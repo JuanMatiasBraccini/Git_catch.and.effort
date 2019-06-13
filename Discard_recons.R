@@ -71,9 +71,11 @@ Dat_total=Dat_total %>% filter(METHOD=="GN")
 Comm.disc.sp=read.csv("C:\\Matias\\Analyses\\Ecosystem indices\\Shark-bycatch\\SPECIES+PCS+FATE.csv",stringsAsFactors = F)
 
 #Length weight relationships
-Len.wei=read.csv("C:\\Matias\\External collaborations\\Hilario Murua\\length.weights.csv",stringsAsFactors = F)
+setwd('C:\\Matias\\Analyses\\Catch and effort\\Bycatch total catch recons')
 
-setwd('C:\\Matias\\External collaborations\\Hilario Murua')
+Len.wei=read.csv("length.weights.csv",stringsAsFactors = F)
+
+
 
 # 2. Parameter ---------------------------------------------------------
 
