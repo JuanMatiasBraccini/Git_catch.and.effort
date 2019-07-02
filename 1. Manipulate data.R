@@ -1545,7 +1545,7 @@ if(Inspect.New.dat=="YES")
   rm(Current.data)
 }
 
-#DEJE ACA
+#DEJE ACA 2
   #Create dummies to id NIL catch shots and nil effort
 Data.daily$sname1=with(Data.daily,ifelse(is.na(species),"no catch",as.character(sname1))) 
 Data.daily$landwt=with(Data.daily,ifelse(is.na(species),0,landwt))
