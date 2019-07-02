@@ -1,5 +1,9 @@
 #####-------- SHARK GILLNET AND LONGLINE FISHERY CATCH AND EFFORT MANIPULATIONS -------###########
 
+#MISSING: charter.mean.w is dummy. Go out with them to calculate properly!
+          # another issue with Charter data is species id (e.g. bull sharks for licence FT1L373 may not be)
+
+
 #Index for navigation
 #SECTION A. ---- MONTHLY RECORDS ----
 #SECTION B. ---- DAILY LOGBOOKS ----
@@ -100,12 +104,13 @@ library(tidyr)
 
 par.default=par()
 
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Plot.Map.R")
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/SoFaR.figs.R")
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R")
 #source("C:/Matias/Analyses/SOURCE_SCRIPTS/send.emails.R")
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Population dynamics/fn.fig.R")
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Smart_par.R")
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_Population.dynamics/fn.fig.R")
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Smart_par.R")
 
+fn.scale=function(x,scaler) ((x/max(x,na.rm=T))^0.5)*scaler
 
 setwd("C:/Matias/Data/Catch and Effort")  # working directory
 
@@ -116,12 +121,13 @@ setwd("C:/Matias/Data/Catch and Effort")  # working directory
 #--- DATA SECTION ---#
 ###################################################
 
-
-Current.yr="2016-17"    #Set current financial year 
-Current.yr.dat=paste(substr(Current.yr,1,4),substr(Current.yr,6,7),sep="_")
-
 First.run="NO"    #turn to yes when new year's data is included
 #First.run="YES"
+
+Current.yr="2017-18"    #Set current financial year 
+Current.yr.dat=paste(substr(Current.yr,1,4),substr(Current.yr,6,7),sep="_")
+
+
 
 #Monthly records 
 
@@ -145,7 +151,7 @@ close(channel)
 drop=c("VesselID","BlockAveID","AnnualVesselAveID","SpeciesID","ReturnID")
 Data.monthly=Data.monthly[,-match(drop,names(Data.monthly))]
 
-      #combine Table 81d.mdb and CAESS
+  #combine Table 81d.mdb and CAESS
 if(Get.CAESS.Logbook=="YES")
 {
   Data.monthly$FINYEAR=as.character(Data.monthly$FINYEAR)
@@ -173,8 +179,7 @@ if(Get.CAESS.Logbook=="YES")
 #Daily logbooks
   #Select previous daily logbooks (static) or Eva's dynamic data dump
 #Get.Daily.Logbook="NO"  #use Rory's files
-Get.Daily.Logbook="YES"  #use Eva's annual extraction
-
+Get.Daily.Logbook="YES"  #use SADA's annual extraction
 if(Get.Daily.Logbook=="YES")
 {
   #Daily records 
@@ -185,10 +190,7 @@ if(Get.Daily.Logbook=="YES")
   Data.daily<- sqlFetch(channel,"CATCH", colnames = F)
   close(channel)
   
-  # channel <- odbcConnectAccess2007("2014_15/SharklogbookDataUpTo1415.mdb")
-  # Data.daily<- sqlFetch(channel,"shark", colnames = F)
-  # close(channel)
-  
+
   #teps
   TEPS.current<- read.csv(paste(Current.yr.dat,"/TEPS_PROTECTEDSP.csv",sep=""),stringsAsFactors=F)
   Comments.TEPS.current<- read.csv(paste(Current.yr.dat,"/TEPS_Comments.csv",sep=""),stringsAsFactors=F)
@@ -206,13 +208,14 @@ if(Get.Daily.Logbook=="YES")
   }
   
   #other fisheries
-  #note that since 2017 other.fishery.catch is extracted from CAESS
+  #note: can extract from FishCube running this query:
+  # http://F01-FIMS-WEBP01/FishCubeWA/Query.aspx?CubeId=CommercialDPIRDOnly&QueryId=8729f44a-3f88-4fb2-80d3-81a80aad9734
+  #     however, since 2017 'other.fishery.catch' is provided by Paul F in the updated Data.monthly
   #Other.fishery.catch=read.csv(paste(Current.yr.dat,"/otherSH.csv",sep=""),stringsAsFactors=F)      
   
   #Catch price
   PRICES=read.csv(paste(Current.yr.dat,"/PriceComparison.csv",sep=""),stringsAsFactors=F)  #update 2016-17
 }
-
 if(Get.Daily.Logbook=="NO")
 {
   channel <- odbcConnectExcel2007("2009_10_(Jan_2011)") 
@@ -274,20 +277,18 @@ Spec.catch.zone.pre.2013=read.csv("Historic/Spec.catch.zone.csv")
 #Charter operators                            
 #note: each year ask Rhonda to do a data extraction from FishCube
 #       species identification is an issue
-channel <- odbcConnectExcel2007("Charter/Charter_2017.xlsx") 
+channel <- odbcConnectExcel2007("Charter/Charter.xlsx") 
 Charter.fish.catch<- sqlFetch(channel,"Data")
 close(channel)
-charter.mean.w=read.csv('Charter/Sp_mean_weight.csv')    #this is dummy weights, calculate accordingly
+charter.mean.w=read.csv('Charter/Sp_mean_weight.csv')    
 charter.blk=read.csv('Charter/Centroid_Grid_Block_5NM_All.csv')
 
 
 #Rec fisheries
 #note:  iSurvey 2011-12 Tables 7-10 (estimated retained number of shark and ray individuals in 2011-12,boat-based
 #       phone diary survey (Ryan et al 2013)
-#       Ask Karina for latest data (more recent than 2011-12)
 Rec.fish.catch=read.csv("Recreational/I.Survey.csv")
-#Rec.fish.catch.2013.14=read.csv("Recreational/I.Survey.2013_14.csv")    
-#Rec.fish.catch.2011.12=read.csv("Recreational/I.Survey.2011_12.csv") 
+
 
 #SHAPE FILE PERTH ISLANDS
 # PerthIs=read.table("C:/Matias/Data/Mapping/WAislandsPointsNew.txt", header=T)
@@ -331,16 +332,16 @@ if(First.run=="YES")Inspect.New.dat="YES"
 
 #control how to aggregate effort
 #note: define whether to use DATE or ID (i.e. the combination of SNo and DSNo) to aggregate by MAX?
-Use.Date="YES"    #Rory's approach (aggregating by DATE)
+Use.Date="YES"    #Advice from Rory McAuley (aggregating by DATE)
 #Use.Date="NO"     # aggregating by SNo and DSNo 
 
 #Control if doing figures for cpue standardisation paper
 plot.cpue.paper.figures="NO"
 
-#Control of doing figures for Mean weight paper
+#Control if doing figures for Mean weight paper
 do.mean.weight.figure="NO"
 
-#control of doing State of Fisheries
+#control if doing State of Fisheries
 do.SoFAR="YES"
 #Use.Previos.Sofar="YES"   #Select YES if attaching previous Sofar data to current year #     
 Use.Previos.Sofar="NO"   #From 2017 SOFAR, set Use.Previos.Sofar="NO"
@@ -361,6 +362,9 @@ do.Ref.Points="NO"
 
 #Control if doing movies
 do.exploratory="NO"
+
+#Control if exploring data for catch composition sampling
+explore.Catch.compo="NO" 
 
 #Control what data requests are done
 do.audit="NO"
@@ -392,41 +396,45 @@ ASL.compensation="NO"
 do.CITES="NO"
 do.Nick_mesh.size.WCDGDLF="NO"
 do.ASL.action.2018="NO"
+do.financial.ass="NO"
 
+
+#Spatial range TDGDLF
 TDGDLF.lat.range=c(-26,-40)
+
+#Fin to total weight ratio
 Percent.fin.of.livewt=0.03
 
 #Species definition
 Shark.species=5001:24900
 Ray.species=25000:31000
 Scalefish.species=188000:599001
-
 Indicator.species=c(17001,17003,18001,18003,18007)
 names(Indicator.species)=c("Gummy","Whiskery","Bronzy","Dusky","Sandbar")
-
 TARGETS=list(whiskery=17003,gummy=17001,dusky=c(18001,18003),sandbar=18007) 
-#TARGETS=c(17003,17001,18003,18007)
 N.species=length(TARGETS)
-
 Fix.species=c(18003,17001,17003,22999)  #species that need catch reapportioning
 
-Inc.per=1.05  #5% percent increase in catch and effort prior 1990  (Rory's suggestion)                    
-Fish.Pow=.02  #2% annual (i.e. 2%, 4%, 6%, etc) increase in fishing power prior 1994  (Rory's suggestion)                   
+#Catch and effort misreporting  as adviced by Colin Simpfendorfer (2001) and Rory McAuley 
+Inc.per=1.05  #5% percent increase in catch and effort prior 1990                    
 
+#Assumed increase in fishing power as adviced by Colin Simpfendorfer (2001) and Rory McAuley 
+Fish.Pow=.02  #2% annual (i.e. 2%, 4%, 6%, etc) increase in fishing power prior 1994                     
 
-#Net.max=12000  #maximum possible net length   (McAuley et al 2005)
+#Maximum net length in TDGDLF
 Net.max=8500    #Rory pers comm
+#Net.max=12000  #maximum possible net length   (McAuley et al 2005)
 
+#Boundary blocks
 Boundary.blk=c(34160,35160,36160)
 
-#Commercial species regions for effective effort calculation
-#Assessment regions                                         #Rory's rule 5a-5k
+#Commercial species regions for effective effort calculation (McAuley 2005)
+    #Rory's rule 5a-5k
 Dusky.range=c(-28,120)
 Sandbar.range=c(-26,118)
 Whiskery.range=c(-28,129)
 Gummy.range=c(116,129)
 Dist.range=list(Dusky=Dusky.range,Sandbar=Sandbar.range,Whiskery=Whiskery.range,Gummy=Gummy.range)
-
 
 #Maximum possible weights for commercial species
 Wei.range=merge(Wei.range,Wei.range.names,by="Sname",all.x=T)
@@ -436,9 +444,8 @@ max.w.gum=Wei.range[Wei.range$SPECIES==17001,]$TW.max
 max.w.dus=Wei.range[Wei.range$SPECIES==18003,]$TW.max
 max.w.san=Wei.range[Wei.range$SPECIES==18007,]$TW.max
 
-
 #Reference points
-  #Catch range of indicative species (Gummy, whiskery, dusky, sandbar)
+  #Catch range of indicator species (Gummy, whiskery, dusky, sandbar)
 Catch.range.key.species=c(725,1095)
 
   #Fishing effort limits (2001-02)
@@ -460,8 +467,8 @@ Do.jpeg="YES"
 #--- DATA MANIPULATION SECTION ---#
 ###################################################
 
-#other Fisheries
- #recreational
+#Non-commercial Fisheries
+ #a. recreational
 Rec.fish.catch$FinYear=as.character(Rec.fish.catch$Survey)
 Rec.fish.catch=subset(Rec.fish.catch,!FinYear=="Grand Total")
 names(Rec.fish.catch)[match("Estimated.Kept.Catch..by.numbers.",names(Rec.fish.catch))]="Kept.Number"
@@ -471,7 +478,7 @@ names(Rec.fish.catch)[match("Species.Scientific.Name",names(Rec.fish.catch))]="S
 if(is.factor(Rec.fish.catch$Kept.Number)) Rec.fish.catch$Kept.Number <- as.numeric(gsub(",","",Rec.fish.catch$Kept.Number))
 if(is.factor(Rec.fish.catch$Rel.Number)) Rec.fish.catch$Rel.Number <- as.numeric(gsub(",","",Rec.fish.catch$Rel.Number))
 
-  #charter boats
+  #b. charter boats
 names(Charter.fish.catch)[match("TO Zone",names(Charter.fish.catch))]="Zone"
 names(Charter.fish.catch)[match("Calendar Year",names(Charter.fish.catch))]="Year"
 names(Charter.fish.catch)[match("05x05NM Block",names(Charter.fish.catch))]="Block5"
@@ -486,76 +493,88 @@ Charter.fish.catch$Kept_w=Charter.fish.catch$Kept_N*Charter.fish.catch$Mean_weig
 Charter.fish.catch$Released_w=Charter.fish.catch$Released_N*Charter.fish.catch$Mean_weight_kg
 Charter.fish.catch$Year=year(Charter.fish.catch$Year)
 Charter.fish.catch$Month=month(Charter.fish.catch$Month)
-
-#add block lat and long
 Charter.fish.catch=merge(Charter.fish.catch,charter.blk,by.x="Block5",by.y="BlockNo",all.x=T)
-
-
 Tab.chart.blck.sp=aggregate(cbind(Kept_N,Released_N)~SNAME+Block5,Charter.fish.catch,sum)
 Tab.chart.blck.sp_w=aggregate(cbind(Kept_w,Released_w)~SNAME+Block5,Charter.fish.catch,sum)
 Tab.chart.yr.sp_w=aggregate(cbind(Kept_w,Released_w)~SNAME+Year,Charter.fish.catch,sum)
-
+par(mfcol=c(2,1),mar=c(2,2,1,1),oma=c(1,1,1,1),las=1,mgp=c(1,.5,0))
+with(aggregate(cbind(Kept_N,Released_N)~LAT+LONG,Charter.fish.catch,sum),
+{
+       plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Kept_N,3),
+            main=paste("All years. Kept numbers","(n=",sum(Kept_N),")"),ylab='',xlab='')
+       plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Released_N,3),
+            main=paste("All years. Released numbers","(n=",sum(Released_N),")"),ylab='',xlab='')
+     })
+yr=as.numeric(substr(Current.yr,1,4))
+with(aggregate(cbind(Kept_N,Released_N)~LAT+LONG,subset(Charter.fish.catch,Year==yr),sum),
+{
+       plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Kept_N,3),
+            main=paste(yr,"Kept numbers","(n=",sum(Kept_N),")"),ylab='',xlab='')
+       plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Released_N,3),
+            main=paste(yr,"Released numbers","(n=",sum(Released_N),")"),ylab='',xlab='')
+     })
 
 #Quick check to determine samples size catch age composition
-hnd.compo="C:/Matias/Fieldwork and workplans/Catch age composition/"
-fn.scale=function(x,max,scaler) ((x/max)^0.5)*scaler
-#Albany
-fun.sample.catch.age.com=function(d)
+if(explore.Catch.compo=="YES")
 {
-  d=d %>%mutate_all( funs(as.character(.)), names( .[,sapply(., is.factor)] ))%>%
-    mutate(Name=ifelse(species==17003,"Whiskery",
-                ifelse(species==17001,"Gummy",
-                ifelse(species==18003,"Dusky",
-                ifelse(species==18007,"Sandbar",NA)))))
-  
-  Tab1=with(d[!duplicated(d$TSNo),],table(finyear,vessel))
-  jpeg(file=paste(hnd.compo,unique(d$port),"_vessel trips.jpg",sep=""),width=2400,height=2400,units="px",res=300)
-  par(las=1)
-  barplot(Tab1,horiz=T,legend.text=rownames(Tab1),xlab="Number of trips",
-          args.legend=list(x='bottomright',bty='n',cex=1.5))
-  box()
-  dev.off()
-  
-  d$nfish=as.numeric(d$nfish)
-  
-   dd=d %>% group_by(Name,finyear) %>%
-     summarize(Sum=sum(nfish))%>%
-     mutate(Yr=as.numeric(substr(finyear,1,4)))%>%
-     as.data.frame
-   jpeg(file=paste(hnd.compo,unique(d$port),"_total.fish.jpg",sep=""),width=2400,height=2400,units="px",res=300)
-   par(cex.axis=1.35, cex.lab=1.5)
-   ggplot(data = dd, aes(x = finyear, y = jitter(Sum,50))) + 
-     geom_point(aes(colour  =Name),size=5)+ labs(y = "Total # individuals")+ theme(axis.title = element_text(face="bold", size=22))+
-     theme(axis.text=element_text(size=18))+theme(legend.text=element_text(size=16))
-   dev.off()
-  
-  Uni=unique(d$Name)
-  for(u in 1:length(Uni))
+  hnd.compo="C:/Matias/Fieldwork and workplans/Catch age composition/"
+    #Albany
+  fun.sample.catch.age.com=function(d)
   {
-    jpeg(file=paste(hnd.compo,unique(d$port),"_nfish_",Uni[u],".jpg",sep=""),width=2400,height=2400,units="px",res=300)
-    ggplot(data = subset(d,Name==Uni[u]), aes(x = finyear, y = nfish)) + 
-      geom_boxplot(aes(fill =vessel ), width = 0.8) + theme_bw()+
-    theme(axis.title = element_text(face="bold", size=22))+
+    d=d %>%mutate_all( funs(as.character(.)), names( .[,sapply(., is.factor)] ))%>%
+      mutate(Name=ifelse(species==17003,"Whiskery",
+                         ifelse(species==17001,"Gummy",
+                                ifelse(species==18003,"Dusky",
+                                       ifelse(species==18007,"Sandbar",NA)))))
+    
+    Tab1=with(d[!duplicated(d$TSNo),],table(finyear,vessel))
+    jpeg(file=paste(hnd.compo,unique(d$port),"_vessel trips.jpg",sep=""),width=2400,height=2400,units="px",res=300)
+    par(las=1)
+    barplot(Tab1,horiz=T,legend.text=rownames(Tab1),xlab="Number of trips",
+            args.legend=list(x='bottomright',bty='n',cex=1.5))
+    box()
+    dev.off()
+    
+    d$nfish=as.numeric(d$nfish)
+    
+    dd=d %>% group_by(Name,finyear) %>%
+      summarize(Sum=sum(nfish))%>%
+      mutate(Yr=as.numeric(substr(finyear,1,4)))%>%
+      as.data.frame
+    jpeg(file=paste(hnd.compo,unique(d$port),"_total.fish.jpg",sep=""),width=2400,height=2400,units="px",res=300)
+    par(cex.axis=1.35, cex.lab=1.5)
+    ggplot(data = dd, aes(x = finyear, y = jitter(Sum,50))) + 
+      geom_point(aes(colour  =Name),size=5)+ labs(y = "Total # individuals")+ theme(axis.title = element_text(face="bold", size=22))+
       theme(axis.text=element_text(size=18))+theme(legend.text=element_text(size=16))
     dev.off()
+    
+    Uni=unique(d$Name)
+    for(u in 1:length(Uni))
+    {
+      jpeg(file=paste(hnd.compo,unique(d$port),"_nfish_",Uni[u],".jpg",sep=""),width=2400,height=2400,units="px",res=300)
+      ggplot(data = subset(d,Name==Uni[u]), aes(x = finyear, y = nfish)) + 
+        geom_boxplot(aes(fill =vessel ), width = 0.8) + theme_bw()+
+        theme(axis.title = element_text(face="bold", size=22))+
+        theme(axis.text=element_text(size=18))+theme(legend.text=element_text(size=16))
+      dev.off()
+    }
+    
+    # dd=d %>% group_by(Name,vessel,finyear) %>%
+    #   summarize(mean=mean(nfish),
+    #          sd=sd(nfish))%>%
+    #   as.data.frame
+    # for(u in 1:length(Uni))
+    # {
+    #   xx=subset(dd,Name==Uni[u])
+    #   Mn=xx %>% select(vessel,finyear,mean)%>% spread(finyear,mean)
+    #   SD=xx %>% select(vessel,finyear,sd)%>% spread(finyear,sd)
+    # }
   }
-  
-  # dd=d %>% group_by(Name,vessel,finyear) %>%
-  #   summarize(mean=mean(nfish),
-  #          sd=sd(nfish))%>%
-  #   as.data.frame
-  # for(u in 1:length(Uni))
-  # {
-  #   xx=subset(dd,Name==Uni[u])
-  #   Mn=xx %>% select(vessel,finyear,mean)%>% spread(finyear,mean)
-  #   SD=xx %>% select(vessel,finyear,sd)%>% spread(finyear,sd)
-  # }
+  fun.sample.catch.age.com(d=Data.daily %>%
+                             filter(port=="ALBANY" & finyear%in%c('2014-15','2015-16','2016-17') &
+                                      species%in%c(17003,17001,18003,18007))%>% 
+                             select(port,species,nfish,vessel,TSNo,finyear))
 }
-fun.sample.catch.age.com(d=Data.daily %>%
-         filter(port=="ALBANY" & finyear%in%c('2014-15','2015-16','2016-17') &
-                species%in%c(17003,17001,18003,18007))%>% 
-         select(port,species,nfish,vessel,TSNo,finyear))
-
 
 
 #SECTION A. ---- MONTHLY RECORDS ----
@@ -629,7 +648,6 @@ Data.monthly.original=Data.monthly
 Data.monthly.original$LAT=-as.numeric(substr(Data.monthly.original$BLOCKX,1,2))
 Data.monthly.original$LONG=100+as.numeric(substr(Data.monthly.original$BLOCKX,3,4))
 
-
 fn.chk.ktch=function(d1,d2,VAR1,VAR2)
 {
   d1sum=round(sum(d1[,match(VAR1,names(d1))],na.rm=T))
@@ -649,7 +667,6 @@ fn.chk.ktch=function(d1,d2,VAR1,VAR2)
   print(paste("Catch by year-vessel has this many discrepancies=",
               nrow(discrepancy),"records"))
 }
-
 fn.chk.ktch(d1=Data.monthly.original,
       d2=subset(Data.monthly,FINYEAR%in%Data.monthly.original$FINYEAR),
       VAR1="LIVEWT",VAR2="LIVEWT")
@@ -657,8 +674,7 @@ fn.chk.ktch(d1=Data.monthly.original,
 
 # A.5. Create variables
 
-
-#define estuaries
+  #define estuaries
 Estuaries=c(95010,95020,95030,95040,95050,95060,95070,95080,95090,85010,85020,85030,85040,85050,85060,
             85070,85080,85090,85100,85110,85130,85990)
 Bays=96000:98000
@@ -668,13 +684,11 @@ Geographe.Bay=96010
 Cockburn.sound=96000
 King.George.sound=96030 
 
-
-#Idenfity estuaries
+  #Idenfity estuaries
 Data.monthly$Estuary=with(Data.monthly,ifelse(BLOCKX%in%Estuaries,"YES","NO"))
-
 test.Estuaries=subset(Data.monthly,BLOCKX%in%Estuaries)
 Table.Estuary=aggregate(LIVEWT~FINYEAR+SPECIES,test.Estuaries,sum)  
-#there is shark catch in estuaries, must keep records for total catch taken
+#note: there is shark catch in estuaries, must keep records for total catch taken
 
 
   # A.5.1 Lat and Long of block (top left corner)
@@ -749,7 +763,7 @@ Data.monthly$CONDITN=as.character(Data.monthly$CONDITN)
 Data.monthly$CONDITN=with(Data.monthly,ifelse(is.na(SPECIES),"NIL",CONDITN))
 
 
-# A.8. Add bioregion and zone                                                                 # REVIEW RORY
+# A.8. Add bioregion and zone                                                               
 Data.monthly$LONG=with(Data.monthly,ifelse(BLOCKX==85990,NA,
                     ifelse(BLOCKX==31300,130,
                     ifelse(BLOCKX==32300,130,LONG))))
@@ -764,7 +778,6 @@ Data.monthly$Bioregion=as.character(with(Data.monthly,ifelse(LONG>=115.5 & LONG<
 
 Data.monthly$Bioregion=with(Data.monthly,
             ifelse(Bioregion=="SC"& LAT>(-34) & LONG <115.91 ,"WC",Bioregion))
-
 
 Data.monthly$zone=as.character(with(Data.monthly,ifelse(LONG>=116.5 & LAT<=(-26),"Zone2",
                   ifelse(LONG<116.5 & LAT<=(-33),"Zone1",
@@ -797,7 +810,6 @@ Data.monthly$LongFC=NA
 
     #add var for merging with daily
 Data.monthly$nfish=NA
-
 Data.monthly=Data.monthly[,-match("fishery",names(Data.monthly))]
 
 
@@ -805,7 +817,6 @@ Data.monthly=Data.monthly[,-match("fishery",names(Data.monthly))]
 #SECTION B. ---- DAILY LOGBOOKS ----
 
 #simple financial assessment
-do.financial.ass="NO"
 if(do.financial.ass=="YES")
 {
   b=aggregate(livewt~vessel+species,subset(Data.daily,finyear==Current.yr,select=c(livewt,vessel,species)),sum,na.rm=T)
@@ -857,7 +868,6 @@ This=c("finyear","year","month","day","date","zone","depthMax","vessel","fdays",
 #create file for checking mesh size
 Mesh.size=subset(Data.daily,method=="GN",select=c(DSNo,TSNo,SNo,vessel,date,finyear,method,
                             netlen,hours,shots,mshigh,mslow,LatDeg,LongDeg,zone))
-
 
   #Select which file to use
 if(Get.Daily.Logbook=="YES")
@@ -1011,7 +1021,6 @@ if(Get.Daily.Logbook=="YES")
     ifelse(finyear=="2012-13" & TSNo=="TDGLF8002261" & netlen==300,3000,
     ifelse(finyear=="2012-13" & TSNo%in%c("TDGLF8008946","TDGLF8008924") & netlen==400,4000,netlen))))
 }
-
 if(Get.Daily.Logbook=="NO")
 {
   # B.1. Combine data sets and create copy
@@ -1140,44 +1149,37 @@ Data.daily=subset(Data.daily,finyear%in%FINYrs)
   # hence remove directly
 
 #Before removing records, check if any fisher reported just fins
-A=subset(Data.daily,species==22998)
-THIS=unique(with(A,paste(DSNo,TSNo)))
-NN=length(THIS)
-a=Data.daily
-a$THAT=with(a,(paste(DSNo,TSNo)))
-a=subset(a,THAT%in%THIS)
-
-guarda=vector('list',NN)
-names(guarda)=THIS[1:NN]
-system.time(for(i in 1:NN)
+if(Inspect.New.dat=="YES")
 {
-  b=subset(a,THAT%in%THIS[i])
-  checK=unique(b$species)
-  checK=subset(checK,checK<22998)
-  guarda[[i]]=checK
-})
-system.time(Only.reported.fins <- guarda[sapply(guarda, function(i) length(i) < 1)])
-a=subset(a,THAT%in%names(Only.reported.fins))
-rm(A,a,b,guarda)
-
+  A=subset(Data.daily,species==22998 & finyear==Current.yr)
+  THIS=unique(with(A,paste(DSNo,TSNo)))
+  NN=length(THIS)
+  a=Data.daily
+  a$THAT=with(a,(paste(DSNo,TSNo)))
+  a=subset(a,THAT%in%THIS)
+  guarda=vector('list',NN)
+  names(guarda)=THIS[1:NN]
+  system.time(for(i in 1:NN)
+  {
+    b=subset(a,THAT%in%THIS[i])
+    checK=unique(b$species)
+    checK=checK[-match(22998,checK)]
+    if(length(which(checK%in%Shark.species))==0)  guarda[[i]]=THIS[i]
+  })
+  Check=unlist(guarda)
+  if(!is.null(Check))
+  {
+    stop("records with only fins")
+    plot.new()
+    text(1,1,paste("DSNo", strsplit(Check, "[ ]")[[1]][1]),col=2)
+    mtext('WARNING. Reporting Fins only',3,cex=2,col=2)
+  }
+  rm(A,a,b,guarda)
+}
 
 Data.daily=subset(Data.daily,!(species%in%c(22997,22998)))
 if(nrow(Data.daily.incomplete))Data.daily.incomplete=subset(Data.daily.incomplete,!(species%in%c(22997,22998)))
 if(nrow(Data.daily.FC.2005_06))Data.daily.FC.2005_06=subset(Data.daily.FC.2005_06,!(species%in%c(22997,22998)))
-
-
-  #Check if there's numbers data but no weights
-check.nfish.weight=subset(Data.daily, !is.na(nfish) | !nfish==0)
-check.nfish.weight=subset(check.nfish.weight,is.na(livewt) | livewt==0)
-if(nrow(check.nfish.weight)>0)
-{
-  stop("records with nfish but no weight")
-  par(bg=2)
-  plot.new()
-  mtext("there are records with nfish but no weight",3)
-  par(bg="white")
-}
-  
 
 
   #fix typos
@@ -1356,7 +1358,8 @@ Data.daily$LongMinFirst=substr(Data.daily$LongMin,1,1)
 Data.daily$LongDegSec=Data.daily$LongDeg-100
 Data.daily$block101=with(Data.daily,
       ifelse(is.na(block10) & !is.na(LatDeg),paste(LatDeg,LatMinFirst,LongDegSec,LongMinFirst,sep=""),
-      ifelse(is.na(block10) & is.na(LatDeg),as.numeric(paste(substr(blockx,1,2),0,substr(blockx,3,5),sep="")),block10)))
+      ifelse(is.na(block10) & is.na(LatDeg),as.numeric(paste(substr(blockx,1,2),0,substr(blockx,3,5),sep="")),
+             block10)))
 Data.daily=Data.daily[,-match(c("LatMinFirst","LongMinFirst","LongDegSec"),names(Data.daily))]
 
  #Create effort dataset
@@ -1419,6 +1422,21 @@ if(Inspect.New.dat=="YES")
   #note:this compares average weights from returns to the range of possible weights by species.
   #     for some species there's no Wei.range info.
   
+    #Check if there's numbers data but no weights      
+  check.nfish.weight=subset(Current.data, !is.na(nfish) | !nfish==0)
+  check.nfish.weight=subset(check.nfish.weight,is.na(livewt) | livewt==0)
+  if(nrow(check.nfish.weight)>0)
+  {
+    par(bg=2)
+    plot.new()
+    mtext("there are records ",3,cex=3,col="white")
+    mtext("with nfish but no weight",3,-2,cex=3,col="white")
+    par(bg="white")
+    #stop("records with nfish but no weight")
+  }
+  write.csv(check.nfish.weight,file=paste(handle,"/Check.no_live.weight.csv",sep=""),row.names=F)
+  
+  
     #calculate average weight for each species
   Current.data$Avg.wt=with(Current.data,livewt/nfish)
   Uniq.sp=Current.data[,match(c("species","sname1"),names(Current.data))]
@@ -1427,14 +1445,11 @@ if(Inspect.New.dat=="YES")
   Uniq.sp.nam=as.character(Uniq.sp$sname1)
   Uniq.sp=Uniq.sp$species
   names(Uniq.sp)=Uniq.sp.nam
-  
   id=match(Wei.range$SPECIES,Uniq.sp)
   id=subset(id,!is.na(id))
   Uniq.sp.with.weight=Uniq.sp[id]
   Uniq.sp.nam.with.weight=Uniq.sp.nam[id]
-  
   tolerance=0.2   #tolerance bounds for acceptable weight
-  
   fn.avg.wt=function(sp,sp.name)
   {
     Data=subset(Current.data,species==sp & !(is.na(Avg.wt)))
@@ -1470,14 +1485,11 @@ if(Inspect.New.dat=="YES")
   Avg.wt.list=vector('list',length=length(Uniq.sp.with.weight))
   names(Avg.wt.list)=Uniq.sp.nam.with.weight
   for (i in 1:length(Uniq.sp.with.weight)) Avg.wt.list[[i]]=fn.avg.wt(Uniq.sp.with.weight[i],Uniq.sp.nam.with.weight[i])
-  
-  
   Current.data=merge(Current.data,Wei.range[,6:8],
               by.x="species",by.y="SPECIES",all.x=T)
   Current.data$Chk.wt=with(Current.data,
             ifelse(Avg.wt<(TW.min*(1-tolerance)) | 
             Avg.wt>(TW.max*(1+tolerance)),"check","ok"))
-  
   check.weights=subset(Current.data,Chk.wt=="check",
      select=c(TSNo,DSNo,SNo,vessel,finyear,month,
               species,sname1,flagtype,conditn,nfish,landwt,livewt,Avg.wt,TW.min,TW.max))
@@ -1485,11 +1497,9 @@ if(Inspect.New.dat=="YES")
   check.weights[,idd]=round(check.weights[,idd],2)
   check.weights=check.weights[order(check.weights$finyear,check.weights$month,check.weights$TSNo,
                                     check.weights$DSNo),]
-  
   write.csv(check.weights[,-match(c("Avg.wt","TW.min","TW.max"),names(check.weights))],
             file=paste(handle,"/Check.nfish.weight.typo.csv",sep=""),row.names=F)
-  
-  
+
   Avg.wt.list.ind=vector('list',length=length(Indicator.species))
   names(Avg.wt.list.ind)=names(Indicator.species)
   for (i in 1:length(Indicator.species)) Avg.wt.list.ind[[i]]=fn.avg.wt(Indicator.species[i],names(Indicator.species)[i])  
@@ -1506,7 +1516,6 @@ if(Inspect.New.dat=="YES")
     return(CHeck[,match(c("TSNo","DSNo","SNo","date","vessel","species",
                           "sname1","flagtype","conditn","nfish","landwt","livewt","Aver.w"),names(CHeck))])
   }
-  
   Check.Whis.Weight=fn.Wght.Freq(26.5,17003,"GN",MAX.w=max.w.whis,BRK=seq(0,max.w.whis,by=5),XMAX=max.w.whis,YMAX=1300,"Whiskery")
   Check.Gum.Weight=fn.Wght.Freq(26.5,17001,"GN",MAX.w=max.w.gum,BRK=seq(0,max.w.gum,by=5),XMAX=25,YMAX=3200,"Gummy")
   Check.Dus.Weight=fn.Wght.Freq(26.5,18003,"GN",MAX.w=max.w.dus,BRK=seq(0,max.w.dus,by=5),XMAX=50,YMAX=1100,"Dusky")
@@ -1523,20 +1532,20 @@ if(Inspect.New.dat=="YES")
   Dist.range=list(Gummy=list(c(113,-29),c(129,-36)), Whiskery=list(c(113,-21),c(129,-36)),
                   Bronzy=list(c(113,-29),c(129,-36)),Dusky=list(c(113,-15),c(129,-36)),
                   Sandbar=list(c(113,-15),c(125,-36)))
+  smart.par(n.plots=length(Indicator.species),MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(.1, 0.5, 0))
   for (i in 1:length(Indicator.species))
   {
     s=subset(Current.data,species==Indicator.species[i])
     NM=names(Indicator.species)[i]
-    plot(s$Long,s$Lat,main=NM,ylim=c(-36,-10),xlim=c(113,129))
+    plot(s$Long,s$Lat,main=NM,ylim=c(-36,-10),xlim=c(113,129),ylab="",xlab="")
     pol=Dist.range[[match(NM,names(Dist.range))]]
     polygon(x=c(pol[[1]][1],pol[[2]][1],pol[[2]][1],pol[[1]][1]),
             y=c(pol[[1]][2],pol[[1]][2],pol[[2]][2],pol[[2]][2]),border=2)
   }
-  
   rm(Current.data)
 }
 
-
+#DEJE ACA
   #Create dummies to id NIL catch shots and nil effort
 Data.daily$sname1=with(Data.daily,ifelse(is.na(species),"no catch",as.character(sname1))) 
 Data.daily$landwt=with(Data.daily,ifelse(is.na(species),0,landwt))
@@ -4804,7 +4813,7 @@ if(Inspect.New.dat=="YES")
       if(length(YRS>1))TIT=paste(c(YRS[1],"to",YRS[length(YRS)],Unik.ves[i]),collapse=" ")else
         TIT=paste(YRS,"",Unik.ves[i])
       
-      plot(da$dummy,da[,id],type="b",xlab="session n°",ylab=VAR,main=TIT,cex.main=.8,ylim=c(lim1,lim2))
+      plot(da$dummy,da[,id],type="b",xlab="session n?",ylab=VAR,main=TIT,cex.main=.8,ylim=c(lim1,lim2))
       abline(threshold,0,col=2,lwd=2)
       text(1,threshold*1.15,threshold,col=2)
       
@@ -4873,7 +4882,7 @@ if(Inspect.New.dat=="YES")
       NN=length(Unik.sess)
       da$dummy=1:nrow(da)
       
-      plot(da$dummy,da$combo,type="b",xlab="session n°",ylab=paste(VAR,"x",VAR1),main=paste(YRS,"",Unik.ves[i]),ylim=c(lim1,lim2))
+      plot(da$dummy,da$combo,type="b",xlab="session n?",ylab=paste(VAR,"x",VAR1),main=paste(YRS,"",Unik.ves[i]),ylim=c(lim1,lim2))
       abline(threshold,0,col=2,lwd=2)
       text(1,threshold*1.15,threshold,col=2)
       
@@ -4927,7 +4936,7 @@ if(Inspect.New.dat=="YES")
       NN=length(Unik.sess)
       da$dummy=1:nrow(da)
       
-      plot(da$dummy,da$km.gn.hours,type="b",xlab="session n°",ylab="km.gn.hours",main=paste(YRS,"",Unik.ves[i]))
+      plot(da$dummy,da$km.gn.hours,type="b",xlab="session n?",ylab="km.gn.hours",main=paste(YRS,"",Unik.ves[i]))
       
       if(withCols=="YES")
       {
@@ -5028,7 +5037,7 @@ if(Inspect.New.dat=="YES")
         if(length(YRS>1))TIT=paste(c(YRS[1],"to",YRS[length(YRS)],Unik.ves[i]),collapse=" ")else
           TIT=paste(YRS,"",Unik.ves[i])
         
-        plot(da$dummy,da[,id],type='o',col=2,xlab="session n°",ylab="",main=TIT,
+        plot(da$dummy,da[,id],type='o',col=2,xlab="session n?",ylab="",main=TIT,
              cex.main=.8,ylim=c(lim1,lim2),yaxt="n")
         abline(threshold,0,col=2,lwd=2)
         text(1,threshold*0.9,threshold,col=2)
@@ -5048,7 +5057,7 @@ if(Inspect.New.dat=="YES")
         axis(side = 4,col.axis=3)
         mtext(side = 4, line = 2, 'Netlen',col=3)
         
-        plot(da$dummy,da[,id]*da[,id2],type='o',col=1,xlab="session n°",ylab="nlines x netlen",main="",
+        plot(da$dummy,da[,id]*da[,id2],type='o',col=1,xlab="session n?",ylab="nlines x netlen",main="",
              ylim=c(lim1,lim22))
         abline(threshold1,0,col=1,lwd=2)
         text(3,threshold1*1.2,threshold1,col=1)
@@ -5612,7 +5621,7 @@ if(Inspect.Eff.vars=="YES")
       NN=length(Unik.sess)
       da$dummy=1:nrow(da)
       
-      plot(da$dummy,da[,id],type="b",xlab="session n°",ylab=VAR,ylim=c(lim1,lim2))
+      plot(da$dummy,da[,id],type="b",xlab="session n?",ylab=VAR,ylim=c(lim1,lim2))
       legend("topright",c(Unik.ves[i],YRS),bty='n')
       abline(threshold,0,col=2,lwd=2)
       text(1,threshold*1.15,threshold,col=2)
@@ -5654,7 +5663,7 @@ if(Inspect.Eff.vars=="YES")
       NN=length(Unik.sess)
       da$dummy=1:nrow(da)
       
-      plot(da$dummy,da[,id],type="b",xlab="session n°",ylab="",ylim=c(lim1,lim2))
+      plot(da$dummy,da[,id],type="b",xlab="session n?",ylab="",ylim=c(lim1,lim2))
       legend("topright",c(Unik.ves[i],YRS),bty='n')
       abline(threshold,0,col=2,lwd=2)
       text(1,threshold*1.15,threshold,col=2)
@@ -5698,7 +5707,7 @@ if(Inspect.Eff.vars=="YES")
       NN=length(Unik.sess)
       da$dummy=1:nrow(da)
       
-      plot(da$dummy,da[,id],type="b",xlab="session n°",ylab="",ylim=c(lim1,lim2))
+      plot(da$dummy,da[,id],type="b",xlab="session n?",ylab="",ylim=c(lim1,lim2))
       legend("topright",c(Unik.ves[i],YRS),bty='n')
       abline(threshold,0,col=2,lwd=2)
       text(1,threshold*1.15,threshold,col=2)
@@ -5742,7 +5751,7 @@ if(Inspect.Eff.vars=="YES")
       NN=length(Unik.sess)
       da$dummy=1:nrow(da)
       
-      plot(da$dummy,da[,id],type="b",xlab="session n°",ylab=VAR,main=paste(YRS,"",Unik.ves[i]),ylim=c(lim1,lim2))
+      plot(da$dummy,da[,id],type="b",xlab="session n?",ylab=VAR,main=paste(YRS,"",Unik.ves[i]),ylim=c(lim1,lim2))
       abline(threshold,0,col=2,lwd=2)
       text(1,threshold*1.15,threshold,col=2)
       
@@ -5783,7 +5792,7 @@ if(Inspect.Eff.vars=="YES")
       NN=length(Unik.sess)
       da$dummy=1:nrow(da)
       
-      plot(da$dummy,da[,id],type="b",xlab="session n°",ylab="",ylim=c(lim1,lim2))
+      plot(da$dummy,da[,id],type="b",xlab="session n?",ylab="",ylim=c(lim1,lim2))
       legend("topright",c(Unik.ves[i],YRS),bty='n')
       abline(threshold,0,col=2,lwd=2)
       text(1,threshold*1.15,threshold,col=2)
@@ -5832,7 +5841,7 @@ if(Inspect.Eff.vars=="YES")
       da$dummy=1:nrow(da)
       
       
-      plot(da$dummy,da[,id],type="b",xlab="session n°",ylab="",ylim=c(lim1,lim2))
+      plot(da$dummy,da[,id],type="b",xlab="session n?",ylab="",ylim=c(lim1,lim2))
       legend("topright",c(Unik.ves[i],YRS),bty='n')
       abline(threshold,0,col=2,lwd=2)
       text(1,threshold*1.15,threshold,col=2)
@@ -6419,7 +6428,7 @@ if(Do.post.check=="YES")
       NN=length(Unik.sess)
       da$dummy=1:nrow(da)
       
-      plot(da$dummy,da[,id],type="b",xlab="session n°",ylab=VAR,ylim=c(0,max(da[,id],da$Km.Gillnet.Days.c.shot)))
+      plot(da$dummy,da[,id],type="b",xlab="session n?",ylab=VAR,ylim=c(0,max(da[,id],da$Km.Gillnet.Days.c.shot)))
       legend("topright",c(Unik.ves[i],YRS),bty='n')
       abline(threshold,0,col=2,lwd=2)
       text(1,threshold*1.15,threshold,col=2)
@@ -6481,7 +6490,7 @@ if(Do.post.check=="YES")
       da$dummy=1:nrow(da)
       
       
-      plot(da$dummy,da[,id],type="b",xlab="session n°",ylab=VAR,ylim=c(0,max(da[,id],da$Km.Gillnet.Days.c.shot)))
+      plot(da$dummy,da[,id],type="b",xlab="session n?",ylab=VAR,ylim=c(0,max(da[,id],da$Km.Gillnet.Days.c.shot)))
       legend("topright",c(Unik.ves[i],YRS),bty='n')
       abline(threshold,0,col=2,lwd=2)
       text(1,threshold*1.15,threshold,col=2)
@@ -8172,8 +8181,8 @@ if (plot.cpue.paper.figures=="YES")
   points(117.8,-35,pch=19,cex=1.5)
   text(122,-33.62,("Esperance"),col="black", cex=1.1)
   points(121.9,-33.86,pch=19,cex=1.5)
-  mtext("Latitude (ºS)",side=2,line=1.7,las=3,cex=1.75)
-  mtext("Longitude (ºE)",side=1,line=1.75,cex=1.75)
+  mtext("Latitude (?S)",side=2,line=1.7,las=3,cex=1.75)
+  mtext("Longitude (?E)",side=1,line=1.75,cex=1.75)
   
   text(113.5,-30.5,("WCDGDLF"),col="black", cex=1.4)
   text(114,-34.75,("JASDGDLF"),col="black", cex=1.4) 
@@ -8408,8 +8417,8 @@ if (plot.cpue.paper.figures=="YES")
     if(i%in%c(3,6,9)) axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=.65)
     if(i==8) color.legend(126,-26,129,-30.5,round(EffortBreakSS,0),rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
   }  
-  mtext("Latitude (ºS)",side=2,line=0.4,las=3,cex=1.25,outer=T)
-  mtext("Longitude (ºE)",side=1,line=0.75,cex=1.25,outer=T)  
+  mtext("Latitude (?S)",side=2,line=0.4,las=3,cex=1.25,outer=T)
+  mtext("Longitude (?E)",side=1,line=0.75,cex=1.25,outer=T)  
   dev.off()
   
   
@@ -8601,8 +8610,8 @@ if(First.run=='YES')
   #     #   par(opar) 
   #     # }
   #   }
-  #   mtext("Latitude (ºS)",side=2,line=0.4,las=3,cex=1.3,outer=T)
-  #   mtext("Longitude (ºE)",side=1,line=0.6,cex=1.3,outer=T)
+  #   mtext("Latitude (?S)",side=2,line=0.4,las=3,cex=1.3,outer=T)
+  #   mtext("Longitude (?E)",side=1,line=0.6,cex=1.3,outer=T)
   #   dev.off()
   # }
   
@@ -8768,8 +8777,8 @@ if(First.run=='YES')
     fn.fig(paste(HnD.ctch.exp,names(Tar)[i],sep="/"),2400, 2400)
     smart.par(n.plots=length(FINYrS)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.35, 0))
     fn.ctch.plot.all.yrs(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=20)
-    mtext("Latitude (ºS)",side=2,line=0.5,las=3,cex=1.1,outer=T)
-    mtext("Longitude (ºE)",side=1,line=0.5,cex=1.1,outer=T)
+    mtext("Latitude (?S)",side=2,line=0.5,las=3,cex=1.1,outer=T)
+    mtext("Longitude (?E)",side=1,line=0.5,cex=1.1,outer=T)
     dev.off()
     
     #grouped years
@@ -8798,8 +8807,8 @@ if(First.run=='YES')
     fn.fig(paste(HnD.ctch.exp,"/",names(Tar)[i],"_grouped.yrs",sep=""),2000, 2400)
     smart.par(n.plots=length(FINYrS.gped)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.35, 0))
     fn.ctch.plot.grouped.yrs(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=50,grouping=5)
-    mtext("Latitude (ºS)",side=2,line=0.5,las=3,cex=1.1,outer=T)
-    mtext("Longitude (ºE)",side=1,line=0.5,cex=1.1,outer=T)
+    mtext("Latitude (?S)",side=2,line=0.5,las=3,cex=1.1,outer=T)
+    mtext("Longitude (?E)",side=1,line=0.5,cex=1.1,outer=T)
     dev.off()
     
     rm(ddd)
@@ -8870,8 +8879,8 @@ if(First.run=='YES')
         legend('top',FINYrS[y],bty='n',cex=1.2)
         axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
         axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
-        mtext("Latitude (ºS)",side=2,line=1,las=3,cex=1.75,outer=T)
-        mtext("Longitude (ºE)",side=1,line=1,cex=1.75,outer=T)
+        mtext("Latitude (?S)",side=2,line=1,las=3,cex=1.75,outer=T)
+        mtext("Longitude (?E)",side=1,line=1,cex=1.75,outer=T)
         color.legend(quantile(a,probs=.9),quantile(b,probs=.91),quantile(a,probs=.95),quantile(b,probs=.5),
                      paste(round(Breaks,0),"t"),rect.col=Couleurs,gradient="y",col=colLeg,cex=.95)
       }
@@ -8946,8 +8955,8 @@ if(First.run=='YES')
   #   if(i==length(Yr.rango))color.legend(126,-26,129,-30.5,paste(round(EffortBreakS,0),"km gn d"),
   #                                       rect.col=couleurs,gradient="y",col=colLeg,cex=0.65)
   # }
-  # mtext("Latitude (ºS)",side=2,line=0.4,las=3,cex=1.3,outer=T)
-  # mtext("Longitude (ºE)",side=1,line=0.6,cex=1.3,outer=T)
+  # mtext("Latitude (?S)",side=2,line=0.4,las=3,cex=1.3,outer=T)
+  # mtext("Longitude (?E)",side=1,line=0.6,cex=1.3,outer=T)
   # dev.off()
   
   
@@ -9024,8 +9033,8 @@ if(First.run=='YES')
   }  
   plot(1:1,col="transparent",axes=F,ylab="",xlab="")
   color.legend(xl=0.72,yb=0.39,xr=1.29,yt=1.4,round(EffortBreaks,0),rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
-  mtext("Latitude (ºS)",side=2,line=.5,las=3,cex=1.25,outer=T)
-  mtext("Longitude (ºE)",side=1,line=.8,cex=1.25,outer=T)
+  mtext("Latitude (?S)",side=2,line=.5,las=3,cex=1.25,outer=T)
+  mtext("Longitude (?E)",side=1,line=.8,cex=1.25,outer=T)
   dev.off()
   
   
@@ -9054,8 +9063,8 @@ if(First.run=='YES')
   }  
   plot(1:1,col="transparent",axes=F,ylab="",xlab="")
   color.legend(xl=0.72,yb=0.5,xr=1.29,yt=1.4,round(EffortBreaks,0),rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
-  mtext("Latitude (ºS)",side=2,line=.5,las=3,cex=1.25,outer=T)
-  mtext("Longitude (ºE)",side=1,line=.8,cex=1.25,outer=T)
+  mtext("Latitude (?S)",side=2,line=.5,las=3,cex=1.25,outer=T)
+  mtext("Longitude (?E)",side=1,line=.8,cex=1.25,outer=T)
   dev.off()
   
   
@@ -9123,8 +9132,8 @@ if(First.run=='YES')
   fn.fig(paste(HnD.eff.exp,"Effort dynamics.gillnets_all.yrs",sep="/"),2400, 2400)
   smart.par(n.plots=length(FINYrS)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.35, 0))
   fn.eff.plot.all.yrs.mon.and.daily(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=50)
-  mtext("Latitude (ºS)",side=2,line=0.5,las=3,cex=1.1,outer=T)
-  mtext("Longitude (ºE)",side=1,line=0.5,cex=1.1,outer=T)
+  mtext("Latitude (?S)",side=2,line=0.5,las=3,cex=1.1,outer=T)
+  mtext("Longitude (?E)",side=1,line=0.5,cex=1.1,outer=T)
   dev.off()
   
     #grouped years
@@ -9210,8 +9219,8 @@ if(First.run=='YES')
   fn.fig(paste(HnD.eff.exp,"Effort dynamics.gillnets_grouped.yrs",sep="/"),2000, 2400)
   smart.par(n.plots=length(FINYrS.gped)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.35, 0))
   fn.eff.plot.grouped.yrs.mon.and.daily(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=50,grouping=grouping)
-  mtext("Latitude (ºS)",side=2,line=0.5,las=3,cex=1.1,outer=T)
-  mtext("Longitude (ºE)",side=1,line=0.5,cex=1.1,outer=T)
+  mtext("Latitude (?S)",side=2,line=0.5,las=3,cex=1.1,outer=T)
+  mtext("Longitude (?E)",side=1,line=0.5,cex=1.1,outer=T)
   dev.off()
   
   #MOVIE_Monthly and years in same plot
@@ -9264,8 +9273,8 @@ if(First.run=='YES')
         legend('top',FINYrS[y],bty='n',cex=1.75)
         axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
         axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
-        mtext("Latitude (ºS)",side=2,line=1,las=3,cex=1.75,outer=T)
-        mtext("Longitude (ºE)",side=1,line=1,cex=1.75,outer=T)
+        mtext("Latitude (?S)",side=2,line=1,las=3,cex=1.75,outer=T)
+        mtext("Longitude (?E)",side=1,line=1,cex=1.75,outer=T)
         color.legend(quantile(a,probs=.9),quantile(b,probs=.91),quantile(a,probs=.95),quantile(b,probs=.5),
                      paste(round(Breaks,0),"km gn d"),rect.col=couleurs,gradient="y",col=colLeg,cex=1)
         
@@ -11474,8 +11483,8 @@ if (do.Steves=="YES")
   text(122,-33.66,("Esperance"),col="black", cex=1.1)
   points(121.9,-33.86,pch=19)
   
-  mtext("Latitude (ºS)",side=2,line=2.75,las=3,cex=1.3)
-  mtext("Longitude (ºE)",side=1,line=2.75,cex=1.3)
+  mtext("Latitude (?S)",side=2,line=2.75,las=3,cex=1.3)
+  mtext("Longitude (?E)",side=1,line=2.75,cex=1.3)
   
   
   dev.off()
@@ -12268,8 +12277,8 @@ if(do.exploratory=="YES")
   polygon(x=S.WA.long,y=S.WA.lat,lwd=1.5,col=rgb(.1,.1,.1,alpha=.2))
   text(133,-21.5,("Australia"),col="black", cex=2)
   text(118.7,-32,("Perth"),col="black", cex=1.1)
-  mtext("Latitude (ºS)",side=2,line=0.4,las=3,cex=1.3)
-  mtext("Longitude (ºE)",side=1,line=0.6,cex=1.3)
+  mtext("Latitude (?S)",side=2,line=0.4,las=3,cex=1.3)
+  mtext("Longitude (?E)",side=1,line=0.6,cex=1.3)
   for (i in 1:length(DATA.lista))
   {
     fn.eff.plot(DATA.lista[[i]],tcl.1=16,tcl.2=18,EffortBreaks)
@@ -12323,8 +12332,8 @@ if(do.exploratory=="YES")
       axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
       #  color.legend(126,-26,129,-30.5,round(EffortBreaks.movie,0),rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
       color.legend(126,-26,129,-30.5,"",rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
-      mtext("Latitude (ºS)",side=2,line=3,las=3,cex=1.25)
-      mtext("Longitude (ºE)",side=1,line=3,cex=1.25)    
+      mtext("Latitude (?S)",side=2,line=3,las=3,cex=1.25)
+      mtext("Longitude (?E)",side=1,line=3,cex=1.25)    
     }
   }, interval=0.6,movie.name="Effort.movie.wmv", ani.width=300,ani.height=300)
   
@@ -12363,8 +12372,8 @@ if(do.exploratory=="YES")
         mtext(YEAR.c.monthly[i],side=3,line=0,cex=1.25)
         axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
         axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
-        mtext("Latitude (ºS)",side=2,line=3,las=3,cex=1.25)
-        mtext("Longitude (ºE)",side=1,line=3,cex=1.25)    
+        mtext("Latitude (?S)",side=2,line=3,las=3,cex=1.25)
+        mtext("Longitude (?E)",side=1,line=3,cex=1.25)    
       }
     }, interval=0.6,movie.name=paste(SP,".Catch.movie.wmv",sep=""), ani.width=300,ani.height=300)
     
@@ -12454,8 +12463,8 @@ if(do.exploratory=="YES")
         mtext(YEAR.c.monthly[i],side=3,line=0,cex=1.25)
         axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
         axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
-        mtext("Latitude (ºS)",side=2,line=3,las=3,cex=1.25)
-        mtext("Longitude (ºE)",side=1,line=3,cex=1.25)    
+        mtext("Latitude (?S)",side=2,line=3,las=3,cex=1.25)
+        mtext("Longitude (?E)",side=1,line=3,cex=1.25)    
       }
     }, interval=0.6,movie.name=paste(SP,".CPUE.movie.wmv",sep=""), ani.width=300,ani.height=300)
     
@@ -12587,8 +12596,8 @@ if(do.exploratory=="YES")
     if(i%in%c(1,3,5)) axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
     if(i==6)color.legend(126,-26,129,-30.5,round(EffortBreaks,0),rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
   }
-  mtext("Latitude (ºS)",side=2,line=-1,las=3,cex=1.1,outer=T)
-  mtext("Longitude (ºE)",side=1,line=-1,cex=1.1,outer=T)
+  mtext("Latitude (?S)",side=2,line=-1,las=3,cex=1.1,outer=T)
+  mtext("Longitude (?E)",side=1,line=-1,cex=1.1,outer=T)
   dev.off()
   
   
@@ -12676,8 +12685,8 @@ if(do.exploratory=="YES")
       if(i%in%c(1,3,5)) axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
       if(i==6)color.legend(126,-26,129,-30.5,round(Breaks,0),rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
     }
-    mtext("Latitude (ºS)",side=2,line=-1,las=3,cex=1.1,outer=T)
-    mtext("Longitude (ºE)",side=1,line=-1,cex=1.1,outer=T)
+    mtext("Latitude (?S)",side=2,line=-1,las=3,cex=1.1,outer=T)
+    mtext("Longitude (?E)",side=1,line=-1,cex=1.1,outer=T)
     dev.off()
     
   }
