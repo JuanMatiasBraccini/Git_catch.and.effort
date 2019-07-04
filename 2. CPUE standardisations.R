@@ -53,10 +53,124 @@
 #               4.22.11 Construct spatial standardised catch rates
 #               4.22.12 Export catch rates
 
+
+
+rm(list=ls(all=TRUE))
+
+#library(glmmADMB)
+library(lattice)
+library(bbmle) #for AIC comparisons
+library(tweedie)
+library(pscl) #zero inflated GLMs
+library(ggplot2)
+library(lme4) #mixed models
+#library(nlme) 
+#detach("package:lme4")  # detach lme4 (not compatible with nlme)
+library(pvclust) #cluster anlyses
+library(cluster) 
+library(fpc)
+library(coefplot)
+#install.packages("coefplot2",repos="http://www.math.mcmaster.ca/bolker/R",type="source")
+#library(coefplot2)
+require(statmod) # Provides tweedie family functions
+library(VGAM) #zero truncated models
+library(Hmisc)#for error bars
+library(plotrix)
+library(qpcR)  #AKAIKE stuff
+library(zoo)    		#needed for filling in NAs
+library(lsmeans)
+library(mvtnorm)      #for multivariate normal pdf
+library(lunar)     #moon phases
+library(MASS)
+library(stringr)
+library(dplyr)
+library(corrplot)
+library(cluster)
+library(factoextra) #for plotting
+library(cede)     #Malcolm Haddon's
+library(gridExtra)
+library(glmulti)  #model selection
+library(fitdistrplus)  #select distribution
+library(coefplot)  #visualise coefficients
+library(emmeans)  #for model predictions
+
+options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)   
+
+
+
+setwd("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other")
+source("Delta_lognormal.R")
+source("Delta_gamma.R")
+#source("Bootstrap_Delta_Methods.R")
+source("Compare.error.structure.R")
+source("Deviance.explained.R")
+source("Sorting.objects.R")
+source("MS.Office.outputs.R")
+setwd("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_Population.dynamics")
+source("fn.fig.R")
+source("Nominal_cpue_functions.R")
+source("C:\\Matias\\R\\Sort ls by size.R")
+
 #Add this
 
 #################################################from 1.Manipulate data.R ###########
+setwd('C:/Matias/Analyses/Catch and effort/Data_outs')
+Data.monthly.GN=read.csv("Data.monthly.GN.csv")
+Data.daily.GN=read.csv("Data.daily.GN.csv")
+Effort.daily=read.csv("Effort.daily.csv")
+Effort.monthly=read.csv("Effort.monthly.csv")
+
+lst <- strsplit(Data.daily.GN$Same.return.SNo, "\\s+")
+Data.daily.GN$SNo <- sapply(lst ,'[', 1)
+Data.daily.GN$DSNo <- sapply(lst, '[', 2)
+Data.daily.GN$TSNo <- sapply(lst, '[', 3)
+
+
+#Put data into species list (keep species with at least 10 years of positive catches in Daily)
+Elasmo.species=5001:31000
+Indicator.sp=c(17001,17003,18003,18001,18007)
+A=with(subset(Data.daily.GN,SPECIES%in%Elasmo.species),table(SPECIES,FINYEAR))
+A[A>0]=1
+A=rowSums(A)
+SpiSis=names(A[A>10])
+SpiSis=SpiSis[-match("22999",SpiSis)]
+SP.list=as.list(SpiSis)
+names(SP.list)=SpiSis
+SP.list$Non.indicators=Elasmo.species[-match(Indicator.sp,Elasmo.species)]    
+
+#get core area (60% of catch)
+fn.scale=function(x,scaler) ((x/max(x,na.rm=T))^0.5)*scaler
+Core=SP.list
+pdf('C:/Matias/Analyses/Catch and effort/species core areas/cores.pdf')
+for(s in 1:length(SP.list))
+{
+  d=aggregate(LIVEWT.c~LAT+LONG,subset(Data.monthly.GN,SPECIES%in%SP.list[[s]]),sum)
+  d=d[order(-d$LIVEWT.c),]
+  d$CumSum=cumsum(d$LIVEWT.c)
+  d$CumSum=100*d$CumSum/max(d$CumSum)
+  plot(d$LONG,d$LAT,cex=fn.scale(d$LIVEWT.c,4),pch=19,col="steelblue",
+       ylab="Lat",xlab="Long",main=names(SP.list)[s])
+  d=subset(d,CumSum<=80)
+  Rnglat=range(d$LAT)
+  Rnglon=range(d$LONG)
+  polygon(c(Rnglon[1],Rnglon[2],Rnglon[2],Rnglon[1]),
+          c(Rnglat[1],Rnglat[1],Rnglat[2],Rnglat[2]),border=2)
+  
+  d=subset(d,CumSum<=60)
+  Rnglat=range(d$LAT)
+  Rnglon=range(d$LONG)
+  polygon(c(Rnglon[1],Rnglon[2],Rnglon[2],Rnglon[1]),
+          c(Rnglat[1],Rnglat[1],Rnglat[2],Rnglat[2]))
+  Core[[s]]=list(Lat=Rnglat,Long=Rnglon)
+}
+dev.off()
+
 #4.4.1 Catch records
+Dusky.range=c(-28,120)
+Sandbar.range=c(-26,118)
+Whiskery.range=c(-28,129)
+Gummy.range=c(116,129)
+
 #Monthly
 #note: select species range, remove nets<100, aggregate catch by by Same return
 fn.cpue.data=function(Dat)
@@ -864,74 +978,6 @@ for ( i in 1:N.species)DATA.list.LIVEWT.c[[i]]=Effort.data.fun(Species.list[[i]]
 
 
 
-rm(list=ls(all=TRUE))
-
-#library(glmmADMB)
-library(lattice)
-library(bbmle) #for AIC comparisons
-library(tweedie)
-library(pscl) #zero inflated GLMs
-library(ggplot2)
-
-library(lme4) #mixed models
-#library(nlme) 
-#detach("package:lme4")  # detach lme4 (not compatible with nlme)
-
-library(pvclust) #cluster anlyses
-library(cluster) 
-library(fpc)
-
-library(coefplot)
-#install.packages("coefplot2",repos="http://www.math.mcmaster.ca/bolker/R",type="source")
-#library(coefplot2)
-require(statmod) # Provides tweedie family functions
-library(VGAM) #zero truncated models
-library(Hmisc)#for error bars
-library(plotrix)
-library(qpcR)  #AKAIKE stuff
-library(zoo)    		#needed for filling in NAs
-library(lsmeans)
-
-library(mvtnorm)      #for multivariate normal pdf
-
-library(lunar)     #moon phases
-
-library(MASS)
-
-library(stringr)
-library(dplyr)
-library(corrplot)
-
-library('cluster')
-library(factoextra) #for plotting
-
-library(cede)
-library(gridExtra)
-
-library(glmulti)  #model selection
-
-library(fitdistrplus)  #select distribution
-
-library(coefplot)  #visualise coefficients
-
-library(emmeans)  #for model predictions
-
-
-options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)   
-
-
-setwd("C:/Matias/Analyses/SOURCE_SCRIPTS")
-source("Delta_lognormal.R")
-source("Delta_gamma.R")
-#source("Bootstrap_Delta_Methods.R")
-source("Compare.error.structure.R")
-source("Deviance.explained.R")
-source("Sorting.objects.R")
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/MS.Office.outputs.R")
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Population dynamics/fn.fig.R")
-source("C:\\Matias\\R\\Sort ls by size.R")
-source("C:\\Matias\\Analyses\\SOURCE_SCRIPTS\\Population dynamics\\Nominal_cpue_functions.R")
-
 
 #----1. DATA SECTION-----#
 
@@ -1550,14 +1596,14 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
   DATA$Catch.Dhufish=with(DATA,ifelse(SPECIES%in%c(320000),DATA[,ID],0))
   
   Other.shk=c(5001:24900,25000:31000)
-  Other.shk=subset(Other.shk,!Other.shk%in%c(17001,17003,18003,18001,18007))
+  Other.shk=subset(Other.shk,!Other.shk%in%Indicator.sp)
   DATA$Catch.Other.shrk=with(DATA,ifelse(SPECIES%in%Other.shk,DATA[,ID],0))
   
   Other.scalie=188000:599001
   Other.scalie=subset(Other.scalie,!Other.scalie%in%c(384002,353001,377004,320000))
   DATA$Catch.Other.scalefish=with(DATA,ifelse(SPECIES%in%Other.scalie,DATA[,ID],0))
   
-  DATA$Catch.non_indicators=with(DATA,ifelse(!SPECIES%in%c(17001,17003,18003,18001,18007),DATA[,ID],0))
+  DATA$Catch.non_indicators=with(DATA,ifelse(!SPECIES%in%Indicator.sp,DATA[,ID],0))
   
   DATA$Catch.Total=with(DATA,ifelse(SPECIES%in%c(5001:24900,25000:31000,188000:599001),DATA[,ID],0))
   

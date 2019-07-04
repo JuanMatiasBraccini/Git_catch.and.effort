@@ -7070,11 +7070,6 @@ Data.monthly.GN$Boundary.blk=with(Data.monthly.GN,
 setwd("C:/Matias/Analyses/Catch and effort/Data_outs")
 
 #some final amendments
-lst <- strsplit(Data.daily$Same.return.SNo, "\\s+")
-Data.daily$SNo <- sapply(lst ,'[', 1)
-Data.daily$DSNo <- sapply(lst, '[', 2)
-Data.daily$TSNo <- sapply(lst, '[', 3)
-
 crap=c("GoodsplitID","Prop.sandbar","SanBar.rep",            
        "Prop.Gum.Ves.ID","Prop.Whi.Ves.ID","Prop.Dus.Ves.ID","Prop.Other.Ves.ID",     
        "Prop.Sch.Ves.ID","Prop.DogS.Ves.ID","Prop.San.Ves.ID","Prop.Dus.Good.spl",     
@@ -7082,6 +7077,9 @@ crap=c("GoodsplitID","Prop.sandbar","SanBar.rep",
        "Prop.Gum.Zone.Good.spl","Prop.Whi.Zone.Good.spl","Prop.Dus.Mon.Good.spl",
        "Prop.Gum.Mon.Good.spl","Prop.Whi.Mon.Good.spl","Prop.Dus.YrZn.Good.spl",
        "Prop.Gum.YrZn.Good.spl","Prop.Whi.YrZn.Good.spl")
+crap.daily=c("YEAR","Sch.or.DogS","GoodsplitID","GoodsplitID","BlockAveID",
+             "AnnualVesselAveID","MonthlyID","BlockID","ZoneID","ZnID",
+             "Prop.Sch.Ves.ID","Prop.DogS.Ves.ID")
 crap.ef=c("AnnualVesselAveID_BDAYS.m","AnnualVesselAveID_HOURS.m","AnnualVesselAveID_SHOTS.m", 
        "AnnualVesselAveID_NETLEN.m","MonthlyZoneID_BDAYS.m","MonthlyZoneID_HOURS.m",     
        "MonthlyZoneID_SHOTS.m","MonthlyZoneID_NETLEN.m")
@@ -7104,14 +7102,14 @@ Exprt.list=list(
   PRICES=PRICES,
   Data.monthly=Data.monthly[,-match(crap,names(Data.monthly))],
   Data.monthly.north=Data.monthly.north[,-match(crap,names(Data.monthly.north))],
-  Data.monthly.GN=Data.monthly.GN,
-  Data.monthly.LL=Data.monthly.LL,
+  Data.monthly.GN=Data.monthly.GN[,-match(crap,names(Data.monthly.GN))],
+  Data.monthly.LL=Data.monthly.LL[,-match(crap,names(Data.monthly.LL))],
   Data.monthly.other=Data.monthly.other,
-  Data.daily=Data.daily,
+  Data.daily=Data.daily[,-match(crap.daily,names(Data.daily))],
   Data.daily.original=Data.daily.original,
-  Data.daily.GN=Data.daily.GN,
-  Data.daily.LL=Data.daily.LL,
-  Data.daily.other=Data.daily.other)
+  Data.daily.GN=Data.daily.GN[,-match(crap.daily,names(Data.daily.GN))],
+  Data.daily.LL=Data.daily.LL[,-match(crap.daily,names(Data.daily.LL))],
+  Data.daily.other=Data.daily.other[,-match(crap.daily,names(Data.daily.other))])
 for(i in 1:length(Exprt.list)) fwrite(Exprt.list[[i]],paste(names(Exprt.list)[i],".csv",sep=""),row.names=F)
 rm(Exprt.list)
 
