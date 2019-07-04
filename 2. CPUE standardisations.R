@@ -53,6 +53,815 @@
 #               4.22.11 Construct spatial standardised catch rates
 #               4.22.12 Export catch rates
 
+#Add this
+
+#################################################from 1.Manipulate data.R ###########
+#4.4.1 Catch records
+#Monthly
+#note: select species range, remove nets<100, aggregate catch by by Same return
+fn.cpue.data=function(Dat)
+{
+  Baddies=subset(Dat,Reporter.old=="bad")   # Set all records of reapportioned returns to bad
+  Baddies=unique(Baddies$Same.return)
+  Dat$Reporter.old=with(Dat,ifelse(Same.return%in%Baddies,'bad',Reporter.old))
+  Dat$Reporter=Dat$Reporter.old  #set reporter to the variable with a tally of all bad reporters
+  
+  #remove small net length which correspond to non-shark gillnet
+  Dat=subset(Dat,NETLEN.c >100)
+  
+  #aggregate records by Same return (drop issues with Condition and Bioregion...)
+  Dat=aggregate(cbind(LIVEWT.c,LIVEWT)~FINYEAR+MONTH+VESSEL+METHOD+BLOCKX+Boundary.blk+SPECIES+SNAME+YEAR.c
+                +LAT+LONG+Same.return+TYPE.DATA+zone+Reporter+Sch.or.DogS,data=Dat,sum,na.rm=T)
+  return(Dat)
+}
+Data.monthly.GN.whiskery=fn.cpue.data(subset(Data.monthly.GN,LAT <= Whiskery.range[1] 
+                                             & LONG <= Whiskery.range[2]))
+Data.monthly.GN.gummy=fn.cpue.data(subset(Data.monthly.GN,LONG >= Gummy.range[1] 
+                                          & LONG <= Gummy.range[2] & LAT <=(-30)))
+Data.monthly.GN.dusky=fn.cpue.data(subset(Data.monthly.GN,LAT <= Dusky.range[1] 
+                                          & LONG <= Dusky.range[2]))
+Data.monthly.GN.sandbar=fn.cpue.data(subset(Data.monthly.GN,LAT <= Sandbar.range[1] 
+                                            & LONG <= Sandbar.range[2]))
+
+
+#Daily 
+#note: select species range and remove nets<100
+#       aggregate catch by date or ID (==Same.return.SNo). Note that for catch aggregating by date
+#       or by ID makes no difference but it's needed for merging with effort
+
+#put date back
+get.dates=subset(Effort.daily,Same.return.SNo%in%unique(Data.daily.GN$Same.return.SNo),select=c(Same.return.SNo,date))
+get.dates=get.dates[!duplicated(get.dates$Same.return.SNo),]
+Data.daily.GN=merge(Data.daily.GN,get.dates,"Same.return.SNo",all.x=T)
+
+#create species data sets    
+fn.cpue.data.daily=function(Dat)
+{
+  Baddies=subset(Dat,Reporter.old=="bad")   # Set all records of reapportioned returns to bad
+  if(nrow(Baddies)>0)
+  {
+    Baddies=unique(Baddies$Same.return)
+    Dat$Reporter.old=with(Dat,ifelse(Same.return%in%Baddies,'bad',Reporter.old))
+  }
+  
+  Dat$Reporter=Dat$Reporter.old  #set reporter to the variable with a tally of all bad reporters
+  
+  #remove small net length which correspond to non-shark gillnet
+  Dat=subset(Dat,netlen.c >100)
+  
+  Dat=aggregate(cbind(LIVEWT.c,LIVEWT,nfish)~date+Same.return.SNo+Same.return+FINYEAR+MONTH+
+                  VESSEL+METHOD+BLOCKX+block10+SPECIES+SNAME+YEAR.c+LAT+LONG+
+                  TYPE.DATA+zone+Reporter+Sch.or.DogS+ZnID,data=Dat,sum,na.rm=T)
+  
+  Dat$TSNo=sapply(strsplit(Dat$Same.return.SNo, " "), "[", 3)
+  return(Dat)
+}
+
+if(Reapportion.daily=="NO") Data.daily.GN$Reporter.old="good"
+
+Data.daily.GN.whiskery=fn.cpue.data.daily(subset(Data.daily.GN,LAT <= Whiskery.range[1] 
+                                                 & LONG <= Whiskery.range[2]))
+Data.daily.GN.gummy=fn.cpue.data.daily(subset(Data.daily.GN,LONG >= Gummy.range[1] 
+                                              & LONG <= Gummy.range[2] & LAT <=(-30)))
+Data.daily.GN.dusky=fn.cpue.data.daily(subset(Data.daily.GN,LAT <= Dusky.range[1] 
+                                              & LONG <= Dusky.range[2]))
+Data.daily.GN.sandbar=fn.cpue.data.daily(subset(Data.daily.GN,LAT <= Sandbar.range[1] 
+                                                & LONG <= Sandbar.range[2]))
+
+
+
+#4.4.2 Effort records
+
+#4.4.2.1 Daily                
+Effort.daily$LAT=-Effort.daily$LAT
+Block.lat.long=Effort.daily[!duplicated(Effort.daily$blockx),match(c("blockx","LAT","LONG"),names(Effort.daily))]
+Daily=subset(Effort.daily,netlen.c>100 & method=="GN")   
+
+#km gn days  
+#daily aggregated at monthly level
+if(Use.Date=="NO")  Eff.daily.c=aggregate(Km.Gillnet.Days.c~ID+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)    
+if(Use.Date=="YES") Eff.daily.c=aggregate(Km.Gillnet.Days.c~date+vessel+finyear+month+blockx,data=Daily,max,na.rm=T) 
+Eff.daily.c=aggregate(Km.Gillnet.Days.c~finyear+month+vessel+blockx,data=Eff.daily.c,sum,na.rm=T)
+
+if(Use.Date=="NO") Eff.daily=aggregate(Km.Gillnet.Days.inv~ID+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)
+if(Use.Date=="YES") Eff.daily=aggregate(Km.Gillnet.Days.inv~date+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)
+Eff.daily=aggregate(Km.Gillnet.Days.inv~finyear+month+vessel+blockx,data=Eff.daily,sum,na.rm=T)
+
+
+#daily  not aggregated      
+Eff.daily.c.daily=aggregate(Km.Gillnet.Days.c~Same.return.SNo+vessel+finyear+month+blockx+block10
+                            ,data=Daily,max,na.rm=T)    
+Eff.daily.daily=aggregate(Km.Gillnet.Days.inv~Same.return.SNo+vessel+finyear+month+blockx+block10
+                          ,data=Daily,max,na.rm=T)
+
+
+# if(Use.Date=="YES")
+# {
+#   Eff.daily.c.daily=aggregate(Km.Gillnet.Days.c~date+Same.return.SNo+vessel+finyear+month+blockx+block10,data=Daily,max,na.rm=T)    
+#   Eff.daily.daily=aggregate(Km.Gillnet.Days.inv~date+Same.return.SNo+vessel+finyear+month+blockx+block10,data=Daily,max,na.rm=T)
+# }
+
+
+#km gn hours
+#daily aggregated at monthly level
+if(Use.Date=="NO") Eff.daily.hour.c=aggregate(Km.Gillnet.Hours.c~ID+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)
+if(Use.Date=="YES") Eff.daily.hour.c=aggregate(Km.Gillnet.Hours.c~date+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)
+Eff.daily.hour.c=aggregate(Km.Gillnet.Hours.c~finyear+month+vessel+blockx,data=Eff.daily.hour.c,sum,na.rm=T)
+
+if(Use.Date=="NO") Eff.daily.hour=aggregate(Km.Gillnet.Hours.inv~ID+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)
+if(Use.Date=="YES") Eff.daily.hour=aggregate(Km.Gillnet.Hours.inv~date+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)
+Eff.daily.hour=aggregate(Km.Gillnet.Hours.inv~finyear+month+vessel+blockx,data=Eff.daily.hour,sum,na.rm=T)
+
+#daily not aggregated
+Eff.daily.hour.c.daily=aggregate(Km.Gillnet.Hours.c~Same.return.SNo+vessel+finyear+month+blockx+block10,data=Daily,max,na.rm=T)    
+Eff.daily.hour.daily=aggregate(Km.Gillnet.Hours.inv~Same.return.SNo+vessel+finyear+month+blockx+block10,data=Daily,max,na.rm=T)  
+
+
+# if(Use.Date=="YES")
+# {
+#   Eff.daily.hour.c.daily=aggregate(Km.Gillnet.Hours.c~date+Same.return.SNo+vessel+finyear+month+blockx+block10,data=Daily,max,na.rm=T)    
+#   Eff.daily.hour.daily=aggregate(Km.Gillnet.Hours.inv~date+Same.return.SNo+vessel+finyear+month+blockx+block10,data=Daily,max,na.rm=T)  
+# }
+
+
+#merge into single file
+#daily aggregated at monthly level
+Eff.daily.c=merge(Eff.daily.c,Eff.daily.hour.c,by=c("blockx","finyear","month","vessel"),all=T)
+Eff.daily=merge(Eff.daily,Eff.daily.hour,by=c("blockx","finyear","month","vessel"),all=T)
+Eff.daily.c=merge(Eff.daily.c,Eff.daily,by=c("blockx","finyear","month","vessel"),all.x=T)
+Eff.daily.c=merge(Eff.daily.c,Block.lat.long,by=c("blockx"),all.x=T)
+
+#daily    
+Eff.daily.c.daily=merge(Eff.daily.c.daily,Eff.daily.hour.c.daily,by=c("blockx","block10","finyear","month","vessel","Same.return.SNo"),all=T)
+Eff.daily.daily=merge(Eff.daily.daily,Eff.daily.hour.daily,by=c("blockx","block10","finyear","month","vessel","Same.return.SNo"),all=T)
+Eff.daily.c.daily=merge(Eff.daily.c.daily,Eff.daily.daily,by=c("blockx","block10","finyear","month","vessel","Same.return.SNo"),all.x=T)
+Eff.daily.c.daily=merge(Eff.daily.c.daily,Block.lat.long,by=c("blockx"),all.x=T)  
+
+
+# if(Use.Date=="YES")
+# {
+#   Eff.daily.c.daily=merge(Eff.daily.c.daily,Eff.daily.hour.c.daily,by=c("blockx","block10","finyear","month","vessel","date","Same.return.SNo"),all=T)
+#   Eff.daily.daily=merge(Eff.daily.daily,Eff.daily.hour.daily,by=c("blockx","block10","finyear","month","vessel","date","Same.return.SNo"),all=T)
+#   Eff.daily.c.daily=merge(Eff.daily.c.daily,Eff.daily.daily,by=c("blockx","block10","finyear","month","vessel","date","Same.return.SNo"),all.x=T)
+#   Eff.daily.c.daily=merge(Eff.daily.c.daily,Block.lat.long,by=c("blockx"),all.x=T)  
+# }
+
+
+#4.4.2.2 Monthly 
+Monthly=subset(Effort.monthly,NETLEN.c>100 & METHOD=="GN")
+Block.lat.long=Effort.monthly[!duplicated(Effort.monthly$BLOCKX),match(c("BLOCKX","LAT","LONG"),names(Effort.monthly))]
+
+#km gn days     
+Eff.monthly.c=aggregate(Km.Gillnet.Days.c~VESSEL+BLOCKX+FINYEAR+MONTH+YEAR.c,data=Monthly,max,na.rm=T)
+Eff.monthly=aggregate(Km.Gillnet.Days.inv~VESSEL+BLOCKX+FINYEAR+MONTH+YEAR.c,data=Monthly,max,na.rm=T)
+
+# Eff.monthly.c=aggregate(cbind(Km.Gillnet.Days.c)~FINYEAR+MONTH+VESSEL+BLOCKX+YEAR.c+     #this is redundant
+#                           SHOTS.c+NETLEN.c+BDAYS.c+HOURS.c,data=Eff.monthly.c,sum,na.rm=T) 
+# Eff.monthly=aggregate(cbind(Km.Gillnet.Days.inv)~FINYEAR+MONTH+VESSEL+BLOCKX+YEAR.c+
+#                         SHOTS+NETLEN+BDAYS+HOURS,data=Eff.monthly,sum,na.rm=T)
+
+
+#km gn hours                     
+Eff.monthly.hour.c=aggregate(Km.Gillnet.Hours.c~VESSEL+BLOCKX+FINYEAR+MONTH+YEAR.c,data=Monthly,max,na.rm=T)
+Eff.monthly.hour=aggregate(Km.Gillnet.Hours.inv~VESSEL+BLOCKX+FINYEAR+MONTH+YEAR.c,data=Monthly,max,na.rm=T)
+
+# Eff.monthly.hour.c=aggregate(Km.Gillnet.Hours.c~FINYEAR+MONTH+VESSEL+BLOCKX+YEAR.c,data=Eff.monthly.hour.c,sum,na.rm=T) #this is redundant
+# Eff.monthly.hour=aggregate(Km.Gillnet.Hours.inv~FINYEAR+MONTH+VESSEL+BLOCKX+YEAR.c,data=Eff.monthly.hour,sum,na.rm=T)
+
+#merge into single file
+THESE=c("BLOCKX","FINYEAR","MONTH","VESSEL","YEAR.c")
+Eff.monthly.c=merge(Eff.monthly.c,Eff.monthly.hour.c,by=THESE,all=T)
+Eff.monthly=merge(Eff.monthly,Eff.monthly.hour,by=THESE,all=T)
+Eff.monthly.c=merge(Eff.monthly.c,Eff.monthly,by=THESE,all.x=T)
+Eff.monthly.c=merge(Eff.monthly.c,Block.lat.long,by=c("BLOCKX"),all.x=T)
+
+
+#put back effort reporter variable
+
+#daily aggregated at monthly level
+a=Effort.daily[,match(c("blockx","finyear","month","vessel","Eff.Reporter"),names(Effort.daily))]
+a=a[!duplicated(paste(a$blockx,a$finyear,a$month,a$vessel)),]
+Eff.daily.c=merge(Eff.daily.c,a,by=c("blockx","finyear","month","vessel"),all.x=T)
+
+#daily
+a=Effort.daily[,match(c("blockx","block10","Same.return.SNo","vessel","Eff.Reporter"),names(Effort.daily))]
+a=a[!duplicated(paste(a$blockx,a$block10,a$Same.return.SNo,a$vessel)),]
+Eff.daily.c.daily=merge(Eff.daily.c.daily,a,by=c("blockx","block10","Same.return.SNo","vessel"),all.x=T)
+
+#monthly
+a=Effort.monthly[,match(c("BLOCKX","FINYEAR","MONTH","VESSEL","Eff.Reporter"),names(Effort.monthly))]
+a=a[!duplicated(paste(a$BLOCKX,a$FINYEAR,a$MONTH,a$VESSEL)),]
+Eff.monthly.c=merge(Eff.monthly.c,a,by=c("BLOCKX","FINYEAR","MONTH","VESSEL"),all.x=T)
+
+rm(a)
+
+
+#put back effort variables
+#monthly
+Eff.monthly.c$dummy=with(Eff.monthly.c,paste(BLOCKX,FINYEAR,MONTH,VESSEL,
+                                             Km.Gillnet.Hours.c,Km.Gillnet.Days.c))
+a=Effort.monthly[,match(c("BLOCKX","FINYEAR","MONTH","VESSEL",
+                          "SHOTS.c","NETLEN.c","BDAYS.c","HOURS.c",
+                          "Km.Gillnet.Hours.c","Km.Gillnet.Days.c"),names(Effort.monthly))]
+a$dummy=paste(a$BLOCKX,a$FINYEAR,a$MONTH,a$VESSEL,a$Km.Gillnet.Hours.c,a$Km.Gillnet.Days.c)
+a=a[!duplicated(a$dummy),]
+a=subset(a,dummy%in%Eff.monthly.c$dummy,select=c(dummy,SHOTS.c,NETLEN.c,BDAYS.c,HOURS.c))
+Eff.monthly.c=merge(Eff.monthly.c,a,by="dummy",all.x=T)
+Eff.monthly.c=Eff.monthly.c[,-match("dummy",names(Eff.monthly.c))]
+
+#daily
+a=Effort.daily[,match(c("blockx","block10","Same.return.SNo","vessel",
+                        "netlen.c","hours.c","bdays.c","shots.c","nlines.c"),names(Effort.daily))]
+a$dummy=paste(a$blockx,a$block10,a$Same.return.SNo,a$vessel)
+a=a[!duplicated(a$dummy),]
+Eff.daily.c.daily$dummy=with(Eff.daily.c.daily,paste(blockx,block10,Same.return.SNo,vessel))
+a=subset(a,dummy%in%Eff.daily.c.daily$dummy,select=c(dummy,netlen.c,hours.c,bdays.c,shots.c,nlines.c))
+Eff.daily.c.daily=merge(Eff.daily.c.daily,a,by="dummy",all.x=T)
+Eff.daily.c.daily=Eff.daily.c.daily[,-match("dummy",names(Eff.daily.c.daily))]
+rm(a)
+
+
+
+#4.4.2.3 Merge monthly and daily-aggregated
+Eff.monthly.c=Eff.monthly.c[,-match("YEAR.c",names(Eff.monthly.c))]
+#names(Eff.daily.c)=names(Eff.monthly.c)
+
+#monthly
+Eff=Eff.monthly.c
+#Eff=rbind(Eff.monthly.c,Eff.daily.c)
+Eff$Eff.Reporter=with(Eff,ifelse(is.na(Eff.Reporter),"good",Eff.Reporter))
+
+#daily
+Eff.daily=Eff.daily.c.daily
+names(Eff.daily)[match(c("blockx","finyear","month","vessel"),names(Eff.daily))]=c("BLOCKX",
+                                                                                   "FINYEAR","MONTH","VESSEL")
+Eff.daily$Eff.Reporter=with(Eff.daily,ifelse(is.na(Eff.Reporter),"good",Eff.Reporter))
+
+#increase in fishing efficiency 
+#note: increase of 2% until 1993. From then on, maintain 1994/95 level (Simpfendorfer et al 2000 & Rory's request)
+#       this is done in '2.CPUE standardisations.R' after the standardisation
+fn.eff.creep=function(dat)
+{
+  dat$YEAR.c=as.numeric(substr(dat$FINYEAR,1,4))
+  Fish.pow.inc=(1+Fish.Pow*(1+(1975:1993)-YEAR.c.monthly[1]))
+  dat$Km.Gillnet.Hours.c=with(dat,
+                              ifelse(YEAR.c==1975,Km.Gillnet.Hours.c,
+                                     ifelse(YEAR.c>1975 & YEAR.c<1994,Km.Gillnet.Hours.c*(1+Fish.Pow*(1+YEAR.c-YEAR.c.monthly[2])),
+                                            ifelse(YEAR.c>=1994,Km.Gillnet.Hours.c*Fish.pow.inc[length(Fish.pow.inc)],NA))))
+  
+  dat$Km.Gillnet.Days.c=with(dat,
+                             ifelse(YEAR.c==1975,Km.Gillnet.Days.c,
+                                    ifelse(YEAR.c>1975 & YEAR.c<1994,Km.Gillnet.Days.c*(1+Fish.Pow*(1+YEAR.c-YEAR.c.monthly[2])),
+                                           ifelse(YEAR.c>=1994,Km.Gillnet.Days.c*Fish.pow.inc[length(Fish.pow.inc)],NA))))
+  
+  
+  return(list(KM.GN.H=dat$Km.Gillnet.Hours.c,KM.GN.D=dat$Km.Gillnet.Days.c))
+}
+
+#monthly
+#pp=fn.eff.creep(Eff)
+#Eff$Km.Gillnet.Days.c.no.creep=Eff$Km.Gillnet.Days.c
+
+#daily
+#pp=fn.eff.creep(Eff.daily)
+#Eff.daily$Km.Gillnet.Days.c.no.creep=Eff.daily$Km.Gillnet.Days.c
+
+
+
+#Add mesh size    
+#note:only use meshes of 6.5 inch (165 mm) and 7 inch (178 mm) for cpue standardisation
+#Monthly
+Mesh.monthly$mesh=Mesh.monthly$MSHIGH
+Mesh.monthly$mesh=with(Mesh.monthly,ifelse(mesh==0,NA,mesh))
+#a=subset(Mesh.monthly,mesh%in%c("165","178"))
+#A=with(a,table(VESSEL,mesh))  #vessels fishing with a unique mesh so extrapolate to all records for same vessel
+#a=a[!duplicated(a$VESSEL),match(c("VESSEL","mesh"),names(a))]
+a=subset(Mesh.monthly,select=c(VESSEL,FINYEAR,MONTH,BLOCKX,METHOD,mesh))
+a$dummy=with(a,paste(VESSEL,FINYEAR,MONTH,BLOCKX))
+Eff$dummy=with(Eff,paste(VESSEL,FINYEAR,MONTH,BLOCKX))
+a=subset(a,dummy%in%Eff$dummy)
+a=a[!duplicated(a$dummy),]
+a=a[,-match(c("dummy",'METHOD'),names(a))]
+Eff=Eff[,-match("dummy",names(Eff))]
+Eff=merge(Eff,a,by=c("VESSEL","FINYEAR","MONTH","BLOCKX"),all.x=T)
+
+
+#Daily
+Mesh.size$mesh=Mesh.size$mshigh
+#a=subset(Mesh.size,mesh%in%c(165,178))
+a=subset(Mesh.size,select=c(SNo,DSNo,TSNo,mesh))
+#a$vessel=as.character(a$vessel)
+a$Same.return.SNo=with(a,paste(SNo,DSNo,TSNo))
+a=a[!duplicated(a$Same.return.SNo),]
+#A=with(a,table(vessel,mesh))  # so vessels fish with 6.5 and 7 inch meshes so interpolate
+# msh.ves=unique(a$vessel)
+# O=vector('list',length(msh.ves))
+# for(v in 1:length(msh.ves))
+# {
+#   dd=subset(a,vessel==msh.ves[v],select=c(vessel,mesh,Same.return.SNo,date))
+#   dd=dd[order(dd$date),]
+#   dd$mesh=na.locf(dd$mesh)
+#   O[[v]]=dd[,-match(c("vessel","date"),names(dd))]
+# }
+# O=do.call(rbind,O)
+#O=subset(O,Same.return.SNo%in%unique(Eff.daily$Same.return.SNo))
+#O=O[!duplicated(O$Same.return.SNo),]
+a=subset(a,Same.return.SNo%in%unique(Eff.daily$Same.return.SNo),select=c(Same.return.SNo,mesh))
+Eff.daily=merge(Eff.daily,a,by="Same.return.SNo",all.x=T)  
+
+
+
+
+#Add depth to daily
+a=subset(Data.daily.original,select=c(SNo,DSNo,TSNo,depthMin,depthMax))
+a$Same.return.SNo=with(a,paste(SNo,DSNo,TSNo))
+a=a[!duplicated(a$Same.return.SNo),]
+a$Mean.depth=(a$depthMin+a$depthMax)/2
+a=subset(a,Same.return.SNo%in%unique(Eff.daily$Same.return.SNo),select=c(Same.return.SNo,Mean.depth))
+Eff.daily=merge(Eff.daily,a,by="Same.return.SNo",all.x=T)
+
+
+
+#4.4.2.4 Select effective efforts
+#monthly
+Eff.whis=subset(Eff,LAT <= Whiskery.range[1] & LONG <= Whiskery.range[2])
+Eff.gum=subset(Eff,LONG >= Gummy.range[1] & LONG <= Gummy.range[2] & LAT <=(-30))
+Eff.dus=subset(Eff,LAT <= Dusky.range[1]  & LONG <= Dusky.range[2])
+Eff.san=subset(Eff,LAT <= Sandbar.range[1]  & LONG <= Sandbar.range[2])
+
+#daily
+Eff.whis.daily=subset(Eff.daily,LAT <= Whiskery.range[1] & LONG <= Whiskery.range[2])
+Eff.gum.daily=subset(Eff.daily,LONG >= Gummy.range[1] & LONG <= Gummy.range[2] & LAT <=(-30))
+Eff.dus.daily=subset(Eff.daily,LAT <= Dusky.range[1]  & LONG <= Dusky.range[2])
+Eff.san.daily=subset(Eff.daily,LAT <= Sandbar.range[1]  & LONG <= Sandbar.range[2])
+
+
+#4.4.2.5 Add effort
+#monthly
+Ids=match(c("LAT","LONG"),names(Eff.whis))
+Data.monthly.GN.whiskery=merge(Data.monthly.GN.whiskery,Eff.whis[,-Ids],by=c("BLOCKX",
+                                                                             "FINYEAR","MONTH","VESSEL"),all.x=T)
+Data.monthly.GN.gummy=merge(Data.monthly.GN.gummy,Eff.gum[,-Ids],by=c("BLOCKX",
+                                                                      "FINYEAR","MONTH","VESSEL"),all.x=T)
+Data.monthly.GN.dusky=merge(Data.monthly.GN.dusky,Eff.dus[,-Ids],by=c("BLOCKX",
+                                                                      "FINYEAR","MONTH","VESSEL"),all.x=T)
+Data.monthly.GN.sandbar=merge(Data.monthly.GN.sandbar,Eff.san[,-Ids],by=c("BLOCKX",
+                                                                          "FINYEAR","MONTH","VESSEL"),all.x=T)
+
+#daily
+Ids=match(c("BLOCKX","FINYEAR","MONTH","LAT","LONG","VESSEL","block10"),names(Eff.whis.daily))
+Data.daily.GN.whiskery=merge(Data.daily.GN.whiskery,Eff.whis.daily[,-Ids],
+                             by=c("Same.return.SNo"),all.x=T)
+Data.daily.GN.gummy=merge(Data.daily.GN.gummy,Eff.gum.daily[,-Ids],
+                          by=c("Same.return.SNo"),all.x=T)
+Data.daily.GN.dusky=merge(Data.daily.GN.dusky,Eff.dus.daily[,-Ids],
+                          by=c("Same.return.SNo"),all.x=T)
+Data.daily.GN.sandbar=merge(Data.daily.GN.sandbar,Eff.san.daily[,-Ids],
+                            by=c("Same.return.SNo"),all.x=T) 
+
+
+#Drop mismatch between effort variables and effort
+fan11=function(a,b,PLT="NO")
+{
+  ID=match('Same.return',names(a)) 
+  a$METHOD="GN"
+  if(length(ID==0)) a$Same.return=with(a,paste(FINYEAR,MONTH,VESSEL,METHOD,BLOCKX))
+  a=subset(a,select=c(Same.return,Km.Gillnet.Days.c,YEAR.c,
+                      Km.Gillnet.Hours.c,SHOTS.c, BDAYS.c, HOURS.c, NETLEN.c))
+  a=a[!duplicated(a$Same.return),]
+  
+  b=subset(b,select=c(Same.return.SNo,Km.Gillnet.Days.c,
+                      Km.Gillnet.Hours.c,shots.c, bdays.c, hours.c, netlen.c))
+  b=b[!duplicated(b$Same.return.SNo),]
+  
+  a=subset(a,!(is.na(Km.Gillnet.Days.c)|is.na(Km.Gillnet.Hours.c)))
+  b=subset(b,!(is.na(Km.Gillnet.Days.c)|is.na(Km.Gillnet.Hours.c)))
+  
+  a$dummy.km.gn.d=with(a,BDAYS.c*NETLEN.c/1000)
+  a$dummy.km.gn.h=with(a,SHOTS.c*BDAYS.c*HOURS.c*NETLEN.c/1000)
+  
+  
+  a$dummy.km.gn.d=with(a,ifelse(YEAR.c<1989,dummy.km.gn.d*Inc.per,dummy.km.gn.d))
+  a$dummy.km.gn.h=with(a,ifelse(YEAR.c<1989,dummy.km.gn.h*Inc.per,dummy.km.gn.h))
+  
+  b$dummy.km.gn.d=with(b,netlen.c/1000)
+  b$dummy.km.gn.h=with(b,hours.c*netlen.c/1000)
+  
+  if(PLT=="YES")
+  {
+    par(mfcol=c(2,2))
+    
+    plot(a$Km.Gillnet.Days.c,a$dummy.km.gn.d)
+    lines(a$Km.Gillnet.Days.c,a$Km.Gillnet.Days.c,col=2)
+    
+    #a1=subset(a,!round(Km.Gillnet.Hours.c)==!round(dummy.km.gn.h))
+    plot(a$Km.Gillnet.Hours.c,a$dummy.km.gn.h)
+    lines(a$Km.Gillnet.Hours.c,a$Km.Gillnet.Hours.c,col=2)
+    
+    #b1=subset(b,!round(Km.Gillnet.Days.c)==!round(dummy.km.gn.d))
+    plot(b$Km.Gillnet.Days.c,b$dummy.km.gn.d)
+    lines(b$Km.Gillnet.Days.c,b$Km.Gillnet.Days.c,col=2)
+    
+    #b1=subset(b,!round(Km.Gillnet.Hours.c)==!round(dummy.km.gn.h))
+    plot(b$Km.Gillnet.Hours.c,b$dummy.km.gn.h)
+    lines(b$Km.Gillnet.Hours.c,b$Km.Gillnet.Hours.c,col=2)
+    
+  }
+  
+  
+  print(paste("monthly_km.gn.d",nrow(a)==sum(round(a$dummy.km.gn.d)==round(a$Km.Gillnet.Days.c))))
+  print(paste("monthly_km.gn.h",nrow(a)==sum(round(a$dummy.km.gn.h)==round(a$Km.Gillnet.Hours.c))))
+  print(paste("daily_km.gn.d",nrow(b)==sum(round(b$dummy.km.gn.d)==round(b$Km.Gillnet.Days.c))))
+  print(paste("daily_km.gn.h",nrow(b)==sum(round(b$dummy.km.gn.h)==round(b$Km.Gillnet.Hours.c))))
+  
+  mon.km.gn.d=subset(a,!Km.Gillnet.Days.c==dummy.km.gn.d)
+  mon.km.gn.h=subset(a,!Km.Gillnet.Hours.c==dummy.km.gn.h)
+  Drop.rec.m=unique(c(mon.km.gn.d$Same.return,mon.km.gn.h$Same.return))
+  
+  day.km.gn.d=subset(b,!Km.Gillnet.Days.c==dummy.km.gn.d)
+  day.km.gn.h=subset(b,!Km.Gillnet.Hours.c==dummy.km.gn.h)
+  Drop.rec.d=unique(c(day.km.gn.d$Same.return.SNo,day.km.gn.h$Same.return.SNo))
+  return(list(Drop.rec.m=Drop.rec.m,Drop.rec.d=Drop.rec.d))
+}
+
+drop.whis=fan11(a=subset(Data.monthly.GN.whiskery,!zone=="Zone2"),b=Data.daily.GN.whiskery)
+drop.gum=fan11(a=subset(Data.monthly.GN.gummy,!zone=="Zone2"),b=Data.daily.GN.gummy)
+drop.dus=fan11(a=subset(Data.monthly.GN.dusky,!zone=="Zone2"),b=Data.daily.GN.dusky)
+drop.san=fan11(a=subset(Data.monthly.GN.sandbar,!zone=="Zone2"),b=Data.daily.GN.sandbar)
+
+if(length(drop.whis$Drop.rec.m)>0) Data.monthly.GN.whiskery=subset(Data.monthly.GN.whiskery,!Same.return%in%drop.whis$Drop.rec.m)
+if(length(drop.gum$Drop.rec.m)>0) Data.monthly.GN.gummy=subset(Data.monthly.GN.gummy,!Same.return%in%drop.gum$Drop.rec.m)
+if(length(drop.dus$Drop.rec.m)>0) Data.monthly.GN.dusky=subset(Data.monthly.GN.dusky,!Same.return%in%drop.dus$Drop.rec.m)
+if(length(drop.san$Drop.rec.m)>0) Data.monthly.GN.sandbar=subset(Data.monthly.GN.sandbar,!Same.return%in%drop.san$Drop.rec.m)
+
+if(length(drop.whis$Drop.rec.d)>0) Data.daily.GN.whiskery=subset(Data.daily.GN.whiskery,!Same.return.SNo%in%drop.whis$Drop.rec.d)
+if(length(drop.gum$Drop.rec.d)>0) Data.daily.GN.gummy=subset(Data.daily.GN.gummy,!Same.return.SNo%in%drop.gum$Drop.rec.d)
+if(length(drop.dus$Drop.rec.d)>0) Data.daily.GN.dusky=subset(Data.daily.GN.dusky,!Same.return.SNo%in%drop.dus$Drop.rec.d)
+if(length(drop.san$Drop.rec.d)>0) Data.daily.GN.sandbar=subset(Data.daily.GN.sandbar,!Same.return.SNo%in%drop.san$Drop.rec.d)
+
+
+# if(Use.Date=="YES")
+# {
+#   Data.daily.GN.whiskery=merge(Data.daily.GN.whiskery,Eff.whis.daily[,-Ids],
+#                                by=c("date","Same.return.SNo","VESSEL","block10"),all.x=T)
+#   Data.daily.GN.gummy=merge(Data.daily.GN.gummy,Eff.gum.daily[,-Ids],
+#                             by=c("date","Same.return.SNo","VESSEL","block10"),all.x=T)
+#   Data.daily.GN.dusky=merge(Data.daily.GN.dusky,Eff.dus.daily[,-Ids],
+#                             by=c("date","Same.return.SNo","VESSEL","block10"),all.x=T)
+#   Data.daily.GN.sandbar=merge(Data.daily.GN.sandbar,Eff.san.daily[,-Ids],
+#                               by=c("date","Same.return.SNo","VESSEL","block10"),all.x=T) 
+# }
+
+
+#also consider bad effort reporters             
+#monthly
+Data.monthly.GN.whiskery$Reporter=with(Data.monthly.GN.whiskery,ifelse(Eff.Reporter=="bad","bad",Reporter))  
+Data.monthly.GN.gummy$Reporter=with(Data.monthly.GN.gummy,ifelse(Eff.Reporter=="bad","bad",Reporter))  
+Data.monthly.GN.dusky$Reporter=with(Data.monthly.GN.dusky,ifelse(Eff.Reporter=="bad","bad",Reporter))  
+Data.monthly.GN.sandbar$Reporter=with(Data.monthly.GN.sandbar,ifelse(Eff.Reporter=="bad","bad",Reporter))  
+
+#daily
+Data.daily.GN.whiskery$Reporter=with(Data.daily.GN.whiskery,ifelse(Eff.Reporter=="bad","bad",Reporter))  
+Data.daily.GN.gummy$Reporter=with(Data.daily.GN.gummy,ifelse(Eff.Reporter=="bad","bad",Reporter))  
+Data.daily.GN.dusky$Reporter=with(Data.daily.GN.dusky,ifelse(Eff.Reporter=="bad","bad",Reporter))  
+Data.daily.GN.sandbar$Reporter=with(Data.daily.GN.sandbar,ifelse(Eff.Reporter=="bad","bad",Reporter))  
+
+
+#4.4.2.6 Remove records with no effort 
+#monthly
+Data.monthly.GN.whiskery=subset(Data.monthly.GN.whiskery,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
+Data.monthly.GN.gummy=subset(Data.monthly.GN.gummy,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
+Data.monthly.GN.dusky=subset(Data.monthly.GN.dusky,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
+Data.monthly.GN.sandbar=subset(Data.monthly.GN.sandbar,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
+
+#daily
+Data.daily.GN.whiskery=subset(Data.daily.GN.whiskery,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
+Data.daily.GN.gummy=subset(Data.daily.GN.gummy,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
+Data.daily.GN.dusky=subset(Data.daily.GN.dusky,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
+Data.daily.GN.sandbar=subset(Data.daily.GN.sandbar,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
+
+
+#4.4.2.7 remove caess data post 2005/06 in monthly records
+Post.yrs=max(unique(sort(Data.monthly$YEAR.c)))
+Post.yrs=paste(2006:(Post.yrs-1),substr(2007:Post.yrs,3,4),sep="-")
+Data.monthly.GN.whiskery=subset(Data.monthly.GN.whiskery,!(FINYEAR%in%Post.yrs & TYPE.DATA=="monthly"))
+Data.monthly.GN.gummy=subset(Data.monthly.GN.gummy,!(FINYEAR%in%Post.yrs & TYPE.DATA=="monthly"))
+Data.monthly.GN.dusky=subset(Data.monthly.GN.dusky,!(FINYEAR%in%Post.yrs & TYPE.DATA=="monthly"))
+Data.monthly.GN.sandbar=subset(Data.monthly.GN.sandbar,!(FINYEAR%in%Post.yrs & TYPE.DATA=="monthly"))
+
+
+
+#4.4.2.8 Create list of cpue data sets for plotting in SOFAR
+Species.list=list(whiskery=Data.monthly.GN.whiskery,gummy=Data.monthly.GN.gummy,
+                  dusky=Data.monthly.GN.dusky,sandbar=Data.monthly.GN.sandbar)
+
+
+
+#4.5 Remove school shark and dogshark targeted records                                
+#monthly
+Data.monthly.GN.whiskery=subset(Data.monthly.GN.whiskery,!(Sch.or.DogS=="Yes"))
+Data.monthly.GN.gummy=subset(Data.monthly.GN.gummy,!(Sch.or.DogS=="Yes"))
+Data.monthly.GN.dusky=subset(Data.monthly.GN.dusky,!(Sch.or.DogS=="Yes"))
+Data.monthly.GN.sandbar=subset(Data.monthly.GN.sandbar,!(Sch.or.DogS=="Yes"))
+
+#daily
+Data.daily.GN.whiskery=subset(Data.daily.GN.whiskery,!(Sch.or.DogS=="Yes"))
+Data.daily.GN.gummy=subset(Data.daily.GN.gummy,!(Sch.or.DogS=="Yes"))
+Data.daily.GN.dusky=subset(Data.daily.GN.dusky,!(Sch.or.DogS=="Yes"))
+Data.daily.GN.sandbar=subset(Data.daily.GN.sandbar,!(Sch.or.DogS=="Yes"))
+
+
+#4.6. Remove daily logbook records from data.monthly
+Data.monthly.GN.whiskery=subset(Data.monthly.GN.whiskery,!FINYEAR%in%Daily.l.years)
+Data.monthly.GN.gummy=subset(Data.monthly.GN.gummy,!FINYEAR%in%Daily.l.years)
+Data.monthly.GN.dusky=subset(Data.monthly.GN.dusky,!FINYEAR%in%Daily.l.years)
+Data.monthly.GN.sandbar=subset(Data.monthly.GN.sandbar,!FINYEAR%in%Daily.l.years)
+
+
+
+
+
+#------ G 1. CPUE STANDARDISATION  ------
+if (plot.cpue.paper.figures=="YES")
+{
+  setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper")
+  
+  #Some functions
+  
+  PLOT.fn=function(DATA1,DATA2,max1,max2,LEG,CL2)   #function plot vessels and blocks
+  {
+    plot(1:NN.monthly,DATA1,ylab="",xlab="",xaxt="n",las=2,type="o",pch=19,cex=1,ylim=c(0,max1)
+         ,cex.axis=.75,lwd=1.1)
+    axis(1,at=1:NN.monthly,labels=F,tck=-0.015)
+    
+    par(new=T)
+    plot(1:NN.monthly,DATA2,col=CL2,type='o',pch=19,axes=F,ann='F',cex=1,lwd=1.1,ylim=c(0,max2))
+    #  axis(4,at=pretty(DATA2),labels=pretty(DATA2),las=2,cex.axis=.75)
+    axis(4,at=seq(0,max2,40),labels=seq(0,max2,40),las=2,cex.axis=.75,col.axis=CL2)
+    legend("topleft",LEG,bty='n',cex=.75)
+  }
+  
+  fn.eff.probs=function(gear,eff.var,eff.var1,letra,CLs)
+  {
+    fn.wrong=function()
+    {
+      ID1=match(corr,names(dummy))
+      dummy$VAR=ifelse(!(dummy[,ID]==dummy[,ID1]),"Wrong","OK")
+      dummy$VAR=with(dummy,ifelse(is.na(VAR),"Wrong",VAR))
+      Agg=table(dummy[,ID2],dummy$VAR)
+      Agg=as.matrix(round(100*Agg/rowSums(Agg),4))
+      if(ncol(Agg)==2)Tab=cbind(Agg[,1],Agg[,2])
+      if(ncol(Agg)==1)Tab=cbind(Agg[,1],rep(0,length(Agg[,1])))
+      colnames(Tab)=c("ok","wrong")
+      return(Tab)
+    }
+    
+    #monthly
+    dummy=subset(Effort.monthly,!FINYEAR%in%Daily.l.years & METHOD==gear & !(BLOCKX%in%Estuaries))
+    corr=paste(eff.var,".c",sep="")
+    dummy=dummy[,match(c("FINYEAR","METHOD","Same.return",eff.var,corr),names(dummy))]
+    dummy=dummy[!duplicated(dummy$Same.return),]
+    THIS="FINYEAR"
+    eff.var.1=eff.var
+    ID=match(eff.var,names(dummy))
+    ID2=match(THIS,names(dummy))
+    
+    
+    Tab.m=fn.wrong()
+    
+    #daily
+    dummy=subset(Effort.daily,method==gear & !(blockx%in%Estuaries))
+    corr=paste(eff.var1,".c",sep="")
+    dummy=dummy[,match(c("finyear","method","date","ID",eff.var1,corr),names(dummy))]
+    dummy$ID=with(dummy,paste(date,ID))
+    dummy=dummy[!duplicated(dummy$ID),]
+    ID=match(eff.var1,names(dummy))
+    ID2=match("finyear",names(dummy))
+    
+    Tab.d=fn.wrong()
+    
+    TAB=rbind(Tab.m,Tab.d)
+    rownames(TAB)=NULL
+    barplot(rbind(TAB[,1],TAB[,2]),beside=F,col=CLs,cex.axis=1.25,cex.lab=1.25,
+            ylim=c(0,110),yaxs="i",xaxs="i",legend.text=paste(letra),          
+            args.legend=list(x = "topleft",cex=1,bty='n',
+                             fill="transparent",border='transparent'),ylab="")
+    box()
+    AXIS1()
+    AXIS2()
+    return(data.frame(OK=mean(TAB[,1]),wrong=mean(TAB[,2])))
+  }
+  
+  fn.explore=function(DATA,NAMES)
+  {
+    #remove initial years when sandbar was not reported
+    if(NAMES=="Sandbar shark")
+    {
+      DATA=subset(DATA,!(FINYEAR%in%c("1975-76","1976-77","1977-78",
+                                      "1978-79","1979-80","1980-81","1981-82","1982-83","1983-84","1984-85")))
+    }
+    
+    #Remove vessel levels that don't occur in data
+    DATA$VESSEL=DATA$VESSEL[, drop=TRUE]
+    
+    DATA$CPUE=with(DATA,Catch.Target/Km.Gillnet.Days.c)
+    DATA$SP.Target=ifelse(DATA$CPUE>0,1,0)
+    
+    #Tables
+    TABLE1=sort(with(DATA,table(VESSEL)))
+    TABLE1=data.frame(VESSEL=names(TABLE1),Count=as.numeric(TABLE1))
+    
+    TABLE6=aggregate(Catch.Target~VESSEL,data=DATA,mean)
+    names(TABLE6)[2]="Mean Catch"
+    TABLE6.1=aggregate(Catch.Target~VESSEL,data=DATA,sd)
+    names(TABLE6.1)[2]="SD Catch"
+    TABLE6=merge(TABLE6,TABLE1,by="VESSEL")
+    TABLE6=merge(TABLE6,TABLE6.1,by="VESSEL")
+    TABLE6=TABLE6[order(TABLE6$Count),]
+    
+    
+    #cumulative catch
+    TABLE12=aggregate(Catch.Target~VESSEL,data=DATA,sum)
+    TABLE12=TABLE12[order(-TABLE12$Catch.Target),]
+    TABLE12$CumCatch=cumsum(TABLE12$Catch.Target)
+    TABLE12$PerCumCatch=round(TABLE12$CumCatch*100/sum(TABLE12$Catch.Target),2)
+    
+    TABLE13=aggregate(Catch.Target~BLOCKX,data=DATA,sum)
+    TABLE13=TABLE13[order(-TABLE13$Catch.Target),]
+    TABLE13$CumCatch=cumsum(TABLE13$Catch.Target)
+    TABLE13$PerCumCatch=round(TABLE13$CumCatch*100/sum(TABLE13$Catch.Target),2)
+    
+    #cumulative records
+    TABLE16=rev(sort(table(DATA$VESSEL)))
+    TABLE16=data.frame(Records=as.numeric(TABLE16),VESSEL=names(TABLE16))
+    TABLE16$CumRecords=cumsum(TABLE16$Records)
+    TABLE16$PerCumRecords=round(TABLE16$CumRecords*100/sum(TABLE16$Records),2)
+    
+    TABLE17=rev(sort(table(DATA$BLOCKX)))
+    TABLE17=data.frame(Records=as.numeric(TABLE17),BLOCKX=names(TABLE17))
+    TABLE17$CumRecords=cumsum(TABLE17$Records)
+    TABLE17$PerCumRecords=round(TABLE17$CumRecords*100/sum(TABLE17$Records),2)
+    
+    
+    
+    return(list(Ves.Cum.Ca=TABLE12$PerCumCatch,Block.Cum.Ca=TABLE13$PerCumCatch,
+                TABLE17=TABLE17,TABLE16=TABLE16,Mean_catch_Vessel=TABLE6))
+  }
+  
+  fun.rec.per.ves=function(DATA)
+  {
+    Count.ves.records=table(DATA$Count)
+    Count.ves.records=c(subset(Count.ves.records,as.numeric(names(Count.ves.records))<Min.rec.ves),sum(
+      subset(Count.ves.records,as.numeric(names(Count.ves.records))<Min.rec.ves)))
+    names(Count.ves.records)[length(Count.ves.records)]=paste(Min.rec.ves-1,"+",sep="")
+    b=barplot(Count.ves.records,xaxt='n',yaxt='n')
+    axis(1,at=b,labels=F,tck=-0.016)
+    axis(2,at=seq(0,300,100),labels=seq(0,300,100),tck=-0.016,cex=1.25,las=1)
+    axis(1,at=b[seq(2,(length(b)-2),by=2)],labels=names(Count.ves.records)[seq(2,(length(b)-2),by=2)],
+         tck=-0.032,cex=1.25)
+    mtext("Number of records per vessel",side=1,line=1.2,font=1,las=0,cex=1.125,outer=F)
+    mtext("Count",side=2,line=1.75,font=1,las=0,cex=1.25,outer=F)
+    axis(1,at=b[length(b)],labels=paste(">",19,sep=""),tck=-0.032,cex.axis=1.15)
+    
+  }
+  
+  fn.Figure5=function(DATA,NAMES,SP)
+  {
+    #remove initial years when sandbar was not reported
+    if(NAMES=="Sandbar shark")
+    {
+      DATA=subset(DATA,!(FINYEAR%in%c("1975-76","1976-77","1977-78",
+                                      "1978-79","1979-80","1980-81","1981-82","1982-83","1983-84","1984-85")))
+    }
+    
+    #Remove vessel levels that don't occur in data
+    DATA$VESSEL=DATA$VESSEL[, drop=TRUE]
+    
+    DATA=subset(DATA,SPECIES==SP)
+    DATA$CPUE=with(DATA,LIVEWT.c/Km.Gillnet.Hours.c)
+    DATA$SP.Target=ifelse(DATA$CPUE>0,1,0)
+    DATA$Catch.Target=DATA$LIVEWT.c
+    
+    #Tables
+    TABLE1=sort(with(DATA,table(VESSEL)))
+    
+    TABLE6=aggregate(Catch.Target~VESSEL,data=DATA,mean)
+    names(TABLE6)[2]="Mean Catch"
+    TABLE6.1=aggregate(Catch.Target~VESSEL,data=DATA,sd)
+    names(TABLE6.1)[2]="SD Catch"
+    TABLE6=merge(TABLE6,data.frame(VESSEL=names(TABLE1),Count=as.numeric(TABLE1)),by="VESSEL")
+    TABLE6=merge(TABLE6,TABLE6.1,by="VESSEL")
+    TABLE6=TABLE6[order(TABLE6$Count),]
+    
+    
+    #cumulative catch
+    TABLE12=aggregate(Catch.Target~VESSEL,data=DATA,sum)
+    TABLE12=TABLE12[order(-TABLE12$Catch.Target),]
+    TABLE12$CumCatch=cumsum(TABLE12$Catch.Target)
+    TABLE12$PerCumCatch=round(TABLE12$CumCatch*100/sum(TABLE12$Catch.Target),2)
+    
+    TABLE13=aggregate(Catch.Target~BLOCKX,data=DATA,sum)
+    TABLE13=TABLE13[order(-TABLE13$Catch.Target),]
+    TABLE13$CumCatch=cumsum(TABLE13$Catch.Target)
+    TABLE13$PerCumCatch=round(TABLE13$CumCatch*100/sum(TABLE13$Catch.Target),2)
+    
+    #cumulative records
+    TABLE16=rev(sort(table(DATA$VESSEL)))
+    TABLE16=data.frame(Records=as.numeric(TABLE16),VESSEL=names(TABLE16))
+    TABLE16$CumRecords=cumsum(TABLE16$Records)
+    TABLE16$PerCumRecords=round(TABLE16$CumRecords*100/sum(TABLE16$Records),2)
+    
+    TABLE17=rev(sort(table(DATA$BLOCKX)))
+    TABLE17=data.frame(Records=as.numeric(TABLE17),BLOCKX=names(TABLE17))
+    TABLE17$CumRecords=cumsum(TABLE17$Records)
+    TABLE17$PerCumRecords=round(TABLE17$CumRecords*100/sum(TABLE17$Records),2)
+    
+    
+    
+    return(list(Ves.Cum.Ca=TABLE12$PerCumCatch,Block.Cum.Ca=TABLE13$PerCumCatch,
+                TABLE17=TABLE17,TABLE16=TABLE16,Mean_catch_Vessel=TABLE6))
+  }
+  
+}
+
+
+#Extract monthly records by Year-Month-Vessel-Block
+
+These.efforts=c("FINYEAR","Same.return","Km.Gillnet.Days.inv",
+                "Km.Gillnet.Days.c","zone","MONTH","BLOCKX")
+
+Effort.data.fun=function(DATA,target,ktch)
+{
+  #remove record if no effort data
+  ID=which(DATA$Km.Gillnet.Days.c==0) #no effort records
+  ID=c(ID,which(is.na(DATA$Km.Gillnet.Days.c))) #NA records
+  if(length(ID)>0)DATA=DATA[-ID,]
+  
+  # remove nonsense lat
+  DATA=subset(DATA,LAT>=(-36))
+  
+  #calculate effort
+  Match.these.eff=match(These.efforts,names(DATA))
+  Effort.data=DATA[,Match.these.eff]
+  Effort.data=aggregate(cbind(Km.Gillnet.Days.inv,Km.Gillnet.Days.c)~zone+
+                          FINYEAR+Same.return+MONTH+BLOCKX,Effort.data,max)
+  Effort.data=aggregate(cbind(Km.Gillnet.Days.inv,Km.Gillnet.Days.c)~zone+
+                          FINYEAR+Same.return+MONTH+BLOCKX,Effort.data,sum)
+  
+  #target species catch 
+  ID=match(c(ktch),colnames(DATA))
+  DATA$Catch.Target=with(DATA,ifelse(SPECIES%in%target,DATA[,ID],0))
+  
+  
+  #catch targeted at other species
+  DATA$Catch.Gummy=with(DATA,ifelse(SPECIES==17001,DATA[,ID],0))
+  DATA$Catch.Whiskery=with(DATA,ifelse(SPECIES==17003,DATA[,ID],0))
+  DATA$Catch.Dusky=with(DATA,ifelse(SPECIES%in%c(18003,18001),DATA[,ID],0))
+  DATA$Catch.Sandbar=with(DATA,ifelse(SPECIES==18007,DATA[,ID],0))
+  DATA$Catch.Scalefish=with(DATA,ifelse(SPECIES%in%188000:599001,DATA[,ID],0))
+  
+  #reshape catch data
+  TABLE=aggregate(cbind(Catch.Target,Catch.Gummy,Catch.Whiskery,Catch.Scalefish,Catch.Dusky,Catch.Sandbar)~MONTH+
+                    FINYEAR+BLOCKX+VESSEL+Same.return+LAT+LONG+YEAR.c,data=DATA,sum,na.rm=T)
+  TABLE=TABLE[order(TABLE$FINYEAR,TABLE$MONTH,TABLE$BLOCKX),]
+  
+  #proportion of records with target catch
+  prop.with.catch=round(100*sum(TABLE$Catch.Target>0)/length(TABLE$Catch.Target),0)
+  
+  #merge catch and effort
+  dat=merge(TABLE,Effort.data,by=c("Same.return","FINYEAR","MONTH","BLOCKX"),all.x=T)
+  
+  #create "other shark catch" variable
+  dat$Catch.other.shk=NA
+  if(target[1]==17003)dat$Catch.other.shk=dat$Catch.Dusky+dat$Catch.Sandbar
+  if(target[1]==17001)dat$Catch.other.shk=dat$Catch.Whiskery
+  if(target[1]%in%c(18003,18001))dat$Catch.other.shk=dat$Catch.Whiskery+dat$Catch.Sandbar
+  if(target[1]==18007)dat$Catch.other.shk=dat$Catch.Dusky+dat$Catch.Whiskery
+  
+  #recalculate 60 by 60 blocks
+  dat$BLOCKX.orignl=dat$BLOCKX
+  dat$BLOCKX=as.numeric(substr(dat$BLOCKX,1,4))
+  
+  
+  return(list(dat=dat,prop.with.catch=prop.with.catch))
+}
+
+DATA.list.LIVEWT.c=vector('list',length=N.species)
+names(DATA.list.LIVEWT.c)=names(Species.list)
+
+
+#Create data sets for plotting cpue paper figures
+for ( i in 1:N.species)DATA.list.LIVEWT.c[[i]]=Effort.data.fun(Species.list[[i]],TARGETS[[i]],"LIVEWT.c")$dat
+
+
+#Figure 1. Map of fishing zones
+
+
+
+
+
+############################################################
+
 
 
 rm(list=ls(all=TRUE))
@@ -3794,8 +4603,8 @@ if(Model.run=="First")
     if(s%in%c(4))axis(1,seq(113,129,2),seq(113,129,2),tck=-0.025,cex.axis=1.35)
     mtext(SPECIES.vec[s],4,line=1,las=3,cex=1.5)
   }
-  mtext("Longitude (ºE)",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-  mtext("Latitude (ºS)",side=2,line=0.75,font=1,las=0,cex=1.5,outer=T)
+  mtext("Longitude (?E)",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+  mtext("Latitude (?S)",side=2,line=0.75,font=1,las=0,cex=1.5,outer=T)
   dev.off()
 }
 

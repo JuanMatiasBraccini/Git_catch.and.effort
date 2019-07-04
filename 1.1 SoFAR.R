@@ -54,16 +54,22 @@ Dusky.status="Recovering"
 Sandbar.status="Recovering"
 Whiskery.status="Adequate"
 
+
+#Catch range of indicator species (Gummy, whiskery, dusky, sandbar)
+Catch.range.key.species=c(725,1095)
+
 #bring in data from 1.Manipulate data.R
-Data.monthly=
-Rec.fish.catch=
-Data.current.Sofar=
-PRICES=
-Total.effort.days.monthly=
-Total.effort.hours.monthly=
-Total.effort.zone.hours.monthly=
-Total.effort.zone.days.monthly=
-TEPS.current=  
+setwd("C:/Matias/Analyses/Catch and effort/Data_outs")
+
+Data.monthly=read.csv("Data.monthly.csv",stringsAsFactors = F)
+Rec.fish.catch=read.csv("Rec.fish.catch.csv",stringsAsFactors = F)
+Data.current.Sofar=read.csv(".csv",stringsAsFactors = F)
+PRICES=read.csv(".csv",stringsAsFactors = F)
+Total.effort.days.monthly=read.csv("Annual.total.eff.days.csv",stringsAsFactors = F)
+Total.effort.hours.monthly=read.csv("Annual.total.eff.hours.csv",stringsAsFactors = F)
+Total.effort.zone.hours.monthly=read.csv("Annual.zone.eff.hours.csv",stringsAsFactors = F)
+Total.effort.zone.days.monthly=read.csv("Annual.zone.eff.days.csv",stringsAsFactors = F)
+TEPS.current=read.csv("TEPS.current.csv",stringsAsFactors = F)
   
   
 handle.Sofar=paste("C:/Matias/Analyses/Catch and effort/State of fisheries/",Current.yr,sep="")

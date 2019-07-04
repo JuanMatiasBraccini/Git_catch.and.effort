@@ -2,7 +2,7 @@
 
 #MISSING:  1. charter.mean.w is dummy. Go out with them to calculate properly!
 #             another issue with Charter data is species id (e.g. bull sharks for licence FT1L373 may not be)
-          #2. For NSF add GN equivalent LL (ask Rory for rule)
+          #2. For NSF add GN equivalent effort to LL (ask Rory for rule)
 
 #Index for navigation
 #SECTION A. ---- MONTHLY RECORDS 
@@ -14,10 +14,8 @@
           # F 1. EXTRACT QUANTITIES 
           # F 2. EXPORT DATA FOR ASSESSMENT AND CPUE STANDARDISATION
 #SECTION G. ---- REPORT SECTION 
-          # G 1. CPUE STANDARDISATION 
-          # G 2. SPATIO TEMPORAL CATCH AND EFFORT DISTRIBUTION
-          # G 3. STATE OF FISHERIES REPORT 
-          # G 4. DATA REQUESTS 
+          # G 1. SPATIO TEMPORAL CATCH AND EFFORT DISTRIBUTION
+          # G 2. DATA REQUESTS 
 #SECTION H. ----  EXPORT TOTAL CATCH FOR REFERENCE POINT ANALYSIS ---
 #SECTION I. ----  EXPLORATORY ANALYSES ---   (including movies)
 #SECTION J. ----  DROPPED CODE ---
@@ -438,9 +436,6 @@ max.w.gum=Wei.range[Wei.range$SPECIES==17001,]$TW.max
 max.w.dus=Wei.range[Wei.range$SPECIES==18003,]$TW.max
 max.w.san=Wei.range[Wei.range$SPECIES==18007,]$TW.max
 
-#Reference points
-  #Catch range of indicator species (Gummy, whiskery, dusky, sandbar)
-Catch.range.key.species=c(725,1095)
 
  #how to export figures
 Do.tiff="NO"
@@ -1655,8 +1650,6 @@ Data.daily.agg=aggregate(cbind(LANDWT,LIVEWT)~FINYEAR+YEAR+MONTH+VESSEL+METHOD+B
                           blockxFC+SPECIES+SNAME+CONDITN+Factor+YEAR.c+LAT+LONG+Same.return+
                            TYPE.DATA+Bioregion+zone+Estuary+RSCommonName+RSSpeciesId,
                     data=Data.daily[,-match(c("day","block10"),names(Data.daily))],sum,na.rm=T)
-
-
 
 
 #SECTION C. ---- CATCH MERGING AND CORRECTIONS ----
@@ -4573,9 +4566,6 @@ if(Reapportion.daily=="YES")
 }
 
 
-
-
-
 #SECTION D. ---- EFFORT INSPECTIONS -----
 #note: this part sets functions for inspecting current year data and raise issues
 #       to data-entry girls
@@ -4584,7 +4574,6 @@ if(Reapportion.daily=="YES")
 
 Dummy.yr=sort(unique(Effort.daily$finyear))
 par(mfcol=c(1,1),mai=c(1.3,1.3,.2,.2))
-
 
 if(Inspect.New.dat=="YES")
 {
@@ -5159,8 +5148,8 @@ if(Inspect.New.dat=="YES")
   #write.csv(Inspect.net.monthly,file="Monthly/Monthly.Check.net.length.csv",row.names=F)
   
 }
-
 graphics.off()
+
 
 
 
@@ -5992,7 +5981,6 @@ if(do.Alexs=="YES")
  
 
 ##################--- F. PROCEDURE SECTION ---##############
-
 #SECTION F 1. ---- EXTRACT QUANTITIES ---- 
 
 #1 Check for spatial expansion
@@ -6944,7 +6932,7 @@ if(Inspect.New.dat=="YES")
   dev.off()
 }
 
-#DEJE ACA
+
 #4. Prepare files for cpue standardisation         
  
   #4.1. Some final changes
@@ -6971,11 +6959,14 @@ Data.daily=merge(Data.daily,Ef.netlen.daily.1,by="Same.return.SNo",all.x=T)
     #monthly
 Data.monthly.GN=subset(Data.monthly,METHOD=="GN" & Estuary=="NO")
 Data.monthly.LL=subset(Data.monthly,METHOD=="LL" & Estuary=="NO")
-#Data.monthly.other=subset(Data.monthly,!(METHOD=="LL"|METHOD=="GN"))
+Data.monthly.other=subset(Data.monthly,!(METHOD=="LL"|METHOD=="GN")
+                    |((METHOD=="LL"|METHOD=="GN") & Estuary=="YES"))
 
     #daily
 Data.daily.GN=subset(Data.daily,METHOD=="GN" & Estuary=="NO")
 Data.daily.LL=subset(Data.daily,METHOD=="LL" & Estuary=="NO")
+Data.daily.other=subset(Data.daily,!(METHOD=="LL"|METHOD=="GN")
+                          |((METHOD=="LL"|METHOD=="GN") & Estuary=="YES"))
 
 #Check use of different gears by year and zone for main species
 fn.check.method.contrib=function(D,SPEC)
@@ -7072,565 +7063,58 @@ Effort.expan.north=Effort1.fun(Data.monthly.north)
 Data.monthly.GN$Boundary.blk=with(Data.monthly.GN,
           ifelse(BLOCKX%in%Boundary.blk & !FINYEAR%in%Daily.l.years,"Y","N"))
 
-    #add accurate lat and long and block10 to daily
-# Data.daily.GN$LAT=with(Data.daily.GN,LAT-(LatMin)/60)
-# Data.daily.GN$LONG=with(Data.daily.GN,LONG+(LongMin)/60)
-# Data.daily.1$Same.return.SNo=with(Data.daily.1,paste(SNo,DSNo,TSNo))
-# dummy=subset(Data.daily.1,select=c(Same.return.SNo,block10))
-# dummy=dummy[!duplicated(dummy$Same.return.SNo),]
-# Data.daily.GN=merge(Data.daily.GN,dummy,by="Same.return.SNo",all.x=T)
-
-
-
-    #4.4.1 Catch records
-    #Monthly
-#note: select species range, remove nets<100, aggregate catch by by Same return
-fn.cpue.data=function(Dat)
-{
-  Baddies=subset(Dat,Reporter.old=="bad")   # Set all records of reapportioned returns to bad
-  Baddies=unique(Baddies$Same.return)
-  Dat$Reporter.old=with(Dat,ifelse(Same.return%in%Baddies,'bad',Reporter.old))
-  Dat$Reporter=Dat$Reporter.old  #set reporter to the variable with a tally of all bad reporters
-   
-  #remove small net length which correspond to non-shark gillnet
-  Dat=subset(Dat,NETLEN.c >100)
-  
-  #aggregate records by Same return (drop issues with Condition and Bioregion...)
-  Dat=aggregate(cbind(LIVEWT.c,LIVEWT)~FINYEAR+MONTH+VESSEL+METHOD+BLOCKX+Boundary.blk+SPECIES+SNAME+YEAR.c
-                         +LAT+LONG+Same.return+TYPE.DATA+zone+Reporter+Sch.or.DogS,data=Dat,sum,na.rm=T)
-  return(Dat)
-}
-Data.monthly.GN.whiskery=fn.cpue.data(subset(Data.monthly.GN,LAT <= Whiskery.range[1] 
-                            & LONG <= Whiskery.range[2]))
-Data.monthly.GN.gummy=fn.cpue.data(subset(Data.monthly.GN,LONG >= Gummy.range[1] 
-                            & LONG <= Gummy.range[2] & LAT <=(-30)))
-Data.monthly.GN.dusky=fn.cpue.data(subset(Data.monthly.GN,LAT <= Dusky.range[1] 
-                            & LONG <= Dusky.range[2]))
-Data.monthly.GN.sandbar=fn.cpue.data(subset(Data.monthly.GN,LAT <= Sandbar.range[1] 
-                            & LONG <= Sandbar.range[2]))
-
-
-    #Daily 
-#note: select species range and remove nets<100
-#       aggregate catch by date or ID (==Same.return.SNo). Note that for catch aggregating by date
-#       or by ID makes no difference but it's needed for merging with effort
-
-  #put date back
-get.dates=subset(Effort.daily,Same.return.SNo%in%unique(Data.daily.GN$Same.return.SNo),select=c(Same.return.SNo,date))
-get.dates=get.dates[!duplicated(get.dates$Same.return.SNo),]
-Data.daily.GN=merge(Data.daily.GN,get.dates,"Same.return.SNo",all.x=T)
-
-  #create species data sets    
-fn.cpue.data.daily=function(Dat)
-{
-  Baddies=subset(Dat,Reporter.old=="bad")   # Set all records of reapportioned returns to bad
-  if(nrow(Baddies)>0)
-  {
-    Baddies=unique(Baddies$Same.return)
-    Dat$Reporter.old=with(Dat,ifelse(Same.return%in%Baddies,'bad',Reporter.old))
-  }
-  
-  Dat$Reporter=Dat$Reporter.old  #set reporter to the variable with a tally of all bad reporters
-  
-  #remove small net length which correspond to non-shark gillnet
-  Dat=subset(Dat,netlen.c >100)
-  
-  Dat=aggregate(cbind(LIVEWT.c,LIVEWT,nfish)~date+Same.return.SNo+Same.return+FINYEAR+MONTH+
-                        VESSEL+METHOD+BLOCKX+block10+SPECIES+SNAME+YEAR.c+LAT+LONG+
-                        TYPE.DATA+zone+Reporter+Sch.or.DogS+ZnID,data=Dat,sum,na.rm=T)
-  
-  Dat$TSNo=sapply(strsplit(Dat$Same.return.SNo, " "), "[", 3)
-  return(Dat)
-}
-
-if(Reapportion.daily=="NO") Data.daily.GN$Reporter.old="good"
-
-Data.daily.GN.whiskery=fn.cpue.data.daily(subset(Data.daily.GN,LAT <= Whiskery.range[1] 
-                                             & LONG <= Whiskery.range[2]))
-Data.daily.GN.gummy=fn.cpue.data.daily(subset(Data.daily.GN,LONG >= Gummy.range[1] 
-                                          & LONG <= Gummy.range[2] & LAT <=(-30)))
-Data.daily.GN.dusky=fn.cpue.data.daily(subset(Data.daily.GN,LAT <= Dusky.range[1] 
-                                          & LONG <= Dusky.range[2]))
-Data.daily.GN.sandbar=fn.cpue.data.daily(subset(Data.daily.GN,LAT <= Sandbar.range[1] 
-                                            & LONG <= Sandbar.range[2]))
-
-
-
-    #4.4.2 Effort records
-
-      #4.4.2.1 Daily                
-Effort.daily$LAT=-Effort.daily$LAT
-Block.lat.long=Effort.daily[!duplicated(Effort.daily$blockx),match(c("blockx","LAT","LONG"),names(Effort.daily))]
-Daily=subset(Effort.daily,netlen.c>100 & method=="GN")   
-
-  #km gn days  
-    #daily aggregated at monthly level
-if(Use.Date=="NO")  Eff.daily.c=aggregate(Km.Gillnet.Days.c~ID+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)    
-if(Use.Date=="YES") Eff.daily.c=aggregate(Km.Gillnet.Days.c~date+vessel+finyear+month+blockx,data=Daily,max,na.rm=T) 
-Eff.daily.c=aggregate(Km.Gillnet.Days.c~finyear+month+vessel+blockx,data=Eff.daily.c,sum,na.rm=T)
-
-if(Use.Date=="NO") Eff.daily=aggregate(Km.Gillnet.Days.inv~ID+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)
-if(Use.Date=="YES") Eff.daily=aggregate(Km.Gillnet.Days.inv~date+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)
-Eff.daily=aggregate(Km.Gillnet.Days.inv~finyear+month+vessel+blockx,data=Eff.daily,sum,na.rm=T)
-
-
-    #daily  not aggregated      
-Eff.daily.c.daily=aggregate(Km.Gillnet.Days.c~Same.return.SNo+vessel+finyear+month+blockx+block10
-                              ,data=Daily,max,na.rm=T)    
-Eff.daily.daily=aggregate(Km.Gillnet.Days.inv~Same.return.SNo+vessel+finyear+month+blockx+block10
-                              ,data=Daily,max,na.rm=T)
-
-
-# if(Use.Date=="YES")
-# {
-#   Eff.daily.c.daily=aggregate(Km.Gillnet.Days.c~date+Same.return.SNo+vessel+finyear+month+blockx+block10,data=Daily,max,na.rm=T)    
-#   Eff.daily.daily=aggregate(Km.Gillnet.Days.inv~date+Same.return.SNo+vessel+finyear+month+blockx+block10,data=Daily,max,na.rm=T)
-# }
-
-
-  #km gn hours
-    #daily aggregated at monthly level
-if(Use.Date=="NO") Eff.daily.hour.c=aggregate(Km.Gillnet.Hours.c~ID+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)
-if(Use.Date=="YES") Eff.daily.hour.c=aggregate(Km.Gillnet.Hours.c~date+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)
-Eff.daily.hour.c=aggregate(Km.Gillnet.Hours.c~finyear+month+vessel+blockx,data=Eff.daily.hour.c,sum,na.rm=T)
-
-if(Use.Date=="NO") Eff.daily.hour=aggregate(Km.Gillnet.Hours.inv~ID+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)
-if(Use.Date=="YES") Eff.daily.hour=aggregate(Km.Gillnet.Hours.inv~date+vessel+finyear+month+blockx,data=Daily,max,na.rm=T)
-Eff.daily.hour=aggregate(Km.Gillnet.Hours.inv~finyear+month+vessel+blockx,data=Eff.daily.hour,sum,na.rm=T)
-
-    #daily not aggregated
-Eff.daily.hour.c.daily=aggregate(Km.Gillnet.Hours.c~Same.return.SNo+vessel+finyear+month+blockx+block10,data=Daily,max,na.rm=T)    
-Eff.daily.hour.daily=aggregate(Km.Gillnet.Hours.inv~Same.return.SNo+vessel+finyear+month+blockx+block10,data=Daily,max,na.rm=T)  
-
-
-# if(Use.Date=="YES")
-# {
-#   Eff.daily.hour.c.daily=aggregate(Km.Gillnet.Hours.c~date+Same.return.SNo+vessel+finyear+month+blockx+block10,data=Daily,max,na.rm=T)    
-#   Eff.daily.hour.daily=aggregate(Km.Gillnet.Hours.inv~date+Same.return.SNo+vessel+finyear+month+blockx+block10,data=Daily,max,na.rm=T)  
-# }
-
-
-  #merge into single file
-    #daily aggregated at monthly level
-Eff.daily.c=merge(Eff.daily.c,Eff.daily.hour.c,by=c("blockx","finyear","month","vessel"),all=T)
-Eff.daily=merge(Eff.daily,Eff.daily.hour,by=c("blockx","finyear","month","vessel"),all=T)
-Eff.daily.c=merge(Eff.daily.c,Eff.daily,by=c("blockx","finyear","month","vessel"),all.x=T)
-Eff.daily.c=merge(Eff.daily.c,Block.lat.long,by=c("blockx"),all.x=T)
-
-  #daily    
-Eff.daily.c.daily=merge(Eff.daily.c.daily,Eff.daily.hour.c.daily,by=c("blockx","block10","finyear","month","vessel","Same.return.SNo"),all=T)
-Eff.daily.daily=merge(Eff.daily.daily,Eff.daily.hour.daily,by=c("blockx","block10","finyear","month","vessel","Same.return.SNo"),all=T)
-Eff.daily.c.daily=merge(Eff.daily.c.daily,Eff.daily.daily,by=c("blockx","block10","finyear","month","vessel","Same.return.SNo"),all.x=T)
-Eff.daily.c.daily=merge(Eff.daily.c.daily,Block.lat.long,by=c("blockx"),all.x=T)  
-
-
-# if(Use.Date=="YES")
-# {
-#   Eff.daily.c.daily=merge(Eff.daily.c.daily,Eff.daily.hour.c.daily,by=c("blockx","block10","finyear","month","vessel","date","Same.return.SNo"),all=T)
-#   Eff.daily.daily=merge(Eff.daily.daily,Eff.daily.hour.daily,by=c("blockx","block10","finyear","month","vessel","date","Same.return.SNo"),all=T)
-#   Eff.daily.c.daily=merge(Eff.daily.c.daily,Eff.daily.daily,by=c("blockx","block10","finyear","month","vessel","date","Same.return.SNo"),all.x=T)
-#   Eff.daily.c.daily=merge(Eff.daily.c.daily,Block.lat.long,by=c("blockx"),all.x=T)  
-# }
-
-
-      #4.4.2.2 Monthly 
-Monthly=subset(Effort.monthly,NETLEN.c>100 & METHOD=="GN")
-Block.lat.long=Effort.monthly[!duplicated(Effort.monthly$BLOCKX),match(c("BLOCKX","LAT","LONG"),names(Effort.monthly))]
-
-  #km gn days     
-Eff.monthly.c=aggregate(Km.Gillnet.Days.c~VESSEL+BLOCKX+FINYEAR+MONTH+YEAR.c,data=Monthly,max,na.rm=T)
-Eff.monthly=aggregate(Km.Gillnet.Days.inv~VESSEL+BLOCKX+FINYEAR+MONTH+YEAR.c,data=Monthly,max,na.rm=T)
-
-# Eff.monthly.c=aggregate(cbind(Km.Gillnet.Days.c)~FINYEAR+MONTH+VESSEL+BLOCKX+YEAR.c+     #this is redundant
-#                           SHOTS.c+NETLEN.c+BDAYS.c+HOURS.c,data=Eff.monthly.c,sum,na.rm=T) 
-# Eff.monthly=aggregate(cbind(Km.Gillnet.Days.inv)~FINYEAR+MONTH+VESSEL+BLOCKX+YEAR.c+
-#                         SHOTS+NETLEN+BDAYS+HOURS,data=Eff.monthly,sum,na.rm=T)
-
-
-  #km gn hours                     
-Eff.monthly.hour.c=aggregate(Km.Gillnet.Hours.c~VESSEL+BLOCKX+FINYEAR+MONTH+YEAR.c,data=Monthly,max,na.rm=T)
-Eff.monthly.hour=aggregate(Km.Gillnet.Hours.inv~VESSEL+BLOCKX+FINYEAR+MONTH+YEAR.c,data=Monthly,max,na.rm=T)
-
-# Eff.monthly.hour.c=aggregate(Km.Gillnet.Hours.c~FINYEAR+MONTH+VESSEL+BLOCKX+YEAR.c,data=Eff.monthly.hour.c,sum,na.rm=T) #this is redundant
-# Eff.monthly.hour=aggregate(Km.Gillnet.Hours.inv~FINYEAR+MONTH+VESSEL+BLOCKX+YEAR.c,data=Eff.monthly.hour,sum,na.rm=T)
-
-  #merge into single file
-THESE=c("BLOCKX","FINYEAR","MONTH","VESSEL","YEAR.c")
-Eff.monthly.c=merge(Eff.monthly.c,Eff.monthly.hour.c,by=THESE,all=T)
-Eff.monthly=merge(Eff.monthly,Eff.monthly.hour,by=THESE,all=T)
-Eff.monthly.c=merge(Eff.monthly.c,Eff.monthly,by=THESE,all.x=T)
-Eff.monthly.c=merge(Eff.monthly.c,Block.lat.long,by=c("BLOCKX"),all.x=T)
-
-
-  #put back effort reporter variable
-
-    #daily aggregated at monthly level
-a=Effort.daily[,match(c("blockx","finyear","month","vessel","Eff.Reporter"),names(Effort.daily))]
-a=a[!duplicated(paste(a$blockx,a$finyear,a$month,a$vessel)),]
-Eff.daily.c=merge(Eff.daily.c,a,by=c("blockx","finyear","month","vessel"),all.x=T)
-
-    #daily
-a=Effort.daily[,match(c("blockx","block10","Same.return.SNo","vessel","Eff.Reporter"),names(Effort.daily))]
-a=a[!duplicated(paste(a$blockx,a$block10,a$Same.return.SNo,a$vessel)),]
-Eff.daily.c.daily=merge(Eff.daily.c.daily,a,by=c("blockx","block10","Same.return.SNo","vessel"),all.x=T)
-
-  #monthly
-a=Effort.monthly[,match(c("BLOCKX","FINYEAR","MONTH","VESSEL","Eff.Reporter"),names(Effort.monthly))]
-a=a[!duplicated(paste(a$BLOCKX,a$FINYEAR,a$MONTH,a$VESSEL)),]
-Eff.monthly.c=merge(Eff.monthly.c,a,by=c("BLOCKX","FINYEAR","MONTH","VESSEL"),all.x=T)
-
-rm(a)
-
-
-  #put back effort variables
-    #monthly
-Eff.monthly.c$dummy=with(Eff.monthly.c,paste(BLOCKX,FINYEAR,MONTH,VESSEL,
-                             Km.Gillnet.Hours.c,Km.Gillnet.Days.c))
-a=Effort.monthly[,match(c("BLOCKX","FINYEAR","MONTH","VESSEL",
-          "SHOTS.c","NETLEN.c","BDAYS.c","HOURS.c",
-          "Km.Gillnet.Hours.c","Km.Gillnet.Days.c"),names(Effort.monthly))]
-a$dummy=paste(a$BLOCKX,a$FINYEAR,a$MONTH,a$VESSEL,a$Km.Gillnet.Hours.c,a$Km.Gillnet.Days.c)
-a=a[!duplicated(a$dummy),]
-a=subset(a,dummy%in%Eff.monthly.c$dummy,select=c(dummy,SHOTS.c,NETLEN.c,BDAYS.c,HOURS.c))
-Eff.monthly.c=merge(Eff.monthly.c,a,by="dummy",all.x=T)
-Eff.monthly.c=Eff.monthly.c[,-match("dummy",names(Eff.monthly.c))]
-
-    #daily
-a=Effort.daily[,match(c("blockx","block10","Same.return.SNo","vessel",
-                  "netlen.c","hours.c","bdays.c","shots.c","nlines.c"),names(Effort.daily))]
-a$dummy=paste(a$blockx,a$block10,a$Same.return.SNo,a$vessel)
-a=a[!duplicated(a$dummy),]
-Eff.daily.c.daily$dummy=with(Eff.daily.c.daily,paste(blockx,block10,Same.return.SNo,vessel))
-a=subset(a,dummy%in%Eff.daily.c.daily$dummy,select=c(dummy,netlen.c,hours.c,bdays.c,shots.c,nlines.c))
-Eff.daily.c.daily=merge(Eff.daily.c.daily,a,by="dummy",all.x=T)
-Eff.daily.c.daily=Eff.daily.c.daily[,-match("dummy",names(Eff.daily.c.daily))]
-rm(a)
-
-
-
-      #4.4.2.3 Merge monthly and daily-aggregated
-Eff.monthly.c=Eff.monthly.c[,-match("YEAR.c",names(Eff.monthly.c))]
-#names(Eff.daily.c)=names(Eff.monthly.c)
-
-  #monthly
-Eff=Eff.monthly.c
-#Eff=rbind(Eff.monthly.c,Eff.daily.c)
-Eff$Eff.Reporter=with(Eff,ifelse(is.na(Eff.Reporter),"good",Eff.Reporter))
-
-  #daily
-Eff.daily=Eff.daily.c.daily
-names(Eff.daily)[match(c("blockx","finyear","month","vessel"),names(Eff.daily))]=c("BLOCKX",
-          "FINYEAR","MONTH","VESSEL")
-Eff.daily$Eff.Reporter=with(Eff.daily,ifelse(is.na(Eff.Reporter),"good",Eff.Reporter))
-
-#increase in fishing efficiency 
-#note: increase of 2% until 1993. From then on, maintain 1994/95 level (Simpfendorfer et al 2000 & Rory's request)
-#       this is done in '2.CPUE standardisations.R' after the standardisation
-fn.eff.creep=function(dat)
-{
-  dat$YEAR.c=as.numeric(substr(dat$FINYEAR,1,4))
-  Fish.pow.inc=(1+Fish.Pow*(1+(1975:1993)-YEAR.c.monthly[1]))
-  dat$Km.Gillnet.Hours.c=with(dat,
-            ifelse(YEAR.c==1975,Km.Gillnet.Hours.c,
-            ifelse(YEAR.c>1975 & YEAR.c<1994,Km.Gillnet.Hours.c*(1+Fish.Pow*(1+YEAR.c-YEAR.c.monthly[2])),
-            ifelse(YEAR.c>=1994,Km.Gillnet.Hours.c*Fish.pow.inc[length(Fish.pow.inc)],NA))))
-  
-  dat$Km.Gillnet.Days.c=with(dat,
-            ifelse(YEAR.c==1975,Km.Gillnet.Days.c,
-            ifelse(YEAR.c>1975 & YEAR.c<1994,Km.Gillnet.Days.c*(1+Fish.Pow*(1+YEAR.c-YEAR.c.monthly[2])),
-            ifelse(YEAR.c>=1994,Km.Gillnet.Days.c*Fish.pow.inc[length(Fish.pow.inc)],NA))))
-  
-  
-  return(list(KM.GN.H=dat$Km.Gillnet.Hours.c,KM.GN.D=dat$Km.Gillnet.Days.c))
-}
-
-#monthly
-#pp=fn.eff.creep(Eff)
-#Eff$Km.Gillnet.Days.c.no.creep=Eff$Km.Gillnet.Days.c
-
-#daily
-#pp=fn.eff.creep(Eff.daily)
-#Eff.daily$Km.Gillnet.Days.c.no.creep=Eff.daily$Km.Gillnet.Days.c
-
-
-
-#Add mesh size    
-#note:only use meshes of 6.5 inch (165 mm) and 7 inch (178 mm) for cpue standardisation
-  #Monthly
-Mesh.monthly$mesh=Mesh.monthly$MSHIGH
-Mesh.monthly$mesh=with(Mesh.monthly,ifelse(mesh==0,NA,mesh))
-#a=subset(Mesh.monthly,mesh%in%c("165","178"))
-#A=with(a,table(VESSEL,mesh))  #vessels fishing with a unique mesh so extrapolate to all records for same vessel
-#a=a[!duplicated(a$VESSEL),match(c("VESSEL","mesh"),names(a))]
-a=subset(Mesh.monthly,select=c(VESSEL,FINYEAR,MONTH,BLOCKX,METHOD,mesh))
-a$dummy=with(a,paste(VESSEL,FINYEAR,MONTH,BLOCKX))
-Eff$dummy=with(Eff,paste(VESSEL,FINYEAR,MONTH,BLOCKX))
-a=subset(a,dummy%in%Eff$dummy)
-a=a[!duplicated(a$dummy),]
-a=a[,-match(c("dummy",'METHOD'),names(a))]
-Eff=Eff[,-match("dummy",names(Eff))]
-Eff=merge(Eff,a,by=c("VESSEL","FINYEAR","MONTH","BLOCKX"),all.x=T)
-
-
-  #Daily
-Mesh.size$mesh=Mesh.size$mshigh
-#a=subset(Mesh.size,mesh%in%c(165,178))
-a=subset(Mesh.size,select=c(SNo,DSNo,TSNo,mesh))
-#a$vessel=as.character(a$vessel)
-a$Same.return.SNo=with(a,paste(SNo,DSNo,TSNo))
-a=a[!duplicated(a$Same.return.SNo),]
-#A=with(a,table(vessel,mesh))  # so vessels fish with 6.5 and 7 inch meshes so interpolate
-# msh.ves=unique(a$vessel)
-# O=vector('list',length(msh.ves))
-# for(v in 1:length(msh.ves))
-# {
-#   dd=subset(a,vessel==msh.ves[v],select=c(vessel,mesh,Same.return.SNo,date))
-#   dd=dd[order(dd$date),]
-#   dd$mesh=na.locf(dd$mesh)
-#   O[[v]]=dd[,-match(c("vessel","date"),names(dd))]
-# }
-# O=do.call(rbind,O)
-#O=subset(O,Same.return.SNo%in%unique(Eff.daily$Same.return.SNo))
-#O=O[!duplicated(O$Same.return.SNo),]
-a=subset(a,Same.return.SNo%in%unique(Eff.daily$Same.return.SNo),select=c(Same.return.SNo,mesh))
-Eff.daily=merge(Eff.daily,a,by="Same.return.SNo",all.x=T)  
-
-
-
-
-#Add depth to daily
-a=subset(Data.daily.original,select=c(SNo,DSNo,TSNo,depthMin,depthMax))
-a$Same.return.SNo=with(a,paste(SNo,DSNo,TSNo))
-a=a[!duplicated(a$Same.return.SNo),]
-a$Mean.depth=(a$depthMin+a$depthMax)/2
-a=subset(a,Same.return.SNo%in%unique(Eff.daily$Same.return.SNo),select=c(Same.return.SNo,Mean.depth))
-Eff.daily=merge(Eff.daily,a,by="Same.return.SNo",all.x=T)
-
-
-
-      #4.4.2.4 Select effective efforts
-    #monthly
-Eff.whis=subset(Eff,LAT <= Whiskery.range[1] & LONG <= Whiskery.range[2])
-Eff.gum=subset(Eff,LONG >= Gummy.range[1] & LONG <= Gummy.range[2] & LAT <=(-30))
-Eff.dus=subset(Eff,LAT <= Dusky.range[1]  & LONG <= Dusky.range[2])
-Eff.san=subset(Eff,LAT <= Sandbar.range[1]  & LONG <= Sandbar.range[2])
-
-    #daily
-Eff.whis.daily=subset(Eff.daily,LAT <= Whiskery.range[1] & LONG <= Whiskery.range[2])
-Eff.gum.daily=subset(Eff.daily,LONG >= Gummy.range[1] & LONG <= Gummy.range[2] & LAT <=(-30))
-Eff.dus.daily=subset(Eff.daily,LAT <= Dusky.range[1]  & LONG <= Dusky.range[2])
-Eff.san.daily=subset(Eff.daily,LAT <= Sandbar.range[1]  & LONG <= Sandbar.range[2])
-
-
-      #4.4.2.5 Add effort
-    #monthly
-Ids=match(c("LAT","LONG"),names(Eff.whis))
-Data.monthly.GN.whiskery=merge(Data.monthly.GN.whiskery,Eff.whis[,-Ids],by=c("BLOCKX",
-                "FINYEAR","MONTH","VESSEL"),all.x=T)
-Data.monthly.GN.gummy=merge(Data.monthly.GN.gummy,Eff.gum[,-Ids],by=c("BLOCKX",
-                "FINYEAR","MONTH","VESSEL"),all.x=T)
-Data.monthly.GN.dusky=merge(Data.monthly.GN.dusky,Eff.dus[,-Ids],by=c("BLOCKX",
-                "FINYEAR","MONTH","VESSEL"),all.x=T)
-Data.monthly.GN.sandbar=merge(Data.monthly.GN.sandbar,Eff.san[,-Ids],by=c("BLOCKX",
-                "FINYEAR","MONTH","VESSEL"),all.x=T)
-
-    #daily
-Ids=match(c("BLOCKX","FINYEAR","MONTH","LAT","LONG","VESSEL","block10"),names(Eff.whis.daily))
-Data.daily.GN.whiskery=merge(Data.daily.GN.whiskery,Eff.whis.daily[,-Ids],
-                               by=c("Same.return.SNo"),all.x=T)
-Data.daily.GN.gummy=merge(Data.daily.GN.gummy,Eff.gum.daily[,-Ids],
-                            by=c("Same.return.SNo"),all.x=T)
-Data.daily.GN.dusky=merge(Data.daily.GN.dusky,Eff.dus.daily[,-Ids],
-                            by=c("Same.return.SNo"),all.x=T)
-Data.daily.GN.sandbar=merge(Data.daily.GN.sandbar,Eff.san.daily[,-Ids],
-                              by=c("Same.return.SNo"),all.x=T) 
-
-
-#Drop mismatch between effort variables and effort
-fan11=function(a,b,PLT="NO")
-{
-  ID=match('Same.return',names(a)) 
-  a$METHOD="GN"
-  if(length(ID==0)) a$Same.return=with(a,paste(FINYEAR,MONTH,VESSEL,METHOD,BLOCKX))
-  a=subset(a,select=c(Same.return,Km.Gillnet.Days.c,YEAR.c,
-                      Km.Gillnet.Hours.c,SHOTS.c, BDAYS.c, HOURS.c, NETLEN.c))
-  a=a[!duplicated(a$Same.return),]
-  
-  b=subset(b,select=c(Same.return.SNo,Km.Gillnet.Days.c,
-                      Km.Gillnet.Hours.c,shots.c, bdays.c, hours.c, netlen.c))
-  b=b[!duplicated(b$Same.return.SNo),]
-  
-  a=subset(a,!(is.na(Km.Gillnet.Days.c)|is.na(Km.Gillnet.Hours.c)))
-  b=subset(b,!(is.na(Km.Gillnet.Days.c)|is.na(Km.Gillnet.Hours.c)))
-  
-  a$dummy.km.gn.d=with(a,BDAYS.c*NETLEN.c/1000)
-  a$dummy.km.gn.h=with(a,SHOTS.c*BDAYS.c*HOURS.c*NETLEN.c/1000)
-  
-  
-  a$dummy.km.gn.d=with(a,ifelse(YEAR.c<1989,dummy.km.gn.d*Inc.per,dummy.km.gn.d))
-  a$dummy.km.gn.h=with(a,ifelse(YEAR.c<1989,dummy.km.gn.h*Inc.per,dummy.km.gn.h))
-  
-  b$dummy.km.gn.d=with(b,netlen.c/1000)
-  b$dummy.km.gn.h=with(b,hours.c*netlen.c/1000)
-  
-  if(PLT=="YES")
-  {
-    par(mfcol=c(2,2))
-    
-    plot(a$Km.Gillnet.Days.c,a$dummy.km.gn.d)
-    lines(a$Km.Gillnet.Days.c,a$Km.Gillnet.Days.c,col=2)
-    
-    #a1=subset(a,!round(Km.Gillnet.Hours.c)==!round(dummy.km.gn.h))
-    plot(a$Km.Gillnet.Hours.c,a$dummy.km.gn.h)
-    lines(a$Km.Gillnet.Hours.c,a$Km.Gillnet.Hours.c,col=2)
-    
-    #b1=subset(b,!round(Km.Gillnet.Days.c)==!round(dummy.km.gn.d))
-    plot(b$Km.Gillnet.Days.c,b$dummy.km.gn.d)
-    lines(b$Km.Gillnet.Days.c,b$Km.Gillnet.Days.c,col=2)
-    
-    #b1=subset(b,!round(Km.Gillnet.Hours.c)==!round(dummy.km.gn.h))
-    plot(b$Km.Gillnet.Hours.c,b$dummy.km.gn.h)
-    lines(b$Km.Gillnet.Hours.c,b$Km.Gillnet.Hours.c,col=2)
-    
-  }
-  
-  
-  print(paste("monthly_km.gn.d",nrow(a)==sum(round(a$dummy.km.gn.d)==round(a$Km.Gillnet.Days.c))))
-  print(paste("monthly_km.gn.h",nrow(a)==sum(round(a$dummy.km.gn.h)==round(a$Km.Gillnet.Hours.c))))
-  print(paste("daily_km.gn.d",nrow(b)==sum(round(b$dummy.km.gn.d)==round(b$Km.Gillnet.Days.c))))
-  print(paste("daily_km.gn.h",nrow(b)==sum(round(b$dummy.km.gn.h)==round(b$Km.Gillnet.Hours.c))))
-  
-  mon.km.gn.d=subset(a,!Km.Gillnet.Days.c==dummy.km.gn.d)
-  mon.km.gn.h=subset(a,!Km.Gillnet.Hours.c==dummy.km.gn.h)
-  Drop.rec.m=unique(c(mon.km.gn.d$Same.return,mon.km.gn.h$Same.return))
-  
-  day.km.gn.d=subset(b,!Km.Gillnet.Days.c==dummy.km.gn.d)
-  day.km.gn.h=subset(b,!Km.Gillnet.Hours.c==dummy.km.gn.h)
-  Drop.rec.d=unique(c(day.km.gn.d$Same.return.SNo,day.km.gn.h$Same.return.SNo))
-  return(list(Drop.rec.m=Drop.rec.m,Drop.rec.d=Drop.rec.d))
-}
-
-drop.whis=fan11(a=subset(Data.monthly.GN.whiskery,!zone=="Zone2"),b=Data.daily.GN.whiskery)
-drop.gum=fan11(a=subset(Data.monthly.GN.gummy,!zone=="Zone2"),b=Data.daily.GN.gummy)
-drop.dus=fan11(a=subset(Data.monthly.GN.dusky,!zone=="Zone2"),b=Data.daily.GN.dusky)
-drop.san=fan11(a=subset(Data.monthly.GN.sandbar,!zone=="Zone2"),b=Data.daily.GN.sandbar)
-
-if(length(drop.whis$Drop.rec.m)>0) Data.monthly.GN.whiskery=subset(Data.monthly.GN.whiskery,!Same.return%in%drop.whis$Drop.rec.m)
-if(length(drop.gum$Drop.rec.m)>0) Data.monthly.GN.gummy=subset(Data.monthly.GN.gummy,!Same.return%in%drop.gum$Drop.rec.m)
-if(length(drop.dus$Drop.rec.m)>0) Data.monthly.GN.dusky=subset(Data.monthly.GN.dusky,!Same.return%in%drop.dus$Drop.rec.m)
-if(length(drop.san$Drop.rec.m)>0) Data.monthly.GN.sandbar=subset(Data.monthly.GN.sandbar,!Same.return%in%drop.san$Drop.rec.m)
-
-if(length(drop.whis$Drop.rec.d)>0) Data.daily.GN.whiskery=subset(Data.daily.GN.whiskery,!Same.return.SNo%in%drop.whis$Drop.rec.d)
-if(length(drop.gum$Drop.rec.d)>0) Data.daily.GN.gummy=subset(Data.daily.GN.gummy,!Same.return.SNo%in%drop.gum$Drop.rec.d)
-if(length(drop.dus$Drop.rec.d)>0) Data.daily.GN.dusky=subset(Data.daily.GN.dusky,!Same.return.SNo%in%drop.dus$Drop.rec.d)
-if(length(drop.san$Drop.rec.d)>0) Data.daily.GN.sandbar=subset(Data.daily.GN.sandbar,!Same.return.SNo%in%drop.san$Drop.rec.d)
-
-
-# if(Use.Date=="YES")
-# {
-#   Data.daily.GN.whiskery=merge(Data.daily.GN.whiskery,Eff.whis.daily[,-Ids],
-#                                by=c("date","Same.return.SNo","VESSEL","block10"),all.x=T)
-#   Data.daily.GN.gummy=merge(Data.daily.GN.gummy,Eff.gum.daily[,-Ids],
-#                             by=c("date","Same.return.SNo","VESSEL","block10"),all.x=T)
-#   Data.daily.GN.dusky=merge(Data.daily.GN.dusky,Eff.dus.daily[,-Ids],
-#                             by=c("date","Same.return.SNo","VESSEL","block10"),all.x=T)
-#   Data.daily.GN.sandbar=merge(Data.daily.GN.sandbar,Eff.san.daily[,-Ids],
-#                               by=c("date","Same.return.SNo","VESSEL","block10"),all.x=T) 
-# }
-
-
-#also consider bad effort reporters             
-  #monthly
-Data.monthly.GN.whiskery$Reporter=with(Data.monthly.GN.whiskery,ifelse(Eff.Reporter=="bad","bad",Reporter))  
-Data.monthly.GN.gummy$Reporter=with(Data.monthly.GN.gummy,ifelse(Eff.Reporter=="bad","bad",Reporter))  
-Data.monthly.GN.dusky$Reporter=with(Data.monthly.GN.dusky,ifelse(Eff.Reporter=="bad","bad",Reporter))  
-Data.monthly.GN.sandbar$Reporter=with(Data.monthly.GN.sandbar,ifelse(Eff.Reporter=="bad","bad",Reporter))  
-
-  #daily
-Data.daily.GN.whiskery$Reporter=with(Data.daily.GN.whiskery,ifelse(Eff.Reporter=="bad","bad",Reporter))  
-Data.daily.GN.gummy$Reporter=with(Data.daily.GN.gummy,ifelse(Eff.Reporter=="bad","bad",Reporter))  
-Data.daily.GN.dusky$Reporter=with(Data.daily.GN.dusky,ifelse(Eff.Reporter=="bad","bad",Reporter))  
-Data.daily.GN.sandbar$Reporter=with(Data.daily.GN.sandbar,ifelse(Eff.Reporter=="bad","bad",Reporter))  
-
-
-      #4.4.2.6 Remove records with no effort 
-  #monthly
-Data.monthly.GN.whiskery=subset(Data.monthly.GN.whiskery,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
-Data.monthly.GN.gummy=subset(Data.monthly.GN.gummy,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
-Data.monthly.GN.dusky=subset(Data.monthly.GN.dusky,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
-Data.monthly.GN.sandbar=subset(Data.monthly.GN.sandbar,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
-
-  #daily
-Data.daily.GN.whiskery=subset(Data.daily.GN.whiskery,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
-Data.daily.GN.gummy=subset(Data.daily.GN.gummy,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
-Data.daily.GN.dusky=subset(Data.daily.GN.dusky,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
-Data.daily.GN.sandbar=subset(Data.daily.GN.sandbar,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
-
-
-      #4.4.2.7 remove caess data post 2005/06 in monthly records
-Post.yrs=max(unique(sort(Data.monthly$YEAR.c)))
-Post.yrs=paste(2006:(Post.yrs-1),substr(2007:Post.yrs,3,4),sep="-")
-Data.monthly.GN.whiskery=subset(Data.monthly.GN.whiskery,!(FINYEAR%in%Post.yrs & TYPE.DATA=="monthly"))
-Data.monthly.GN.gummy=subset(Data.monthly.GN.gummy,!(FINYEAR%in%Post.yrs & TYPE.DATA=="monthly"))
-Data.monthly.GN.dusky=subset(Data.monthly.GN.dusky,!(FINYEAR%in%Post.yrs & TYPE.DATA=="monthly"))
-Data.monthly.GN.sandbar=subset(Data.monthly.GN.sandbar,!(FINYEAR%in%Post.yrs & TYPE.DATA=="monthly"))
-
-
-
-      #4.4.2.8 Create list of cpue data sets for plotting in SOFAR
-Species.list=list(whiskery=Data.monthly.GN.whiskery,gummy=Data.monthly.GN.gummy,
-                  dusky=Data.monthly.GN.dusky,sandbar=Data.monthly.GN.sandbar)
-
-
-
-  #4.5 Remove school shark and dogshark targeted records                                
-    #monthly
-Data.monthly.GN.whiskery=subset(Data.monthly.GN.whiskery,!(Sch.or.DogS=="Yes"))
-Data.monthly.GN.gummy=subset(Data.monthly.GN.gummy,!(Sch.or.DogS=="Yes"))
-Data.monthly.GN.dusky=subset(Data.monthly.GN.dusky,!(Sch.or.DogS=="Yes"))
-Data.monthly.GN.sandbar=subset(Data.monthly.GN.sandbar,!(Sch.or.DogS=="Yes"))
-
-    #daily
-Data.daily.GN.whiskery=subset(Data.daily.GN.whiskery,!(Sch.or.DogS=="Yes"))
-Data.daily.GN.gummy=subset(Data.daily.GN.gummy,!(Sch.or.DogS=="Yes"))
-Data.daily.GN.dusky=subset(Data.daily.GN.dusky,!(Sch.or.DogS=="Yes"))
-Data.daily.GN.sandbar=subset(Data.daily.GN.sandbar,!(Sch.or.DogS=="Yes"))
-
-
-  #4.6. Remove daily logbook records from data.monthly
-Data.monthly.GN.whiskery=subset(Data.monthly.GN.whiskery,!FINYEAR%in%Daily.l.years)
-Data.monthly.GN.gummy=subset(Data.monthly.GN.gummy,!FINYEAR%in%Daily.l.years)
-Data.monthly.GN.dusky=subset(Data.monthly.GN.dusky,!FINYEAR%in%Daily.l.years)
-Data.monthly.GN.sandbar=subset(Data.monthly.GN.sandbar,!FINYEAR%in%Daily.l.years)
-
-
 
 
 #SECTION F 2. ---- EXPORT DATA FOR ASSESSMENT AND CPUE STANDARDISATION ----
 
 setwd("C:/Matias/Analyses/Catch and effort/Data_outs")
 
-  #Total catch data
-#note: this exports catch from ALL GEARS reported in Data.monthly
-crap=c("GoodsplitID","Prop.sandbar",           "SanBar.rep",            
-       "Prop.Gum.Ves.ID",        "Prop.Whi.Ves.ID",        "Prop.Dus.Ves.ID",        "Prop.Other.Ves.ID",     
-       "Prop.Sch.Ves.ID",        "Prop.DogS.Ves.ID",       "Prop.San.Ves.ID",        "Prop.Dus.Good.spl",     
-       "Prop.Gum.Good.spl",      "Prop.Whi.Good.spl",      "Prop.Dus.Zone.Good.spl", "Prop.Gum.Zone.Good.spl",
-       "Prop.Whi.Zone.Good.spl", "Prop.Dus.Mon.Good.spl",  "Prop.Gum.Mon.Good.spl",  "Prop.Whi.Mon.Good.spl", 
-       "Prop.Dus.YrZn.Good.spl", "Prop.Gum.YrZn.Good.spl", "Prop.Whi.YrZn.Good.spl")
-Id.crap=match(crap,names(Data.monthly))
-write.csv(Data.monthly[,-Id.crap],file="Data.monthly.csv",row.names=F)
-Id.crap=match(crap,names(Data.monthly.north))
-write.csv(Data.monthly.north[,-Id.crap],file="Data.monthly.north.csv",row.names=F)
+#some final amendments
+lst <- strsplit(Data.daily$Same.return.SNo, "\\s+")
+Data.daily$SNo <- sapply(lst ,'[', 1)
+Data.daily$DSNo <- sapply(lst, '[', 2)
+Data.daily$TSNo <- sapply(lst, '[', 3)
 
-#Total effort data
-crap=c("AnnualVesselAveID_BDAYS.m",  "AnnualVesselAveID_HOURS.m",  "AnnualVesselAveID_SHOTS.m", 
-       "AnnualVesselAveID_NETLEN.m", "MonthlyZoneID_BDAYS.m",      "MonthlyZoneID_HOURS.m",     
-       "MonthlyZoneID_SHOTS.m",      "MonthlyZoneID_NETLEN.m")
-Id.crap=match(crap,names(Effort.monthly))
-write.csv(Effort.monthly[,-Id.crap],file="Effort.monthly.csv",row.names=F)
-Id.crap=match(crap,names(Effort.daily))
-write.csv(Effort.daily[,-Id.crap],file="Effort.daily.csv",row.names=F)
+crap=c("GoodsplitID","Prop.sandbar","SanBar.rep",            
+       "Prop.Gum.Ves.ID","Prop.Whi.Ves.ID","Prop.Dus.Ves.ID","Prop.Other.Ves.ID",     
+       "Prop.Sch.Ves.ID","Prop.DogS.Ves.ID","Prop.San.Ves.ID","Prop.Dus.Good.spl",     
+       "Prop.Gum.Good.spl","Prop.Whi.Good.spl","Prop.Dus.Zone.Good.spl",
+       "Prop.Gum.Zone.Good.spl","Prop.Whi.Zone.Good.spl","Prop.Dus.Mon.Good.spl",
+       "Prop.Gum.Mon.Good.spl","Prop.Whi.Mon.Good.spl","Prop.Dus.YrZn.Good.spl",
+       "Prop.Gum.YrZn.Good.spl","Prop.Whi.YrZn.Good.spl")
+crap.ef=c("AnnualVesselAveID_BDAYS.m","AnnualVesselAveID_HOURS.m","AnnualVesselAveID_SHOTS.m", 
+       "AnnualVesselAveID_NETLEN.m","MonthlyZoneID_BDAYS.m","MonthlyZoneID_HOURS.m",     
+       "MonthlyZoneID_SHOTS.m","MonthlyZoneID_NETLEN.m")
+
+#Export all these objects
+#note: Total.effort... : annual effort reported in SOFAR (GN plus LL equivalent)
+#      Data.monthly has catch from all gears
+
+Exprt.list=list(
+  Annual.total.eff.days=Total.effort.days.monthly,
+  Annual.total.eff.hours=Total.effort.hours.monthly,
+  Annual.zone.eff.hours=Total.effort.zone.hours.monthly,
+  Annual.zone.eff.days=Total.effort.zone.days.monthly,
+  Annual.total.eff_NSF=Total.effort_NFS,
+  Effort.monthly=Effort.monthly[,-match(crap.ef,names(Effort.monthly))],
+  Effort.daily=Effort.daily[,-match(crap.ef,names(Effort.daily))],
+  TEPS.current=TEPS.current,
+  Rec.fish.catch=Rec.fish.catch,
+  Data.current.Sofar=Data.current.Sofar,
+  PRICES=PRICES,
+  Data.monthly=Data.monthly[,-match(crap,names(Data.monthly))],
+  Data.monthly.north=Data.monthly.north[,-match(crap,names(Data.monthly.north))],
+  Data.monthly.GN=Data.monthly.GN,
+  Data.monthly.LL=Data.monthly.LL,
+  Data.monthly.other=Data.monthly.other,
+  Data.daily=Data.daily,
+  Data.daily.original=Data.daily.original,
+  Data.daily.GN=Data.daily.GN,
+  Data.daily.LL=Data.daily.LL,
+  Data.daily.other=Data.daily.other)
+for(i in 1:length(Exprt.list)) fwrite(Exprt.list[[i]],paste(names(Exprt.list)[i],".csv",sep=""),row.names=F)
+rm(Exprt.list)
+
 
 
   #Total catch SAFS for EVA
@@ -7645,1198 +7129,702 @@ if(Export.SAFS=="YES")
   rm(Eva.SAFS.north,Eva.SAFS)  
 }
 
-  #Total Annual effort fot TDGDLF
-#note: effort reported in SOFAR (this has GN and LL equivalent, which is the effort for the fishery)
-
-write.csv(Total.effort.hours.monthly,file="Annual.total.eff.hours.csv",row.names=F)
-write.csv(Total.effort.days.monthly,file="Annual.total.eff.days.csv",row.names=F)
-write.csv(Total.effort.zone.hours.monthly,file="Annual.zone.eff.hours.csv",row.names=F)
-write.csv(Total.effort.zone.days.monthly,file="Annual.zone.eff.days.csv",row.names=F)
-
-write.csv(Total.effort_NFS,file="Annual.total.eff_NSF.csv",row.names=F)
 
 
           
-  #Gillnet Catch rate data
-    #monthly
-write.csv(Data.monthly.GN.whiskery,file ="Data.monthly.GN.whiskery.csv",row.names=F)
-write.csv(Data.monthly.GN.gummy,file ="Data.monthly.GN.gummy.csv",row.names=F)
-write.csv(Data.monthly.GN.dusky,file ="Data.monthly.GN.dusky.csv",row.names=F)
-write.csv(Data.monthly.GN.sandbar,file ="Data.monthly.GN.sandbar.csv",row.names=F)
-
-    #daily
-write.csv(Data.daily.GN.whiskery,file ="Data.daily.GN.whiskery.csv",row.names=F)
-write.csv(Data.daily.GN.gummy,file ="Data.daily.GN.gummy.csv",row.names=F)
-write.csv(Data.daily.GN.dusky,file ="Data.daily.GN.dusky.csv",row.names=F)
-write.csv(Data.daily.GN.sandbar,file ="Data.daily.GN.sandbar.csv",row.names=F)
 
 
 
 
 ##################--- G. REPORT SECTION ---##############
-
-#------ G 1. CPUE STANDARDISATION  ------
-if (plot.cpue.paper.figures=="YES")
+#------ G 1. SPATIO TEMPORAL CATCH AND EFFORT DISTRIBUTION ------
+if(First.run=="YES")
 {
-  setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper")
-  
-  #Some functions
-  
-  PLOT.fn=function(DATA1,DATA2,max1,max2,LEG,CL2)   #function plot vessels and blocks
+  # Plot spatio-temporal catches of 4 main shark species
+  Effect.area=function(SPEC,RANGO)
   {
-    plot(1:NN.monthly,DATA1,ylab="",xlab="",xaxt="n",las=2,type="o",pch=19,cex=1,ylim=c(0,max1)
-         ,cex.axis=.75,lwd=1.1)
-    axis(1,at=1:NN.monthly,labels=F,tck=-0.015)
+    a=subset(Data.monthly,SPECIES%in%SPEC)
+    yr=sort(unique(a$FINYEAR))
+    n=length(yr)
     
-    par(new=T)
-    plot(1:NN.monthly,DATA2,col=CL2,type='o',pch=19,axes=F,ann='F',cex=1,lwd=1.1,ylim=c(0,max2))
-    #  axis(4,at=pretty(DATA2),labels=pretty(DATA2),las=2,cex.axis=.75)
-    axis(4,at=seq(0,max2,40),labels=seq(0,max2,40),las=2,cex.axis=.75,col.axis=CL2)
-    legend("topleft",LEG,bty='n',cex=.75)
-  }
-  
-  fn.eff.probs=function(gear,eff.var,eff.var1,letra,CLs)
-  {
-    fn.wrong=function()
+    agg=aggregate(LIVEWT.c~FINYEAR+BLOCKX+LAT+LONG,a,sum)
+    
+    for(i in 1:n)
     {
-      ID1=match(corr,names(dummy))
-      dummy$VAR=ifelse(!(dummy[,ID]==dummy[,ID1]),"Wrong","OK")
-      dummy$VAR=with(dummy,ifelse(is.na(VAR),"Wrong",VAR))
-      Agg=table(dummy[,ID2],dummy$VAR)
-      Agg=as.matrix(round(100*Agg/rowSums(Agg),4))
-      if(ncol(Agg)==2)Tab=cbind(Agg[,1],Agg[,2])
-      if(ncol(Agg)==1)Tab=cbind(Agg[,1],rep(0,length(Agg[,1])))
-      colnames(Tab)=c("ok","wrong")
-      return(Tab)
+      b=subset(agg,FINYEAR==yr[i])
+      z=b$LIVEWT.c/max(b$LIVEWT.c)
+      plot(b$LONG,b$LAT,cex=z*2,main=yr[i],ylab="",xlab="",pch=19,ylim=c(-36,-26),
+           xlim=c(113,129),cex.axis=0.8,cex.main=.85,col="steelblue4")
+      legend("top",paste(round(max(b$LIVEWT.c)/1000),"tons"),pch=19,pt.cex=2,bty='n',col="steelblue4")
+      Y1=RANGO[RANGO<0]
+      Y2=-36
+      if(length(Y1)>0)
+      {
+        X2=RANGO[RANGO>0]
+        X1=112.5
+      }
+      if(length(Y1)==0)
+      {
+        Y1=-31
+        X1=RANGO[1]
+        X2=RANGO[2]
+      }
+      polygon(c(X1,X2,X2,X1),c(Y2,Y2,Y1,Y1),col=rgb(0.1, .1, .1, 0.1),border="transparent")
     }
-    
-    #monthly
-    dummy=subset(Effort.monthly,!FINYEAR%in%Daily.l.years & METHOD==gear & !(BLOCKX%in%Estuaries))
-    corr=paste(eff.var,".c",sep="")
-    dummy=dummy[,match(c("FINYEAR","METHOD","Same.return",eff.var,corr),names(dummy))]
-    dummy=dummy[!duplicated(dummy$Same.return),]
-    THIS="FINYEAR"
-    eff.var.1=eff.var
-    ID=match(eff.var,names(dummy))
-    ID2=match(THIS,names(dummy))
-    
-    
-    Tab.m=fn.wrong()
-    
-    #daily
-    dummy=subset(Effort.daily,method==gear & !(blockx%in%Estuaries))
-    corr=paste(eff.var1,".c",sep="")
-    dummy=dummy[,match(c("finyear","method","date","ID",eff.var1,corr),names(dummy))]
-    dummy$ID=with(dummy,paste(date,ID))
-    dummy=dummy[!duplicated(dummy$ID),]
-    ID=match(eff.var1,names(dummy))
-    ID2=match("finyear",names(dummy))
-    
-    Tab.d=fn.wrong()
-    
-    TAB=rbind(Tab.m,Tab.d)
-    rownames(TAB)=NULL
-    barplot(rbind(TAB[,1],TAB[,2]),beside=F,col=CLs,cex.axis=1.25,cex.lab=1.25,
-            ylim=c(0,110),yaxs="i",xaxs="i",legend.text=paste(letra),          
-            args.legend=list(x = "topleft",cex=1,bty='n',
-                             fill="transparent",border='transparent'),ylab="")
-    box()
-    AXIS1()
-    AXIS2()
-    return(data.frame(OK=mean(TAB[,1]),wrong=mean(TAB[,2])))
   }
-  
-  fn.explore=function(DATA,NAMES)
-  {
-    #remove initial years when sandbar was not reported
-    if(NAMES=="Sandbar shark")
-    {
-      DATA=subset(DATA,!(FINYEAR%in%c("1975-76","1976-77","1977-78",
-                                      "1978-79","1979-80","1980-81","1981-82","1982-83","1983-84","1984-85")))
-    }
-    
-    #Remove vessel levels that don't occur in data
-    DATA$VESSEL=DATA$VESSEL[, drop=TRUE]
-    
-    DATA$CPUE=with(DATA,Catch.Target/Km.Gillnet.Days.c)
-    DATA$SP.Target=ifelse(DATA$CPUE>0,1,0)
-    
-    #Tables
-    TABLE1=sort(with(DATA,table(VESSEL)))
-    TABLE1=data.frame(VESSEL=names(TABLE1),Count=as.numeric(TABLE1))
-    
-    TABLE6=aggregate(Catch.Target~VESSEL,data=DATA,mean)
-    names(TABLE6)[2]="Mean Catch"
-    TABLE6.1=aggregate(Catch.Target~VESSEL,data=DATA,sd)
-    names(TABLE6.1)[2]="SD Catch"
-    TABLE6=merge(TABLE6,TABLE1,by="VESSEL")
-    TABLE6=merge(TABLE6,TABLE6.1,by="VESSEL")
-    TABLE6=TABLE6[order(TABLE6$Count),]
-    
-    
-    #cumulative catch
-    TABLE12=aggregate(Catch.Target~VESSEL,data=DATA,sum)
-    TABLE12=TABLE12[order(-TABLE12$Catch.Target),]
-    TABLE12$CumCatch=cumsum(TABLE12$Catch.Target)
-    TABLE12$PerCumCatch=round(TABLE12$CumCatch*100/sum(TABLE12$Catch.Target),2)
-    
-    TABLE13=aggregate(Catch.Target~BLOCKX,data=DATA,sum)
-    TABLE13=TABLE13[order(-TABLE13$Catch.Target),]
-    TABLE13$CumCatch=cumsum(TABLE13$Catch.Target)
-    TABLE13$PerCumCatch=round(TABLE13$CumCatch*100/sum(TABLE13$Catch.Target),2)
-    
-    #cumulative records
-    TABLE16=rev(sort(table(DATA$VESSEL)))
-    TABLE16=data.frame(Records=as.numeric(TABLE16),VESSEL=names(TABLE16))
-    TABLE16$CumRecords=cumsum(TABLE16$Records)
-    TABLE16$PerCumRecords=round(TABLE16$CumRecords*100/sum(TABLE16$Records),2)
-    
-    TABLE17=rev(sort(table(DATA$BLOCKX)))
-    TABLE17=data.frame(Records=as.numeric(TABLE17),BLOCKX=names(TABLE17))
-    TABLE17$CumRecords=cumsum(TABLE17$Records)
-    TABLE17$PerCumRecords=round(TABLE17$CumRecords*100/sum(TABLE17$Records),2)
-    
-    
-    
-    return(list(Ves.Cum.Ca=TABLE12$PerCumCatch,Block.Cum.Ca=TABLE13$PerCumCatch,
-                TABLE17=TABLE17,TABLE16=TABLE16,Mean_catch_Vessel=TABLE6))
-  }
-  
-  fun.rec.per.ves=function(DATA)
-  {
-    Count.ves.records=table(DATA$Count)
-    Count.ves.records=c(subset(Count.ves.records,as.numeric(names(Count.ves.records))<Min.rec.ves),sum(
-      subset(Count.ves.records,as.numeric(names(Count.ves.records))<Min.rec.ves)))
-    names(Count.ves.records)[length(Count.ves.records)]=paste(Min.rec.ves-1,"+",sep="")
-    b=barplot(Count.ves.records,xaxt='n',yaxt='n')
-    axis(1,at=b,labels=F,tck=-0.016)
-    axis(2,at=seq(0,300,100),labels=seq(0,300,100),tck=-0.016,cex=1.25,las=1)
-    axis(1,at=b[seq(2,(length(b)-2),by=2)],labels=names(Count.ves.records)[seq(2,(length(b)-2),by=2)],
-         tck=-0.032,cex=1.25)
-    mtext("Number of records per vessel",side=1,line=1.2,font=1,las=0,cex=1.125,outer=F)
-    mtext("Count",side=2,line=1.75,font=1,las=0,cex=1.25,outer=F)
-    axis(1,at=b[length(b)],labels=paste(">",19,sep=""),tck=-0.032,cex.axis=1.15)
-    
-  }
-  
-  fn.Figure5=function(DATA,NAMES,SP)
-  {
-    #remove initial years when sandbar was not reported
-    if(NAMES=="Sandbar shark")
-    {
-      DATA=subset(DATA,!(FINYEAR%in%c("1975-76","1976-77","1977-78",
-             "1978-79","1979-80","1980-81","1981-82","1982-83","1983-84","1984-85")))
-    }
-    
-    #Remove vessel levels that don't occur in data
-    DATA$VESSEL=DATA$VESSEL[, drop=TRUE]
-    
-    DATA=subset(DATA,SPECIES==SP)
-    DATA$CPUE=with(DATA,LIVEWT.c/Km.Gillnet.Hours.c)
-    DATA$SP.Target=ifelse(DATA$CPUE>0,1,0)
-    DATA$Catch.Target=DATA$LIVEWT.c
-    
-    #Tables
-    TABLE1=sort(with(DATA,table(VESSEL)))
-    
-    TABLE6=aggregate(Catch.Target~VESSEL,data=DATA,mean)
-    names(TABLE6)[2]="Mean Catch"
-    TABLE6.1=aggregate(Catch.Target~VESSEL,data=DATA,sd)
-    names(TABLE6.1)[2]="SD Catch"
-    TABLE6=merge(TABLE6,data.frame(VESSEL=names(TABLE1),Count=as.numeric(TABLE1)),by="VESSEL")
-    TABLE6=merge(TABLE6,TABLE6.1,by="VESSEL")
-    TABLE6=TABLE6[order(TABLE6$Count),]
-    
-    
-    #cumulative catch
-    TABLE12=aggregate(Catch.Target~VESSEL,data=DATA,sum)
-    TABLE12=TABLE12[order(-TABLE12$Catch.Target),]
-    TABLE12$CumCatch=cumsum(TABLE12$Catch.Target)
-    TABLE12$PerCumCatch=round(TABLE12$CumCatch*100/sum(TABLE12$Catch.Target),2)
-    
-    TABLE13=aggregate(Catch.Target~BLOCKX,data=DATA,sum)
-    TABLE13=TABLE13[order(-TABLE13$Catch.Target),]
-    TABLE13$CumCatch=cumsum(TABLE13$Catch.Target)
-    TABLE13$PerCumCatch=round(TABLE13$CumCatch*100/sum(TABLE13$Catch.Target),2)
-    
-    #cumulative records
-    TABLE16=rev(sort(table(DATA$VESSEL)))
-    TABLE16=data.frame(Records=as.numeric(TABLE16),VESSEL=names(TABLE16))
-    TABLE16$CumRecords=cumsum(TABLE16$Records)
-    TABLE16$PerCumRecords=round(TABLE16$CumRecords*100/sum(TABLE16$Records),2)
-    
-    TABLE17=rev(sort(table(DATA$BLOCKX)))
-    TABLE17=data.frame(Records=as.numeric(TABLE17),BLOCKX=names(TABLE17))
-    TABLE17$CumRecords=cumsum(TABLE17$Records)
-    TABLE17$PerCumRecords=round(TABLE17$CumRecords*100/sum(TABLE17$Records),2)
-    
-    
-    
-    return(list(Ves.Cum.Ca=TABLE12$PerCumCatch,Block.Cum.Ca=TABLE13$PerCumCatch,
-                TABLE17=TABLE17,TABLE16=TABLE16,Mean_catch_Vessel=TABLE6))
-  }
-  
-}
-
-
-#Extract monthly records by Year-Month-Vessel-Block
-
-These.efforts=c("FINYEAR","Same.return","Km.Gillnet.Days.inv",
-                "Km.Gillnet.Days.c","zone","MONTH","BLOCKX")
-
-Effort.data.fun=function(DATA,target,ktch)
-{
-  #remove record if no effort data
-  ID=which(DATA$Km.Gillnet.Days.c==0) #no effort records
-  ID=c(ID,which(is.na(DATA$Km.Gillnet.Days.c))) #NA records
-  if(length(ID)>0)DATA=DATA[-ID,]
-  
-  # remove nonsense lat
-  DATA=subset(DATA,LAT>=(-36))
-  
-  #calculate effort
-  Match.these.eff=match(These.efforts,names(DATA))
-  Effort.data=DATA[,Match.these.eff]
-  Effort.data=aggregate(cbind(Km.Gillnet.Days.inv,Km.Gillnet.Days.c)~zone+
-                          FINYEAR+Same.return+MONTH+BLOCKX,Effort.data,max)
-  Effort.data=aggregate(cbind(Km.Gillnet.Days.inv,Km.Gillnet.Days.c)~zone+
-                          FINYEAR+Same.return+MONTH+BLOCKX,Effort.data,sum)
-  
-  #target species catch 
-  ID=match(c(ktch),colnames(DATA))
-  DATA$Catch.Target=with(DATA,ifelse(SPECIES%in%target,DATA[,ID],0))
+  setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper/Catch_spatial_temporal")
+  tiff("Spatio.temporal.catch.Whiskery.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+  n.graph=length(unique(subset(Data.monthly,SPECIES==Whiskery)$FINYEAR))
+  smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
+  Effect.area(Whiskery,Whiskery.range)
+  plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
+  text(5,7,"Whiskery",cex=1.5)
+  text(5,4,"shark",cex=1.75)
+  dev.off()
   
   
-  #catch targeted at other species
-  DATA$Catch.Gummy=with(DATA,ifelse(SPECIES==17001,DATA[,ID],0))
-  DATA$Catch.Whiskery=with(DATA,ifelse(SPECIES==17003,DATA[,ID],0))
-  DATA$Catch.Dusky=with(DATA,ifelse(SPECIES%in%c(18003,18001),DATA[,ID],0))
-  DATA$Catch.Sandbar=with(DATA,ifelse(SPECIES==18007,DATA[,ID],0))
-  DATA$Catch.Scalefish=with(DATA,ifelse(SPECIES%in%188000:599001,DATA[,ID],0))
-  
-  #reshape catch data
-  TABLE=aggregate(cbind(Catch.Target,Catch.Gummy,Catch.Whiskery,Catch.Scalefish,Catch.Dusky,Catch.Sandbar)~MONTH+
-                    FINYEAR+BLOCKX+VESSEL+Same.return+LAT+LONG+YEAR.c,data=DATA,sum,na.rm=T)
-  TABLE=TABLE[order(TABLE$FINYEAR,TABLE$MONTH,TABLE$BLOCKX),]
-  
-  #proportion of records with target catch
-  prop.with.catch=round(100*sum(TABLE$Catch.Target>0)/length(TABLE$Catch.Target),0)
-  
-  #merge catch and effort
-  dat=merge(TABLE,Effort.data,by=c("Same.return","FINYEAR","MONTH","BLOCKX"),all.x=T)
-  
-  #create "other shark catch" variable
-  dat$Catch.other.shk=NA
-  if(target[1]==17003)dat$Catch.other.shk=dat$Catch.Dusky+dat$Catch.Sandbar
-  if(target[1]==17001)dat$Catch.other.shk=dat$Catch.Whiskery
-  if(target[1]%in%c(18003,18001))dat$Catch.other.shk=dat$Catch.Whiskery+dat$Catch.Sandbar
-  if(target[1]==18007)dat$Catch.other.shk=dat$Catch.Dusky+dat$Catch.Whiskery
-  
-  #recalculate 60 by 60 blocks
-  dat$BLOCKX.orignl=dat$BLOCKX
-  dat$BLOCKX=as.numeric(substr(dat$BLOCKX,1,4))
+  tiff("Spatio.temporal.catch.gummy.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+  n.graph=length(unique(subset(Data.monthly,SPECIES==Gummy)$FINYEAR))
+  smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
+  Effect.area(Gummy,Gummy.range)
+  plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
+  text(5,7,"Gummy",cex=1.5)
+  text(5,4,"shark",cex=1.75)
+  dev.off()
   
   
-  return(list(dat=dat,prop.with.catch=prop.with.catch))
-}
-
-DATA.list.LIVEWT.c=vector('list',length=N.species)
-names(DATA.list.LIVEWT.c)=names(Species.list)
-
-
-#Create data sets for plotting cpue paper figures
-for ( i in 1:N.species)DATA.list.LIVEWT.c[[i]]=Effort.data.fun(Species.list[[i]],TARGETS[[i]],"LIVEWT.c")$dat
-
-
-#Figure 1. Map of fishing zones
-
-
-#------ G 2. SPATIO TEMPORAL CATCH AND EFFORT DISTRIBUTION ------
-
-# Plot spatio-temporal catches of 4 main shark species
-Effect.area=function(SPEC,RANGO)
-{
-  a=subset(Data.monthly,SPECIES%in%SPEC)
-  yr=sort(unique(a$FINYEAR))
-  n=length(yr)
+  tiff("Spatio.temporal.catch.dusky.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+  n.graph=length(unique(subset(Data.monthly,SPECIES%in%Dusky_whaler)$FINYEAR))
+  smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
+  Effect.area(Dusky_whaler,Dusky.range)
+  plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
+  text(5,7,"Dusky",cex=1.5)
+  text(5,4,"shark",cex=1.75)
+  dev.off()
   
-  agg=aggregate(LIVEWT.c~FINYEAR+BLOCKX+LAT+LONG,a,sum)
   
-  for(i in 1:n)
-  {
-    b=subset(agg,FINYEAR==yr[i])
-    z=b$LIVEWT.c/max(b$LIVEWT.c)
-    plot(b$LONG,b$LAT,cex=z*2,main=yr[i],ylab="",xlab="",pch=19,ylim=c(-36,-26),
-         xlim=c(113,129),cex.axis=0.8,cex.main=.85,col="steelblue4")
-    legend("top",paste(round(max(b$LIVEWT.c)/1000),"tons"),pch=19,pt.cex=2,bty='n',col="steelblue4")
-    Y1=RANGO[RANGO<0]
-    Y2=-36
-    if(length(Y1)>0)
-    {
-      X2=RANGO[RANGO>0]
-      X1=112.5
-    }
-    if(length(Y1)==0)
-    {
-      Y1=-31
-      X1=RANGO[1]
-      X2=RANGO[2]
-    }
-    polygon(c(X1,X2,X2,X1),c(Y2,Y2,Y1,Y1),col=rgb(0.1, .1, .1, 0.1),border="transparent")
-  }
-}
-setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper/Catch_spatial_temporal")
-tiff("Spatio.temporal.catch.Whiskery.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-n.graph=length(unique(subset(Data.monthly,SPECIES==Whiskery)$FINYEAR))
-smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-Effect.area(Whiskery,Whiskery.range)
-plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
-text(5,7,"Whiskery",cex=1.5)
-text(5,4,"shark",cex=1.75)
-dev.off()
-
-
-tiff("Spatio.temporal.catch.gummy.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-n.graph=length(unique(subset(Data.monthly,SPECIES==Gummy)$FINYEAR))
-smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-Effect.area(Gummy,Gummy.range)
-plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
-text(5,7,"Gummy",cex=1.5)
-text(5,4,"shark",cex=1.75)
-dev.off()
-
-
-tiff("Spatio.temporal.catch.dusky.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-n.graph=length(unique(subset(Data.monthly,SPECIES%in%Dusky_whaler)$FINYEAR))
-smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-Effect.area(Dusky_whaler,Dusky.range)
-plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
-text(5,7,"Dusky",cex=1.5)
-text(5,4,"shark",cex=1.75)
-dev.off()
-
-
-tiff("Spatio.temporal.catch.sandbar.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-n.graph=length(unique(subset(Data.monthly,SPECIES==Sandbar)$FINYEAR))
-smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-Effect.area(Sandbar,Sandbar.range)
-plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
-text(5,7,"Sandbar",cex=1.5)
-text(5,4,"shark",cex=1.75)
-dev.off()
-
+  tiff("Spatio.temporal.catch.sandbar.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+  n.graph=length(unique(subset(Data.monthly,SPECIES==Sandbar)$FINYEAR))
+  smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
+  Effect.area(Sandbar,Sandbar.range)
+  plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
+  text(5,7,"Sandbar",cex=1.5)
+  text(5,4,"shark",cex=1.75)
+  dev.off()
+  
   #add effort to Data.monthly.GN
-s=subset(Eff,LAT<=(-26))
-s$METHOD="GN"
-s$Same.return=with(s,paste(FINYEAR,MONTH,VESSEL,METHOD,BLOCKX))
-s=s[,-match(c("BLOCKX","FINYEAR","MONTH","VESSEL","METHOD","LAT","LONG","Eff.Reporter"),names(s))]
-Data.monthly.GN=merge(Data.monthly.GN,s,by="Same.return",all.x=T)
-
+  s=subset(Eff,LAT<=(-26))
+  s$METHOD="GN"
+  s$Same.return=with(s,paste(FINYEAR,MONTH,VESSEL,METHOD,BLOCKX))
+  s=s[,-match(c("BLOCKX","FINYEAR","MONTH","VESSEL","METHOD","LAT","LONG","Eff.Reporter"),names(s))]
+  Data.monthly.GN=merge(Data.monthly.GN,s,by="Same.return",all.x=T)
+  
   #grouping years
-Last.calendar.Yr=as.numeric(substr(Current.yr,1,4))
-yrs.grupd=4
-Yr.group=seq(1975,(Last.calendar.Yr+1),5)
-Yr.group.plus=Yr.group+yrs.grupd
-Yr.group.plus[length(Yr.group.plus)]=min(Yr.group.plus[length(Yr.group.plus)],Last.calendar.Yr)
-Yr.range=vector('list',length(Yr.group))
-for(e in 1:length(Yr.group))Yr.range[[e]]=paste(Yr.group[e],"-",Yr.group.plus[e])
-Yr.range=unlist(Yr.range)  
-
+  Last.calendar.Yr=as.numeric(substr(Current.yr,1,4))
+  yrs.grupd=4
+  Yr.group=seq(1975,(Last.calendar.Yr+1),5)
+  Yr.group.plus=Yr.group+yrs.grupd
+  Yr.group.plus[length(Yr.group.plus)]=min(Yr.group.plus[length(Yr.group.plus)],Last.calendar.Yr)
+  Yr.range=vector('list',length(Yr.group))
+  for(e in 1:length(Yr.group))Yr.range[[e]]=paste(Yr.group[e],"-",Yr.group.plus[e])
+  Yr.range=unlist(Yr.range)  
+  
   #create data list
-DATA.lista=vector('list',length(Yr.range))
-names(DATA.lista)=Yr.range
-for(i in 1:(length(DATA.lista))) DATA.lista[[i]]=subset(Data.monthly.GN,YEAR.c>=Yr.group[i] & YEAR.c<=Yr.group.plus[i])
-
-Bathymetry=Bathymetry[order(Bathymetry$V1,Bathymetry$V2),]
-xbat=sort(unique(Bathymetry$V1))
-ybat=sort(unique(Bathymetry$V2))
-
-add.depth="NO"
-if(add.depth=="YES")reshaped=as.matrix(reshape(Bathymetry,idvar="V1",timevar="V2",v.names="V3", direction="wide"))
-
-data(worldLLhigh)
-
-#define coordinates of plots
-South.WA.lat=c(-36,-25); South.WA.long=c(112,129)
-S.WA.long=c(South.WA.long[2], South.WA.long[2], South.WA.long[1], South.WA.long[1])
-S.WA.lat=c(South.WA.lat[2], South.WA.lat[1], South.WA.lat[1], South.WA.lat[2])
-
-OZ.lat=c(-44.5,-11);OZ.long=c(113,155)
-
-Perth=c(115.866,-31.95)
-Rotnest=c(115.50,-32.02)
-
-Long.seq=seq(South.WA.long[1]+1,South.WA.long[2]-1,by=3)
-Lat.seq=c(-26,-28,-30,-32,-34)
-
-numInt=20  #number of intervals for effort 
-
-#couleurs=rev(gray(0:(numInt-1)/(numInt-1)))
-couleurs=rev(gray(seq(0.2,0.9,length=numInt)))
-#couleurs  <- tail(topo.colors(trunc(1.4 * numInt)),numInt)
-numberLab=5
-colLeg=(rep(c("black",rep("transparent",numberLab-1)),(numInt+1)/numberLab))
-
-a=112:129
-b=seq(-37,South.WA.lat[2],length.out=length(a))
-
-
-#max block effort for each year period
-Ef.var="days"   #express effort in km gn days
-#Ef.var="hours"
-
-MAX.EFF=data.frame(Period=Yr.range,Max.eff=NA)
-EFF.bin=NULL
-for (i in 1:length(DATA.lista))
-{
-  DATA=DATA.lista[[i]]
-  DATA=DATA[-which(duplicated(DATA$Same.return)),]
-  if(Ef.var=="days") Max.effort=with(DATA,aggregate(Km.Gillnet.Days.c,list(BLOCKX),FUN=sum,na.rm=T))
-  if(Ef.var=="hours") Max.effort=with(DATA,aggregate(Km.Gillnet.Hours.c,list(BLOCKX),FUN=sum,na.rm=T))
-  EFF.bin=c(EFF.bin,Max.effort[,2])
-  MAX.EFF[i,2]=max(Max.effort[,2])
-}
-Max.effort=ceiling(max(MAX.EFF[,2])) 
-# dummy=cbind(128.5,-35.5,Max.effort)
-fn.eff.plot=function(DATA,tcl.1,tcl.2,EffortBreaks)   #function plot effort
-{
-  DATA$LAT=as.numeric(substr(DATA$LAT,1,3))
-  DATA$LONG=as.numeric(substr(DATA$LONG,1,3))
-  DATA$BLOCKX.c=with(DATA,paste(-LAT,LONG-100,sep=""))
-  MapEffort=with(DATA,aggregate(Km.Gillnet.Days.c,list(BLOCKX.c),FUN=sum,na.rm=T))    
+  DATA.lista=vector('list',length(Yr.range))
+  names(DATA.lista)=Yr.range
+  for(i in 1:(length(DATA.lista))) DATA.lista[[i]]=subset(Data.monthly.GN,YEAR.c>=Yr.group[i] & YEAR.c<=Yr.group.plus[i])
   
-  colnames(MapEffort)=c("BLOCKX.c","Total effort")
-  id=unique(match(MapEffort$BLOCKX.c,DATA$BLOCKX.c))
-  MapEffort$LAT=DATA$LAT[id]
-  MapEffort$LONG=DATA$LONG[id]
-  lat=sort(unique(MapEffort$LAT))
-  ids=match(-27,lat)
-  if(is.na(ids))      #add dummy for sorting image out of whack when missing Lat
-  {
-    adD=MapEffort[1,]
-    adD[,2]=NA
-    adD$BLOCKX.c="-27 113"
-    adD$LAT=-27
-    MapEffort=rbind(MapEffort,adD)
-  }
+  Bathymetry=Bathymetry[order(Bathymetry$V1,Bathymetry$V2),]
+  xbat=sort(unique(Bathymetry$V1))
+  ybat=sort(unique(Bathymetry$V2))
   
-  MapEffort$LAT.cen=MapEffort$LAT-.5
-  MapEffort$LONG.cen=MapEffort$LONG+.5  
-  MapEffort=MapEffort[order(MapEffort$LAT.cen,MapEffort$LONG.cen),]
-  MapEffort=subset(MapEffort,LONG.cen<=South.WA.long[2])
-  long=sort(unique(MapEffort$LONG.cen))
-  lat=sort(unique(MapEffort$LAT.cen))      #latitude vector for image  
+  add.depth="NO"
+  if(add.depth=="YES")reshaped=as.matrix(reshape(Bathymetry,idvar="V1",timevar="V2",v.names="V3", direction="wide"))
   
-  MapEffort=MapEffort[,match(c("LONG.cen","LAT.cen","Total effort"),names(MapEffort))]  
-  #MapEffort=rbind(MapEffort,dummy)#keep in perspective
+  data(worldLLhigh)
   
-  Reshaped=as.matrix(reshape(MapEffort,idvar="LONG.cen",    #transposed as matrix   
-                             timevar="LAT.cen",v.names="Total effort", direction="wide"))  
-  Reshaped=Reshaped[order(Reshaped[,1]),]
-  Reshaped=Reshaped[,-1]  									
+  #define coordinates of plots
+  South.WA.lat=c(-36,-25); South.WA.long=c(112,129)
+  S.WA.long=c(South.WA.long[2], South.WA.long[2], South.WA.long[1], South.WA.long[1])
+  S.WA.lat=c(South.WA.lat[2], South.WA.lat[1], South.WA.lat[1], South.WA.lat[2])
   
-  a=South.WA.long[1]:South.WA.long[2]
-  b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
-  plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-  image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=EffortBreaks,axes = FALSE,add=T)			
-  axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
-  axis(side = 4, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.2)
+  OZ.lat=c(-44.5,-11);OZ.long=c(113,155)
   
-  par(new=T)
-  plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+  Perth=c(115.866,-31.95)
+  Rotnest=c(115.50,-32.02)
   
-  if(add.depth=="YES") contour(xbat, ybat, reshaped[,2:ncol(reshaped)],ylim=South.WA.lat,xlim=South.WA.long, zlim=c(-1,-300),
-                               nlevels = 1,labcex=0.1,lty = c(1,2,3),col=c("gray20","gray20","gray20","transparent"),add=T)
-}
-
-EffortBreakSS=quantile(EFF.bin,probs=seq(0,1,1/numInt),na.rm=T)  #breaks for effort
-
-PLATE=c(.01,.9,.075,.9)
-
-LATT=South.WA.lat[2]:South.WA.lat[1]
-LONGG=South.WA.long[1]:South.WA.long[2]
-
-South.WA.lat=c(-37,-25)
-Lat.seq=c(-26,-28,-30,-32,-34,-36)
-
-#Create figures 1 to 5
-if (plot.cpue.paper.figures=="YES")
-{
-  tiff(file="Figure 1. Map.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-  par(mar=c(2,2,2,2),oma=c(1,1,1,1))
-  plotmap(a,b,PLATE,"dark grey",South.WA.long,c(-37,-25))
-  polygon(x=c(116.5,116.5,112,112),y=c(-26.5,-33,-33,-26.5),lwd=1.5,col=rgb(.1,.1,.1,alpha=.2))
-  polygon(x=c(116.5,116.5,112,112),y=c(-33,-37,-37,-33),lwd=1.5,col=rgb(.3,.3,.3,alpha=.5))
-  polygon(x=c(129,129,116.5,116.5),y=c(-30,-37,-37,-30),lwd=1.5,col=rgb(.7,.7,.7,alpha=.2))
-  axis(side = 1, at =LONGG, labels = F, tcl = 34,lty=3,col="grey30")
-  axis(side = 4, at = LATT, labels = F,tcl =34,lty=3,col="grey30")
-  if(add.depth=="YES") contour(xbat, ybat, reshaped[,2:ncol(reshaped)],ylim=c(-37,-25),xlim=South.WA.long, zlim=c(-1,-300),
-                               nlevels = 1,labcex=0.1,lty = c(1,2,3),col=c("gray20","gray20","gray20","transparent"),add=T)
+  Long.seq=seq(South.WA.long[1]+1,South.WA.long[2]-1,by=3)
+  Lat.seq=c(-26,-28,-30,-32,-34)
   
-  par(new=T,mar=c(2,2,2,2),oma=c(1,1,1,1))
-  plotmap(a,b,PLATE,"dark grey",South.WA.long,c(-37,-25))
-  axis(side = 1, at =seq(112,129,2), labels = seq(112,129,2), tcl = .35,las=1,cex.axis=1.25,padj=-1.25)
-  axis(side = 2, at = seq(-36,-25,2), labels = -seq(-36,-25,2),tcl = .35,las=2,cex.axis=1.25,hadj=.3)
-  text(116.73,Perth[2],("Perth"),col="black", cex=1.1)
-  points(115.86,-31.95,pch=19,cex=1.5)
-  text(116.73,-33.55,("Bunbury"),col="black", cex=1.1)
-  points(115.6,-33.55,pch=19,cex=1.5)
-  text(117.7,-34.75,("Albany"),col="black", cex=1.1)
-  points(117.8,-35,pch=19,cex=1.5)
-  text(122,-33.62,("Esperance"),col="black", cex=1.1)
-  points(121.9,-33.86,pch=19,cex=1.5)
-  mtext("Latitude (?S)",side=2,line=1.7,las=3,cex=1.75)
-  mtext("Longitude (?E)",side=1,line=1.75,cex=1.75)
+  numInt=20  #number of intervals for effort 
   
-  text(113.5,-30.5,("WCDGDLF"),col="black", cex=1.4)
-  text(114,-34.75,("JASDGDLF"),col="black", cex=1.4) 
-  text(114,-35.55,("(Zone 1)"),col="black", cex=1.4)
-  text(122,-34.75,("JASDGDLF"),col="black", cex=1.4)
-  text(122,-35.55,("(Zone 2)"),col="black", cex=1.4)
+  #couleurs=rev(gray(0:(numInt-1)/(numInt-1)))
+  couleurs=rev(gray(seq(0.2,0.9,length=numInt)))
+  #couleurs  <- tail(topo.colors(trunc(1.4 * numInt)),numInt)
+  numberLab=5
+  colLeg=(rep(c("black",rep("transparent",numberLab-1)),(numInt+1)/numberLab))
   
-  par(fig=c(.5,.92,.5,.92), new = T,mgp=c(.1,.4,0))
-  plotMap(worldLLhigh, xlim=OZ.long,ylim=OZ.lat,plt = c(.1, 1, 0.075, 1),
-          col="dark grey",tck = 0.025, tckMinor = 0.0125, xlab="",ylab="",axes=F)
-  box()
-  polygon(x=S.WA.long,y=S.WA.lat,lwd=1.5,col=rgb(.1,.1,.1,alpha=.2))
-  text(134,-22.5,("Australia"),col="black", cex=2)
-  dev.off()
+  a=112:129
+  b=seq(-37,South.WA.lat[2],length.out=length(a))
   
   
-  #Appendix 1.                
+  #max block effort for each year period
+  Ef.var="days"   #express effort in km gn days
+  #Ef.var="hours"
   
-  #Stack-up catch plot
-  these.ones=c(22999,17001,17003,18007,18003)
-  names(these.ones)=c("SHARK, OTHER","SHARK, GUMMY","SHARK, WHISKERY",
-                      "SHARK, THICKSKIN (SANDBAR)","SHARK, BRONZE WHALER")
-    #Monthly
-  FINYEAR.monthly=sort(unique(Data.monthly.GN$FINYEAR))
-  Mn.yr=subset(FINYEAR.monthly,!FINYEAR.monthly %in% FINYEAR.daily)
-  NN.monthly=length(Mn.yr)
-  STORE=matrix(nrow=NN.monthly,ncol=length(these.ones))
-  colnames(STORE)=sort(these.ones)
-  for(i in 1:NN.monthly)
-  {
-    Dat=subset(Data.monthly.GN, FINYEAR==FINYEAR.monthly[i])    
-    test=aggregate(LIVEWT~FINYEAR+Spec.old,data=Dat,sum,na.rm=T)
-    test$SP=ifelse(test$Spec.old%in%these.ones,test$Spec.old,"OTHER")
-    test=aggregate(LIVEWT~FINYEAR+ SP,data=test,sum,na.rm=T)
-    prop=100*test[,3]/sum(test[,3])
-    names(prop)=test[,2]
-    if(!(names(prop)[4]=="18007"))prop=c(prop[1:3],0,prop[4])
-    if(names(prop)[4]=="18007")prop=prop[1:5]
-    STORE[i,]=prop
-  }
-
-    #Daily
-  NN.daily=length(FINYEAR.daily)
-  STORE.daily=matrix(nrow=NN.daily,ncol=length(these.ones))
-  colnames(STORE.daily)=sort(these.ones)
-  for(i in 1:NN.daily)
-  {
-    Dat=subset(Data.daily.GN, FINYEAR==FINYEAR.daily[i])    
-    Dat$Spec.old=Dat$SPECIES
-    test=aggregate(LIVEWT~FINYEAR+Spec.old,data=Dat,sum,na.rm=T)
-    test$SP=ifelse(test$Spec.old%in%these.ones,test$Spec.old,"OTHER")
-    test=aggregate(LIVEWT~FINYEAR+ SP,data=test,sum,na.rm=T)
-    prop=100*test[,3]/sum(test[,3])
-    names(prop)=test[,2]
-    if(!(names(prop)[4]=="18007"))prop=c(prop[1:3],0,prop[4])
-    if(names(prop)[4]=="18007")prop=prop[1:5]
-    STORE.daily[i,]=prop
-  }
-  STORE=rbind(STORE,STORE.daily)
-  
-
-  #Stack-up barplot of effort problems
-  COL.BAR=c("white","grey35","grey55","grey75","black")
-  NN=NN.monthly+NN.daily
-  AXIS1=function()axis(1,at=b,labels=F,tck=-0.016)
-  AXIS2=function()axis(1,at=b[seq(1,NN,by=5)],labels=F,tck=-0.03)
-  AXIS3=function()axis(1,at=b[seq(1,NN,by=5)],labels=FINYEAR.monthly[seq(1,NN,by=5)],tck=-0.035,cex.axis=1.25)
-  
-  tiff(file="Appendix 1. Data problems_All.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-  layout(matrix(c(1,1,2:5), 3, 2, byrow = TRUE))
-  par(mar=c(2,.75,.25,2),oma=c(2,4,.25,.01),las=1,mgp=c(1,.75,0))
-  
-  #Catch (species id problem)
-  b=barplot(rbind(STORE[,1],STORE[,2],STORE[,3],STORE[,4],STORE[,5]),beside=F,col=COL.BAR,cex.axis=1.25,cex.lab=1.25,
-            ylim=c(0,110),yaxs="i",xaxs="i",legend.text=c("Gummy","Whiskery","Dusky","Sandbar","Unid. shark"),
-            args.legend=list(x = "topleft",horiz=T,cex=1.7,pt.cex=1.7,bty='n',inset=c(0, -0.025)),ylab="")
-  box()
-  AXIS1()
-  AXIS3()
-  
-  #BDAYS                                        
-  print(fn.eff.probs("GN","BDAYS","bdays","",c("grey85","black"))  )
-  mtext("Number of days fished per month",3,line=-1.375,cex=1.25)
-  
-  #HOURS
-  print(fn.eff.probs("GN","HOURS","hours","",c("grey85","black")))
-  mtext("Number of hours fished per day",3,line=-1.375,cex=1.25)
-  
-  #SHOTS
-  print(fn.eff.probs("GN","SHOTS","shots","",c("grey85","black")))
-  AXIS3()
-  mtext("Number of shots per day",3,line=-1.375,cex=1.25)
-  
-  #NETLEN     
-  print(fn.eff.probs("GN","NETLEN","netlen","",c("grey85","black")))
-  AXIS3()
-  mtext("Net length per shot",3,line=-1.375,cex=1.25)
-  
-  mtext("Financial year",side=1,line=0.8,font=1,las=0,cex=1.75,outer=T)
-  mtext("Percentage",side=2,line=2,font=1,las=0,cex=1.75,outer=T)
-  dev.off()
-  
-  
-  tiff(file="Appendix 1. Data problems.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-  par(mfcol=c(2,1),mar=c(1,3,.1,.1),oma=c(2.5,.5,.1,.5),las=1,mgp=c(1.8,.6,0))
-  
-  #Catch (species id problem)
-  b=barplot(rbind(STORE[,1],STORE[,2],STORE[,3],STORE[,4],STORE[,5]),beside=F,col=COL.BAR,cex.axis=1.25,cex.lab=1.25,
-            ylim=c(0,110),yaxs="i",xaxs="i",legend.text=c("Gummy","Whiskery","Dusky","Sandbar","Unid. shark"),
-            args.legend=list(x = "topleft",horiz=T,cex=1.17,pt.cex=1.25,bty='n',inset=c(0, -0.025)),ylab="")
-  box()
-  AXIS1()
-  AXIS2()
-  
-  # #NETLEN     
-  fn.eff.probs("GN","NETLEN","netlen","",c("grey85","black"))
-  AXIS3()
-  
-  mtext("Financial year",side=1,line=1,font=1,las=0,cex=1.75,outer=T)
-  mtext("Percentage",side=2,line=-0.75,font=1,las=0,cex=1.75,outer=T)
-  dev.off()
-  
-  
-  tiff(file="Appendix 1. Data problems_catch_only.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-  par(mfcol=c(1,1),mar=c(1,3,.15,.1),oma=c(3,.5,.15,.65),las=1,mgp=c(1.8,.9,0))
-  
-  #Catch (species id problem)
-  b=barplot(rbind(STORE[,1],STORE[,2],STORE[,3],STORE[,4],STORE[,5]),beside=F,col=COL.BAR,cex.axis=1.25,cex.lab=1.25,
-            ylim=c(0,110),yaxs="i",xaxs="i",legend.text=c("Gummy","Whiskery","Dusky","Sandbar","Unid. shark"),
-            args.legend=list(x = "topleft",horiz=T,cex=1.17,pt.cex=1.25,bty='n',inset=c(0, -0.015)),ylab="")
-  box()
-  AXIS1()
-  AXIS2()
-  AXIS3()
-  mtext("Financial year",side=1,line=1.5,font=1,las=0,cex=1.75,outer=T)
-  mtext("Percentage",side=2,line=-0.75,font=1,las=0,cex=1.75,outer=T)
-  dev.off()
-  
-  
-  tiff(file="Appendix 1. Data problems_effort_only.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-  par(mfcol=c(2,2),mar=c(1,3.2,.1,.1),oma=c(2.5,.5,.1,.65),las=1,mgp=c(1.8,.6,0))
-    
-  #BDAYS                                        
-  print(fn.eff.probs("GN","BDAYS","bdays","(a)",c("grey85","black"))  )
-  
-  #HOURS
-  print(fn.eff.probs("GN","HOURS","hours","(b)",c("grey85","black")))
-  AXIS3()
-  #SHOTS
-  print(fn.eff.probs("GN","SHOTS","shots","(c)",c("grey85","black")))
-  
-  #NETLEN     
-  print(fn.eff.probs("GN","NETLEN","netlen","(d)",c("grey85","black")))
-  AXIS3()
-  
-  mtext("Financial year",side=1,line=1.25,font=1,las=0,cex=1.75,outer=T)
-  mtext("Percentage",side=2,line=-1,font=1,las=0,cex=1.75,outer=T)
-  dev.off()
- 
-  
-   
-  #Appendix 2. Flowchart diagram 
-  source("C:/Matias/Analyses/SOURCE_SCRIPTS/flow_chart.R")
-  #text
-  LABELS <- list("raw data",
-                 c("Exclude records from estuaries, non-gillnet gear","and school shark and dogfish targeting"),
-                 c("Valid catch composition"),
-                 c("Correct catch but do not use record"," in catch and effort standardisation"),
-                 "Valid effort",
-                 c("Correct effort but do not use record","in catch and effort standardisation"),
-                 c("Financial year > 1989-90"),
-                 c("Adjust incomplete","catch and effort"),
-                 c("Record within effective area"),
-                 c("Do not use record in","catch and effort standardisation"),
-                 c("Standardise catch and effort","Construct abundance index"),
-                 c("Adjust for increase in","fishing efficiency"))
-  
-  #type of shape
-  #Note:
-  #oval: start and terminal points
-  #square or round: process
-  #diammond: decision (yes/no)
-  
-  SHAPES=c("oval","round","diamond","round","diamond","round","diamond",
-           "round","diamond","round","round","oval")
-  
-  #Shape coordinates
-  MaInX=0.725
-  X.COOR=c(rep(MaInX,3),MaInX*0.35,MaInX,MaInX*0.35,MaInX,MaInX*0.35,
-           MaInX,MaInX*0.35,MaInX,MaInX)
-  N.labl=length(LABELS)
-  Y.COOR=rep(NA,N.labl)
-  Y.COOR[1]=0.975
-  delta=c(rep(0.115,3),rep(0.07,8),0.115)
-  for(q in 2:N.labl) Y.COOR[q]=Y.COOR[q-1]-delta[q]
-  
-  #Shape size
-  X.size=c(.08,.19,.13,.165,.09,.165,.125,.125,.125,.125,.13,.125)
-  
-  #arrows
-  ArROW=c(rep("Straight",2),rep(c("Side.left","Side.right"),4),"Straight","Side.back")
-  
-  tiff(file="Appendix 2.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-  par(mar=c(0.1,0.1,0.1,0.1))
-  fn.flow.chart(lab=LABELS,SHPE=SHAPES,X.coor=X.COOR,Y.coor=Y.COOR,SX=X.size,ARRw=ArROW,CEX=.9,n=8,n1=9)
-  dev.off()  
-  
-  
-  #Appendix 3. Effort dynamics (expansion and contraction)
-  NN.monthly=NN
-  Lat.seq=c(-26,-28,-30,-32,-34,-36)
- 
-  tiff(file="Appendix 3. Effort dynamics.gillnets.tiff",width = 2000, height = 2400,units = "px", res = 300, compression = "lzw")    
-  smart.par(n.plots=(1+length(DATA.lista)),MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(.1, 0.5, 0))
-    #number of blocks and vessels per year
-  PLOT.fn(BLKS.YEAR,Effort.expan$N.ves.yr,60,180,"",CL2="grey65")
-  axis(1,at=seq(1,NN.monthly,5),labels=FINYEAR.monthly[seq(1,NN.monthly,5)],tck=-0.03,cex.axis=.9)
-  mtext("Financial year",side=1,line=1.5,font=1,las=0,cex=1,outer=F)
-  mtext("Number of blocks fished",side=2,line=1.35,font=1,las=0,cex=.85,outer=F)
-  mtext("Number of licence holders fishing",side=4,line=1.3,las=3,cex=.75,outer=F,col="grey65")
-  
-    #effort by block per calendar year groups
+  MAX.EFF=data.frame(Period=Yr.range,Max.eff=NA)
+  EFF.bin=NULL
   for (i in 1:length(DATA.lista))
   {
-    DATA=DATA.lista[[i]][-which(duplicated(DATA.lista[[i]]$Same.return)),]
-    
-    fn.eff.plot(DATA,tcl.1=0,tcl.2=0,EffortBreakSS)
-    mtext(Yr.range[i],side=3,line=-1.25,cex=.95)
-    axis(side = 1, at =Long.seq, labels = F, tcl = .35,las=1,cex.axis=1,padj=-0.9)
-    axis(side = 2, at = Lat.seq, labels = F,tcl = .35,las=2,cex.axis=1,hadj=.65)
-    if(i%in%c(10,7,8)) axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-0.9)
-    if(i%in%c(3,6,9)) axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=.65)
-    if(i==8) color.legend(126,-26,129,-30.5,round(EffortBreakSS,0),rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
-  }  
-  mtext("Latitude (?S)",side=2,line=0.4,las=3,cex=1.25,outer=T)
-  mtext("Longitude (?E)",side=1,line=0.75,cex=1.25,outer=T)  
-  dev.off()
-  
-  
-  
-  #Appendix 4. Cumulative catch and vessels
-  SPECIES.vec=c("Whiskery shark","Gummy shark","Dusky shark","Sandbar shark")
-  id=70
-  Min.rec.ves=20  #minimum accepted number of records to keep a vessel
-  
-  
-  Data.Summary=vector('list',length=N.species)
-  
-  for ( i in 1:N.species)Data.Summary[[i]]=fn.explore(DATA.list.LIVEWT.c[[i]],SPECIES.vec[i])
-  Data.Fig5=vector('list',length=N.species)
-  spe=c(17003,17001,18003,18007)
-  for ( i in 1:N.species)Data.Fig5[[i]]=fn.Figure5(Species.list[[i]],SPECIES.vec[i],spe[i])
-  
-  tiff(file="Appendix 4.Cummulative.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
-  layout(matrix(c(1,2,1,2,3,4,3,4), 4, 2, byrow = TRUE))
-  par(mar=c(3,.75,.1,3),oma=c(1,4,.1,.01),las=1,mgp=c(1,.9,0))
-  line.col=c("black","grey20","grey55","grey80")
-  line.type=c(1,2,1,1)
-  plot(Data.Fig5[[1]]$Block.Cum.Ca[1:id],ylab="", xlab="",xaxt='n',type='l',cex.axis=1.65,lwd=3)
-  for (i in 2:N.species)lines(Data.Fig5[[i]]$Block.Cum.Ca[1:id],col=line.col[i],lwd=3,lty=line.type[i])
-  axis(1,1:length(Data.Fig5[[1]]$Block.Cum.Ca[1:id]),labels=F,tck=-0.015)
-  axis(1,seq(5,length(Data.Fig5[[1]]$Block.Cum.Ca[1:id]),5),
-       labels=F,tck=-0.03)
-  mtext("Cumulative catch (%)",side=2,line=2.75,font=1,las=0,cex=1.5,outer=F)
-  
-  plot(Data.Fig5[[1]]$Ves.Cum.Ca,ylab="", xlab="",xaxt='n',type='l',cex.axis=1.65,lwd=3)
-  for (i in 2:N.species)lines(Data.Fig5[[i]]$Ves.Cum.Ca,col=line.col[i],lwd=3,lty=line.type[i])
-  axis(1,seq(0,length(Data.Fig5[[1]]$Ves.Cum.Ca),10),labels=F,tck=-0.015)
-  axis(1,seq(100,length(Data.Fig5[[1]]$Ves.Cum.Ca),100),labels=F,tck=-0.03)
-  legend("bottomright",SPECIES.vec,bty='n',cex=1.5,col=line.col,lwd=3,lty=line.type)
-  
-  plot(Data.Fig5[[1]]$TABLE17$PerCumRecords[1:id]*.99,ylab="", xlab="",xaxt='n',type='l',cex.axis=1.65,lwd=3)
-  for (i in 2:N.species)lines(Data.Fig5[[i]]$TABLE17$PerCumRecords[1:id],col=line.col[i],lwd=3,lty=line.type[i])
-  axis(1,1:length(Data.Fig5[[1]]$TABLE17$PerCumRecords[1:id]),labels=F,tck=-0.015)
-  axis(1,seq(5,length(Data.Fig5[[1]]$TABLE17$PerCumRecords[1:id]),5),
-       labels=seq(5,length(Data.Fig5[[1]]$TABLE17$PerCumRecords[1:id]),5),tck=-0.03,cex.axis=1.65)
-  mtext("Number of blocks",side=1,line=2.5,font=1,las=0,cex=1.5,outer=F)
-  mtext("Cumulative records (%)",side=2,line=2.75,font=1,las=0,cex=1.5,outer=F)
-  
-  
-  plot(Data.Fig5[[1]]$TABLE16$PerCumRecords*.99,ylab="", xlab="",xaxt='n',type='l',cex.axis=1.65,lwd=3)
-  for (i in 2:N.species)lines(Data.Fig5[[i]]$TABLE16$PerCumRecords,col=line.col[i],lwd=3,lty=line.type[i])
-  axis(1,seq(0,length(Data.Fig5[[1]]$TABLE16$PerCumRecords),10),labels=F,tck=-0.015)
-  axis(1,seq(100,length(Data.Fig5[[1]]$TABLE16$PerCumRecords),100),
-       labels=seq(100,length(Data.Fig5[[1]]$TABLE16$PerCumRecords),100),tck=-0.03,cex.axis=1.65)
-  mtext("Number of vessels",side=1,line=2.5,font=1,las=0,cex=1.5,outer=F)
-  
-  
-  #Plot of records per vessel
-  par(fig=c(0.60,1.00,.1,0.35), new = T,mgp=c(.25,.2,0),las=1)
-  fun.rec.per.ves(Data.Fig5[[1]]$Mean_catch_Vessel)
-  dev.off()
-  
-  
-  #Plot effective area
-  Dusky=c(X1=South.WA.long[1],X2=Dusky.range[2],Y1=South.WA.lat[1],Y2=Dusky.range[1])
-  Sandbar=c(X1=South.WA.long[1],X2=Sandbar.range[2],Y1=South.WA.lat[1],Y2=Sandbar.range[1])
-  Whiskery=c(X1=South.WA.long[1],X2=Whiskery.range[2],Y1=South.WA.lat[1],Y2=Whiskery.range[1])
-  Gummy=c(X1=Gummy.range[1],X2=Gummy.range[2],Y1=South.WA.lat[1],Y2=-31.6)
-  LISta=list(Whiskery=Whiskery,Gummy=Gummy,Dusky=Dusky,Sandbar=Sandbar)
-  fn.show=function(X1,X2,Y1,Y2)
-  {
-    plotmap(a,b,PLATE,"grey85",South.WA.long,South.WA.lat)
-    polygon(c(X1,X2,X2,X1),c(Y2,Y2,Y1,Y1),col='grey35',border="transparent")
-    par(new=T)
-    plotmap(a,b,PLATE,"grey85",South.WA.long,South.WA.lat)
+    DATA=DATA.lista[[i]]
+    DATA=DATA[-which(duplicated(DATA$Same.return)),]
+    if(Ef.var=="days") Max.effort=with(DATA,aggregate(Km.Gillnet.Days.c,list(BLOCKX),FUN=sum,na.rm=T))
+    if(Ef.var=="hours") Max.effort=with(DATA,aggregate(Km.Gillnet.Hours.c,list(BLOCKX),FUN=sum,na.rm=T))
+    EFF.bin=c(EFF.bin,Max.effort[,2])
+    MAX.EFF[i,2]=max(Max.effort[,2])
   }
-  jpeg(file="Effective_area.jpeg",width = 2400, height = 2400,units = "px", res = 300)
-  par(mfcol=c(2,2),mai=c(.5,.5,.2,.1),oma=c(.1,.1,.65,.1))
-  for(x in 1:length(LISta))
+  Max.effort=ceiling(max(MAX.EFF[,2])) 
+  # dummy=cbind(128.5,-35.5,Max.effort)
+  fn.eff.plot=function(DATA,tcl.1,tcl.2,EffortBreaks)   #function plot effort
   {
-    fn.show(X1=LISta[[x]][[1]],X2=LISta[[x]][[2]],Y1=LISta[[x]][[3]],Y2=LISta[[x]][[4]]) 
-    mtext(names(LISta)[x],3,cex=2)
-    At=c(LISta[[x]][[1]],LISta[[x]][[2]])
-    axis(side = 1, at =At, labels = At, tcl = .35,las=1,cex.axis=1,padj=-0.9)
-    At=c(LISta[[x]][[3]],LISta[[x]][[4]])
-    axis(side = 2, at =At , labels = -At,tcl = .35,las=2,cex.axis=1,hadj=.65)
-  }
-  dev.off()  
-    
-}
-couleurs=rev(heat.colors(numInt))
-
-
-  #Spatial Catch by year period
-if(First.run=='YES')
-{
-  #catch breaks
-  sp=c("whiskery","gummy","dusky","sandbar")
-  MAX.CATCH=data.frame(Period=Yr.range,Max.catch=NA)
-  CATCH.bin=NULL
-  fn.catch.breaks=function(SP)
-  {
-    
-    for (j in 1:length(DATA.lista))
-    {
-      DATA=subset(DATA.lista[[j]],LAT<=(-26) & LAT>(-36.1)&LONG<=(129) & LONG >(111.9) & SPECIES%in%SP)
-      if(nrow(DATA)>0)
-      {
-        Max.catch=with(DATA,aggregate(LIVEWT.c,list(BLOCKX),FUN=sum,na.rm=T))
-        CATCH.bin=c(CATCH.bin,Max.catch[,2])
-        MAX.CATCH[j,2]=max(Max.catch[,2])
-      }
-    }
-    
-    Breaks=quantile(CATCH.bin,probs=seq(0,1,1/numInt),na.rm=T)  #breaks for effort
-    return(Breaks)
-  }
-  
-  #Plot catch by 5-year period   
-  fn.catch.plot=function(DATA,SP,tcl.1,tcl.2,BREAKS)
-  {
-    DATA=subset(DATA,LAT<=(-26) & LAT>(-36.1)&LONG<=(129) & LONG >(111.9) & SPECIES%in%SP)
     DATA$LAT=as.numeric(substr(DATA$LAT,1,3))
     DATA$LONG=as.numeric(substr(DATA$LONG,1,3))
+    DATA$BLOCKX.c=with(DATA,paste(-LAT,LONG-100,sep=""))
+    MapEffort=with(DATA,aggregate(Km.Gillnet.Days.c,list(BLOCKX.c),FUN=sum,na.rm=T))    
+    
+    colnames(MapEffort)=c("BLOCKX.c","Total effort")
+    id=unique(match(MapEffort$BLOCKX.c,DATA$BLOCKX.c))
+    MapEffort$LAT=DATA$LAT[id]
+    MapEffort$LONG=DATA$LONG[id]
+    lat=sort(unique(MapEffort$LAT))
+    ids=match(-27,lat)
+    if(is.na(ids))      #add dummy for sorting image out of whack when missing Lat
+    {
+      adD=MapEffort[1,]
+      adD[,2]=NA
+      adD$BLOCKX.c="-27 113"
+      adD$LAT=-27
+      MapEffort=rbind(MapEffort,adD)
+    }
+    
+    MapEffort$LAT.cen=MapEffort$LAT-.5
+    MapEffort$LONG.cen=MapEffort$LONG+.5  
+    MapEffort=MapEffort[order(MapEffort$LAT.cen,MapEffort$LONG.cen),]
+    MapEffort=subset(MapEffort,LONG.cen<=South.WA.long[2])
+    long=sort(unique(MapEffort$LONG.cen))
+    lat=sort(unique(MapEffort$LAT.cen))      #latitude vector for image  
+    
+    MapEffort=MapEffort[,match(c("LONG.cen","LAT.cen","Total effort"),names(MapEffort))]  
+    #MapEffort=rbind(MapEffort,dummy)#keep in perspective
+    
+    Reshaped=as.matrix(reshape(MapEffort,idvar="LONG.cen",    #transposed as matrix   
+                               timevar="LAT.cen",v.names="Total effort", direction="wide"))  
+    Reshaped=Reshaped[order(Reshaped[,1]),]
+    Reshaped=Reshaped[,-1]  									
+    
     a=South.WA.long[1]:South.WA.long[2]
     b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
+    plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+    image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=EffortBreaks,axes = FALSE,add=T)			
+    axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
+    axis(side = 4, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.2)
     
-    if(nrow(DATA)<=2)   plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-    if(nrow(DATA)>2)
-    {
-      DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
-      
-      MapCatch=with(DATA,aggregate(LIVEWT.c,list(BLOCKX.c),FUN=sum,na.rm=T))    
-      colnames(MapCatch)=c("BLOCKX.c","Total Catch")
-      id=unique(match(MapCatch$BLOCKX.c,DATA$BLOCKX.c))
-      MapCatch$LAT=DATA$LAT[id]
-      MapCatch$LONG=DATA$LONG[id]
-      
-      MapCatch$LAT.cen=MapCatch$LAT-.5
-      MapCatch$LONG.cen=MapCatch$LONG+.5  
-      MapCatch=MapCatch[order(MapCatch$LAT.cen,MapCatch$LONG.cen),]
-      MapCatch=subset(MapCatch,LONG.cen<=South.WA.long[2])
-      long=sort(unique(MapCatch$LONG.cen))
-      lat=sort(unique(MapCatch$LAT.cen))      #latitude vector for image  
-      
-      MapCatch=MapCatch[,match(c("LONG.cen","LAT.cen","Total Catch"),names(MapCatch))]  
-      
-      
-      Reshaped=as.matrix(reshape(MapCatch,idvar="LONG.cen",  	#transposed as matrix 	
-                                 timevar="LAT.cen",v.names="Total Catch", direction="wide"))	
-      Reshaped=Reshaped[order(Reshaped[,1]),]
-      Reshaped=Reshaped[,-1]										
-      
-      
-      plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-      image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=BREAKS,axes = FALSE,add=T)			
-      axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
-      axis(side = 4, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.2)
-      
-      par(new=T)
-      plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-      
-    }
+    par(new=T)
+    plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
     
     if(add.depth=="YES") contour(xbat, ybat, reshaped[,2:ncol(reshaped)],ylim=South.WA.lat,xlim=South.WA.long, zlim=c(-1,-300),
                                  nlevels = 1,labcex=0.1,lty = c(1,2,3),col=c("gray20","gray20","gray20","transparent"),add=T)
   }
-  hndl.sptl.ktch="C:/Matias/Analyses/Catch and effort/Outputs/Paper/Catch_spatial_temporal/"
-  Tar=TARGETS
-  #Tar[[3]]=18003
   
-  # for (ss in 1:length(Tar))   
-  # {
-  #   fn.fig(paste(hndl.sptl.ktch,"Spatio.temporal.catch.",sp[ss],".Catch_map",sep=""),2400, 2400) 
-  #   
-  #   opar <- smart.par(n.plots=length(DATA.lista),MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(.1, 0.15, 0))
-  #   for (i in 1:length(DATA.lista))
-  #   {
-  #     Breaks=fn.catch.breaks(Tar[ss])
-  #     fn.catch.plot(DATA.lista[[i]],Tar[ss],tcl.1=.5,tcl.2=.5,Breaks)
-  #     #fn.catch.plot(DATA.lista[[i]],Tar[ss],tcl.1=16,tcl.2=18.15,Breaks)
-  #     mtext(Yr.range[i],side=3,line=-2,cex=.95)
-  #     axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .5,las=1,cex.axis=1,padj=-.15)
-  #     axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .5,las=2,cex.axis=1,hadj=1.1)
-  #     if(i==length(DATA.lista))color.legend(126,-26,129,-30.5,paste(round(Breaks/1000,0),'t'),
-  #                                           rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
-  #     # if(i==1)
-  #     # {
-  #     #   par(fig=c(0.2,.35,.8,0.95), new = T,mgp=c(.25,.2,0),las=1)
-  #     #   plotMap(worldLLhigh, xlim=OZ.long,ylim=OZ.lat,plt = c(.1, 1, 0.075, 1),
-  #     #           col="dark grey",tck = 0.025, tckMinor = 0.0125, xlab="",ylab="",axes=F)
-  #     #   box()
-  #     #   polygon(x=S.WA.long,y=S.WA.lat,lwd=1.5,col=rgb(.1,.1,.1,alpha=.2))
-  #     #   par(opar) 
-  #     # }
-  #   }
-  #   mtext("Latitude (?S)",side=2,line=0.4,las=3,cex=1.3,outer=T)
-  #   mtext("Longitude (?E)",side=1,line=0.6,cex=1.3,outer=T)
-  #   dev.off()
-  # }
+  EffortBreakSS=quantile(EFF.bin,probs=seq(0,1,1/numInt),na.rm=T)  #breaks for effort
   
-  #plot TDGDLF catch by year and grouped years
-  Colfunc <- colorRampPalette(c("yellow","red"))
-  Couleurs=c("white",Colfunc(numInt-1))
-  #Couleurs=Colfunc(numInt)
-  fn.ctch.plot.all.yrs=function(DATA,tcl.1,tcl.2,numInt) 
+  PLATE=c(.01,.9,.075,.9)
+  
+  LATT=South.WA.lat[2]:South.WA.lat[1]
+  LONGG=South.WA.long[1]:South.WA.long[2]
+  
+  South.WA.lat=c(-37,-25)
+  Lat.seq=c(-26,-28,-30,-32,-34,-36)
+  
+  #Create figures 1 to 5
+  if (plot.cpue.paper.figures=="YES")
   {
-    DATA$LIVEWT.c=DATA$LIVEWT.c/1000   #in tonnes
-    DATA$LONG=as.numeric(DATA$LONG)
-    DATA$blk=substr(DATA$BLOCKX,1,4)
-    A=aggregate(LIVEWT.c~FINYEAR+blk,DATA,sum)
-    Ymax=max(A$LIVEWT.c)
-    Ymin=min(A$LIVEWT.c)
-    #Breaks=c(0,seq(Ymin,Ymax,length.out=(numInt)))
-    Breaks=quantile(A$LIVEWT.c,probs=seq(0,1,1/numInt),na.rm=T)
-    DATA$LAT=as.numeric(substr(DATA$LAT,1,3))
-    DATA$LONG=as.numeric(substr(DATA$LONG,1,3))
-    a=South.WA.long[1]:South.WA.long[2]
-    b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
-    DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
-    for(y in 1:length(FINYrS))
-    {
-      A=subset(DATA,FINYEAR==FINYrS[y])
-      MapCatch=with(A,aggregate(LIVEWT.c,list(BLOCKX.c),FUN=sum,na.rm=T))
-      colnames(MapCatch)=c("BLOCKX.c","Total Catch")
-      id=unique(match(MapCatch$BLOCKX.c,DATA$BLOCKX.c))
-      MapCatch$LAT=DATA$LAT[id]
-      MapCatch$LONG=DATA$LONG[id]
-      msn.lat=seq(min(MapCatch$LAT),max(MapCatch$LAT))
-      msn.lat=msn.lat[which(!msn.lat%in%MapCatch$LAT)]
-      if(length(msn.lat)>0)
-      {
-        dummy=MapCatch[1:length(msn.lat),]
-        dummy$`Total Catch`=0
-        dummy$LAT=msn.lat
-        dummy$BLOCKX.c=with(dummy,paste(LAT,LONG))
-        MapCatch=rbind(MapCatch,dummy)
-      }
-      
-      if(unique(min(A$YEAR.c))>2007)
-      {
-        MapCatch$`Total Catch`=ifelse(MapCatch$LAT>=(-32) & MapCatch$LAT<=(-31) & MapCatch$LONG<116,0,MapCatch$`Total Catch`)
-      }
-      MapCatch$LAT.cen=MapCatch$LAT-.5
-      MapCatch$LONG.cen=MapCatch$LONG+.5  
-      MapCatch=MapCatch[order(MapCatch$LAT.cen,MapCatch$LONG.cen),]
-      MapCatch=subset(MapCatch,LONG.cen<=South.WA.long[2])
-      long=sort(unique(MapCatch$LONG.cen))
-      lat=sort(unique(MapCatch$LAT.cen))      #latitude vector for image  
-      MapCatch=MapCatch[,match(c("LONG.cen","LAT.cen","Total Catch"),names(MapCatch))]  
-      Reshaped=as.matrix(reshape(MapCatch,idvar="LONG.cen",  	#transposed as matrix 	
-                                 timevar="LAT.cen",v.names="Total Catch", direction="wide"))	
-      Reshaped=Reshaped[order(Reshaped[,1]),]
-      Reshaped=Reshaped[,-1]	
-      numberLab=10
-      colLeg=(rep(c("black",rep("transparent",numberLab-1)),(numInt+1)/numberLab))
-      
-      plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-      image(long,lat,z=Reshaped,xlab="",ylab="",col =Couleurs,breaks=Breaks,axes = FALSE,add=T)			
-      axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
-      axis(side = 4, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.2)
-      par(new=T)
-      plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-      legend('top',FINYrS[y],bty='n',cex=1.2)
-      axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
-      axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
-    }
-    plot(a,b,ann=F,axes=F,col='transparent')
-    color.legend(quantile(a,probs=.25),quantile(b,probs=.95),quantile(a,probs=.6),quantile(b,probs=.25),
-                 paste(round(Breaks,0),"t"),rect.col=Couleurs,gradient="y",col=colLeg,cex=.75)
-  }
-  fn.ctch.plot.grouped.yrs=function(DATA,tcl.1,tcl.2,numInt,grouping) 
-  {
-    DATA$LIVEWT.c=DATA$LIVEWT.c/1000   #in tonnes
-    DATA$LONG=as.numeric(DATA$LONG)
-    DATA$blk=substr(DATA$BLOCKX,1,4)
-    DATA$LAT=as.numeric(substr(DATA$LAT,1,3))
-    DATA$LONG=as.numeric(substr(DATA$LONG,1,3))
-    a=South.WA.long[1]:South.WA.long[2]
-    b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
-    DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
+    tiff(file="Figure 1. Map.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    par(mar=c(2,2,2,2),oma=c(1,1,1,1))
+    plotmap(a,b,PLATE,"dark grey",South.WA.long,c(-37,-25))
+    polygon(x=c(116.5,116.5,112,112),y=c(-26.5,-33,-33,-26.5),lwd=1.5,col=rgb(.1,.1,.1,alpha=.2))
+    polygon(x=c(116.5,116.5,112,112),y=c(-33,-37,-37,-33),lwd=1.5,col=rgb(.3,.3,.3,alpha=.5))
+    polygon(x=c(129,129,116.5,116.5),y=c(-30,-37,-37,-30),lwd=1.5,col=rgb(.7,.7,.7,alpha=.2))
+    axis(side = 1, at =LONGG, labels = F, tcl = 34,lty=3,col="grey30")
+    axis(side = 4, at = LATT, labels = F,tcl =34,lty=3,col="grey30")
+    if(add.depth=="YES") contour(xbat, ybat, reshaped[,2:ncol(reshaped)],ylim=c(-37,-25),xlim=South.WA.long, zlim=c(-1,-300),
+                                 nlevels = 1,labcex=0.1,lty = c(1,2,3),col=c("gray20","gray20","gray20","transparent"),add=T)
     
-    DATA=subset(DATA,FINYEAR%in%FINYrS)
-    DATA$yyr=as.numeric(substr(DATA$FINYEAR,1,4))
+    par(new=T,mar=c(2,2,2,2),oma=c(1,1,1,1))
+    plotmap(a,b,PLATE,"dark grey",South.WA.long,c(-37,-25))
+    axis(side = 1, at =seq(112,129,2), labels = seq(112,129,2), tcl = .35,las=1,cex.axis=1.25,padj=-1.25)
+    axis(side = 2, at = seq(-36,-25,2), labels = -seq(-36,-25,2),tcl = .35,las=2,cex.axis=1.25,hadj=.3)
+    text(116.73,Perth[2],("Perth"),col="black", cex=1.1)
+    points(115.86,-31.95,pch=19,cex=1.5)
+    text(116.73,-33.55,("Bunbury"),col="black", cex=1.1)
+    points(115.6,-33.55,pch=19,cex=1.5)
+    text(117.7,-34.75,("Albany"),col="black", cex=1.1)
+    points(117.8,-35,pch=19,cex=1.5)
+    text(122,-33.62,("Esperance"),col="black", cex=1.1)
+    points(121.9,-33.86,pch=19,cex=1.5)
+    mtext("Latitude (?S)",side=2,line=1.7,las=3,cex=1.75)
+    mtext("Longitude (?E)",side=1,line=1.75,cex=1.75)
     
-    AA=vector('list',length(FINYrS.gped))
-    for(y in 1:length(FINYrS.gped))
-    {
-      A=aggregate(LIVEWT.c~blk,subset(DATA,FINYEAR%in%FINYrS.gped[[y]]),sum,na.rm=T)
-      A$y.group=y
-      AA[[y]]=A
-    }
-    A=do.call(rbind,AA)
+    text(113.5,-30.5,("WCDGDLF"),col="black", cex=1.4)
+    text(114,-34.75,("JASDGDLF"),col="black", cex=1.4) 
+    text(114,-35.55,("(Zone 1)"),col="black", cex=1.4)
+    text(122,-34.75,("JASDGDLF"),col="black", cex=1.4)
+    text(122,-35.55,("(Zone 2)"),col="black", cex=1.4)
     
-    Ymax=max(A$LIVEWT.c)
-    Ymin=min(A$LIVEWT.c)
-    Breaks=quantile(A$LIVEWT.c,probs=seq(0,1,1/numInt),na.rm=T)
-    
-    couleurs=rev(heat.colors(numInt))
-    
-    for(y in 1:length(FINYrS.gped))
-    {
-      A=subset(DATA,FINYEAR%in%FINYrS.gped[[y]])
-      MapCatch=with(A,aggregate(LIVEWT.c,list(BLOCKX.c),FUN=sum,na.rm=T))
-      colnames(MapCatch)=c("BLOCKX.c","Total Catch")
-      id=unique(match(MapCatch$BLOCKX.c,DATA$BLOCKX.c))
-      MapCatch$LAT=DATA$LAT[id]
-      MapCatch$LONG=DATA$LONG[id]
-      msn.lat=seq(min(MapCatch$LAT),max(MapCatch$LAT))
-      msn.lat=msn.lat[which(!msn.lat%in%MapCatch$LAT)]
-      if(length(msn.lat)>0)
-      {
-        dummy=MapCatch[1:length(msn.lat),]
-        dummy$`Total Catch`=0
-        dummy$LAT=msn.lat
-        dummy$BLOCKX.c=with(dummy,paste(LAT,LONG))
-        MapCatch=rbind(MapCatch,dummy)
-      }
-      
-      if(unique(min(A$YEAR.c))>2007)
-      {
-        MapCatch$`Total Catch`=ifelse(MapCatch$LAT>=(-32) & MapCatch$LAT<=(-31) & MapCatch$LONG<116,0,MapCatch$`Total Catch`)
-      }
-      MapCatch$LAT.cen=MapCatch$LAT-.5
-      MapCatch$LONG.cen=MapCatch$LONG+.5  
-      MapCatch=MapCatch[order(MapCatch$LAT.cen,MapCatch$LONG.cen),]
-      MapCatch=subset(MapCatch,LONG.cen<=South.WA.long[2])
-      long=sort(unique(MapCatch$LONG.cen))
-      lat=sort(unique(MapCatch$LAT.cen))      #latitude vector for image  
-      MapCatch=MapCatch[,match(c("LONG.cen","LAT.cen","Total Catch"),names(MapCatch))]  
-      Reshaped=as.matrix(reshape(MapCatch,idvar="LONG.cen",  	#transposed as matrix 	
-                                 timevar="LAT.cen",v.names="Total Catch", direction="wide"))	
-      Reshaped=Reshaped[order(Reshaped[,1]),]
-      Reshaped=Reshaped[,-1]	
-      numberLab=10
-      colLeg=(rep(c("black",rep("transparent",numberLab-1)),(numInt+1)/numberLab))
-      
-      plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-      image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=Breaks,axes = FALSE,add=T)			
-      axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
-      axis(side = 4, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.2)
-      par(new=T)
-      plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-      text(115.60,-31.96,"Perth",pos=4,cex=1.2)
-      legend('top',names(FINYrS.gped)[y],bty='n',cex=1.2)
-      axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
-      axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
-    }
-    plot(a,b,ann=F,axes=F,col='transparent')
-    color.legend(quantile(a,probs=.25),quantile(b,probs=.95),quantile(a,probs=.6),quantile(b,probs=.25),
-                 paste(round(Breaks,0),"t"),rect.col=Couleurs,gradient="y",col=colLeg,cex=.75)
-  }
-  HnD.ctch.exp="C:/Matias/Analyses/Catch and effort/Outputs/Expansion_Catch"    
-  for(i in 1:length(Tar))
-  {
-    ddd=subset(Data.monthly,Estuary=="NO" & !is.na(LIVEWT.c) &
-                 METHOD%in%c("GN","LL")& LAT<=(-26) & SPECIES%in%Tar[[i]])
-    FINYrS=unique(ddd$FINYEAR)
-    
-    #all years
-    fn.fig(paste(HnD.ctch.exp,names(Tar)[i],sep="/"),2400, 2400)
-    smart.par(n.plots=length(FINYrS)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.35, 0))
-    fn.ctch.plot.all.yrs(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=20)
-    mtext("Latitude (?S)",side=2,line=0.5,las=3,cex=1.1,outer=T)
-    mtext("Longitude (?E)",side=1,line=0.5,cex=1.1,outer=T)
+    par(fig=c(.5,.92,.5,.92), new = T,mgp=c(.1,.4,0))
+    plotMap(worldLLhigh, xlim=OZ.long,ylim=OZ.lat,plt = c(.1, 1, 0.075, 1),
+            col="dark grey",tck = 0.025, tckMinor = 0.0125, xlab="",ylab="",axes=F)
+    box()
+    polygon(x=S.WA.long,y=S.WA.lat,lwd=1.5,col=rgb(.1,.1,.1,alpha=.2))
+    text(134,-22.5,("Australia"),col="black", cex=2)
     dev.off()
     
-    #grouped years
-    grouping=5
-    FINYrS.gp=seq(1,length(FINYrS),by=grouping)
-    FINYrS.gped=vector('list',length(FINYrS.gp))
-    for(f in 1:length(FINYrS.gped))
+    
+    #Appendix 1.                
+    
+    #Stack-up catch plot
+    these.ones=c(22999,17001,17003,18007,18003)
+    names(these.ones)=c("SHARK, OTHER","SHARK, GUMMY","SHARK, WHISKERY",
+                        "SHARK, THICKSKIN (SANDBAR)","SHARK, BRONZE WHALER")
+    #Monthly
+    FINYEAR.monthly=sort(unique(Data.monthly.GN$FINYEAR))
+    Mn.yr=subset(FINYEAR.monthly,!FINYEAR.monthly %in% FINYEAR.daily)
+    NN.monthly=length(Mn.yr)
+    STORE=matrix(nrow=NN.monthly,ncol=length(these.ones))
+    colnames(STORE)=sort(these.ones)
+    for(i in 1:NN.monthly)
     {
-      if(f==length(FINYrS.gped))
+      Dat=subset(Data.monthly.GN, FINYEAR==FINYEAR.monthly[i])    
+      test=aggregate(LIVEWT~FINYEAR+Spec.old,data=Dat,sum,na.rm=T)
+      test$SP=ifelse(test$Spec.old%in%these.ones,test$Spec.old,"OTHER")
+      test=aggregate(LIVEWT~FINYEAR+ SP,data=test,sum,na.rm=T)
+      prop=100*test[,3]/sum(test[,3])
+      names(prop)=test[,2]
+      if(!(names(prop)[4]=="18007"))prop=c(prop[1:3],0,prop[4])
+      if(names(prop)[4]=="18007")prop=prop[1:5]
+      STORE[i,]=prop
+    }
+    
+    #Daily
+    NN.daily=length(FINYEAR.daily)
+    STORE.daily=matrix(nrow=NN.daily,ncol=length(these.ones))
+    colnames(STORE.daily)=sort(these.ones)
+    for(i in 1:NN.daily)
+    {
+      Dat=subset(Data.daily.GN, FINYEAR==FINYEAR.daily[i])    
+      Dat$Spec.old=Dat$SPECIES
+      test=aggregate(LIVEWT~FINYEAR+Spec.old,data=Dat,sum,na.rm=T)
+      test$SP=ifelse(test$Spec.old%in%these.ones,test$Spec.old,"OTHER")
+      test=aggregate(LIVEWT~FINYEAR+ SP,data=test,sum,na.rm=T)
+      prop=100*test[,3]/sum(test[,3])
+      names(prop)=test[,2]
+      if(!(names(prop)[4]=="18007"))prop=c(prop[1:3],0,prop[4])
+      if(names(prop)[4]=="18007")prop=prop[1:5]
+      STORE.daily[i,]=prop
+    }
+    STORE=rbind(STORE,STORE.daily)
+    
+    
+    #Stack-up barplot of effort problems
+    COL.BAR=c("white","grey35","grey55","grey75","black")
+    NN=NN.monthly+NN.daily
+    AXIS1=function()axis(1,at=b,labels=F,tck=-0.016)
+    AXIS2=function()axis(1,at=b[seq(1,NN,by=5)],labels=F,tck=-0.03)
+    AXIS3=function()axis(1,at=b[seq(1,NN,by=5)],labels=FINYEAR.monthly[seq(1,NN,by=5)],tck=-0.035,cex.axis=1.25)
+    
+    tiff(file="Appendix 1. Data problems_All.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    layout(matrix(c(1,1,2:5), 3, 2, byrow = TRUE))
+    par(mar=c(2,.75,.25,2),oma=c(2,4,.25,.01),las=1,mgp=c(1,.75,0))
+    
+    #Catch (species id problem)
+    b=barplot(rbind(STORE[,1],STORE[,2],STORE[,3],STORE[,4],STORE[,5]),beside=F,col=COL.BAR,cex.axis=1.25,cex.lab=1.25,
+              ylim=c(0,110),yaxs="i",xaxs="i",legend.text=c("Gummy","Whiskery","Dusky","Sandbar","Unid. shark"),
+              args.legend=list(x = "topleft",horiz=T,cex=1.7,pt.cex=1.7,bty='n',inset=c(0, -0.025)),ylab="")
+    box()
+    AXIS1()
+    AXIS3()
+    
+    #BDAYS                                        
+    print(fn.eff.probs("GN","BDAYS","bdays","",c("grey85","black"))  )
+    mtext("Number of days fished per month",3,line=-1.375,cex=1.25)
+    
+    #HOURS
+    print(fn.eff.probs("GN","HOURS","hours","",c("grey85","black")))
+    mtext("Number of hours fished per day",3,line=-1.375,cex=1.25)
+    
+    #SHOTS
+    print(fn.eff.probs("GN","SHOTS","shots","",c("grey85","black")))
+    AXIS3()
+    mtext("Number of shots per day",3,line=-1.375,cex=1.25)
+    
+    #NETLEN     
+    print(fn.eff.probs("GN","NETLEN","netlen","",c("grey85","black")))
+    AXIS3()
+    mtext("Net length per shot",3,line=-1.375,cex=1.25)
+    
+    mtext("Financial year",side=1,line=0.8,font=1,las=0,cex=1.75,outer=T)
+    mtext("Percentage",side=2,line=2,font=1,las=0,cex=1.75,outer=T)
+    dev.off()
+    
+    
+    tiff(file="Appendix 1. Data problems.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    par(mfcol=c(2,1),mar=c(1,3,.1,.1),oma=c(2.5,.5,.1,.5),las=1,mgp=c(1.8,.6,0))
+    
+    #Catch (species id problem)
+    b=barplot(rbind(STORE[,1],STORE[,2],STORE[,3],STORE[,4],STORE[,5]),beside=F,col=COL.BAR,cex.axis=1.25,cex.lab=1.25,
+              ylim=c(0,110),yaxs="i",xaxs="i",legend.text=c("Gummy","Whiskery","Dusky","Sandbar","Unid. shark"),
+              args.legend=list(x = "topleft",horiz=T,cex=1.17,pt.cex=1.25,bty='n',inset=c(0, -0.025)),ylab="")
+    box()
+    AXIS1()
+    AXIS2()
+    
+    # #NETLEN     
+    fn.eff.probs("GN","NETLEN","netlen","",c("grey85","black"))
+    AXIS3()
+    
+    mtext("Financial year",side=1,line=1,font=1,las=0,cex=1.75,outer=T)
+    mtext("Percentage",side=2,line=-0.75,font=1,las=0,cex=1.75,outer=T)
+    dev.off()
+    
+    
+    tiff(file="Appendix 1. Data problems_catch_only.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    par(mfcol=c(1,1),mar=c(1,3,.15,.1),oma=c(3,.5,.15,.65),las=1,mgp=c(1.8,.9,0))
+    
+    #Catch (species id problem)
+    b=barplot(rbind(STORE[,1],STORE[,2],STORE[,3],STORE[,4],STORE[,5]),beside=F,col=COL.BAR,cex.axis=1.25,cex.lab=1.25,
+              ylim=c(0,110),yaxs="i",xaxs="i",legend.text=c("Gummy","Whiskery","Dusky","Sandbar","Unid. shark"),
+              args.legend=list(x = "topleft",horiz=T,cex=1.17,pt.cex=1.25,bty='n',inset=c(0, -0.015)),ylab="")
+    box()
+    AXIS1()
+    AXIS2()
+    AXIS3()
+    mtext("Financial year",side=1,line=1.5,font=1,las=0,cex=1.75,outer=T)
+    mtext("Percentage",side=2,line=-0.75,font=1,las=0,cex=1.75,outer=T)
+    dev.off()
+    
+    
+    tiff(file="Appendix 1. Data problems_effort_only.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    par(mfcol=c(2,2),mar=c(1,3.2,.1,.1),oma=c(2.5,.5,.1,.65),las=1,mgp=c(1.8,.6,0))
+    
+    #BDAYS                                        
+    print(fn.eff.probs("GN","BDAYS","bdays","(a)",c("grey85","black"))  )
+    
+    #HOURS
+    print(fn.eff.probs("GN","HOURS","hours","(b)",c("grey85","black")))
+    AXIS3()
+    #SHOTS
+    print(fn.eff.probs("GN","SHOTS","shots","(c)",c("grey85","black")))
+    
+    #NETLEN     
+    print(fn.eff.probs("GN","NETLEN","netlen","(d)",c("grey85","black")))
+    AXIS3()
+    
+    mtext("Financial year",side=1,line=1.25,font=1,las=0,cex=1.75,outer=T)
+    mtext("Percentage",side=2,line=-1,font=1,las=0,cex=1.75,outer=T)
+    dev.off()
+    
+    
+    
+    #Appendix 2. Flowchart diagram 
+    source("C:/Matias/Analyses/SOURCE_SCRIPTS/flow_chart.R")
+    #text
+    LABELS <- list("raw data",
+                   c("Exclude records from estuaries, non-gillnet gear","and school shark and dogfish targeting"),
+                   c("Valid catch composition"),
+                   c("Correct catch but do not use record"," in catch and effort standardisation"),
+                   "Valid effort",
+                   c("Correct effort but do not use record","in catch and effort standardisation"),
+                   c("Financial year > 1989-90"),
+                   c("Adjust incomplete","catch and effort"),
+                   c("Record within effective area"),
+                   c("Do not use record in","catch and effort standardisation"),
+                   c("Standardise catch and effort","Construct abundance index"),
+                   c("Adjust for increase in","fishing efficiency"))
+    
+    #type of shape
+    #Note:
+    #oval: start and terminal points
+    #square or round: process
+    #diammond: decision (yes/no)
+    
+    SHAPES=c("oval","round","diamond","round","diamond","round","diamond",
+             "round","diamond","round","round","oval")
+    
+    #Shape coordinates
+    MaInX=0.725
+    X.COOR=c(rep(MaInX,3),MaInX*0.35,MaInX,MaInX*0.35,MaInX,MaInX*0.35,
+             MaInX,MaInX*0.35,MaInX,MaInX)
+    N.labl=length(LABELS)
+    Y.COOR=rep(NA,N.labl)
+    Y.COOR[1]=0.975
+    delta=c(rep(0.115,3),rep(0.07,8),0.115)
+    for(q in 2:N.labl) Y.COOR[q]=Y.COOR[q-1]-delta[q]
+    
+    #Shape size
+    X.size=c(.08,.19,.13,.165,.09,.165,.125,.125,.125,.125,.13,.125)
+    
+    #arrows
+    ArROW=c(rep("Straight",2),rep(c("Side.left","Side.right"),4),"Straight","Side.back")
+    
+    tiff(file="Appendix 2.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    par(mar=c(0.1,0.1,0.1,0.1))
+    fn.flow.chart(lab=LABELS,SHPE=SHAPES,X.coor=X.COOR,Y.coor=Y.COOR,SX=X.size,ARRw=ArROW,CEX=.9,n=8,n1=9)
+    dev.off()  
+    
+    
+    #Appendix 3. Effort dynamics (expansion and contraction)
+    NN.monthly=NN
+    Lat.seq=c(-26,-28,-30,-32,-34,-36)
+    
+    tiff(file="Appendix 3. Effort dynamics.gillnets.tiff",width = 2000, height = 2400,units = "px", res = 300, compression = "lzw")    
+    smart.par(n.plots=(1+length(DATA.lista)),MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(.1, 0.5, 0))
+    #number of blocks and vessels per year
+    PLOT.fn(BLKS.YEAR,Effort.expan$N.ves.yr,60,180,"",CL2="grey65")
+    axis(1,at=seq(1,NN.monthly,5),labels=FINYEAR.monthly[seq(1,NN.monthly,5)],tck=-0.03,cex.axis=.9)
+    mtext("Financial year",side=1,line=1.5,font=1,las=0,cex=1,outer=F)
+    mtext("Number of blocks fished",side=2,line=1.35,font=1,las=0,cex=.85,outer=F)
+    mtext("Number of licence holders fishing",side=4,line=1.3,las=3,cex=.75,outer=F,col="grey65")
+    
+    #effort by block per calendar year groups
+    for (i in 1:length(DATA.lista))
+    {
+      DATA=DATA.lista[[i]][-which(duplicated(DATA.lista[[i]]$Same.return)),]
+      
+      fn.eff.plot(DATA,tcl.1=0,tcl.2=0,EffortBreakSS)
+      mtext(Yr.range[i],side=3,line=-1.25,cex=.95)
+      axis(side = 1, at =Long.seq, labels = F, tcl = .35,las=1,cex.axis=1,padj=-0.9)
+      axis(side = 2, at = Lat.seq, labels = F,tcl = .35,las=2,cex.axis=1,hadj=.65)
+      if(i%in%c(10,7,8)) axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-0.9)
+      if(i%in%c(3,6,9)) axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=.65)
+      if(i==8) color.legend(126,-26,129,-30.5,round(EffortBreakSS,0),rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
+    }  
+    mtext("Latitude (?S)",side=2,line=0.4,las=3,cex=1.25,outer=T)
+    mtext("Longitude (?E)",side=1,line=0.75,cex=1.25,outer=T)  
+    dev.off()
+    
+    
+    
+    #Appendix 4. Cumulative catch and vessels
+    SPECIES.vec=c("Whiskery shark","Gummy shark","Dusky shark","Sandbar shark")
+    id=70
+    Min.rec.ves=20  #minimum accepted number of records to keep a vessel
+    
+    
+    Data.Summary=vector('list',length=N.species)
+    
+    for ( i in 1:N.species)Data.Summary[[i]]=fn.explore(DATA.list.LIVEWT.c[[i]],SPECIES.vec[i])
+    Data.Fig5=vector('list',length=N.species)
+    spe=c(17003,17001,18003,18007)
+    for ( i in 1:N.species)Data.Fig5[[i]]=fn.Figure5(Species.list[[i]],SPECIES.vec[i],spe[i])
+    
+    tiff(file="Appendix 4.Cummulative.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+    layout(matrix(c(1,2,1,2,3,4,3,4), 4, 2, byrow = TRUE))
+    par(mar=c(3,.75,.1,3),oma=c(1,4,.1,.01),las=1,mgp=c(1,.9,0))
+    line.col=c("black","grey20","grey55","grey80")
+    line.type=c(1,2,1,1)
+    plot(Data.Fig5[[1]]$Block.Cum.Ca[1:id],ylab="", xlab="",xaxt='n',type='l',cex.axis=1.65,lwd=3)
+    for (i in 2:N.species)lines(Data.Fig5[[i]]$Block.Cum.Ca[1:id],col=line.col[i],lwd=3,lty=line.type[i])
+    axis(1,1:length(Data.Fig5[[1]]$Block.Cum.Ca[1:id]),labels=F,tck=-0.015)
+    axis(1,seq(5,length(Data.Fig5[[1]]$Block.Cum.Ca[1:id]),5),
+         labels=F,tck=-0.03)
+    mtext("Cumulative catch (%)",side=2,line=2.75,font=1,las=0,cex=1.5,outer=F)
+    
+    plot(Data.Fig5[[1]]$Ves.Cum.Ca,ylab="", xlab="",xaxt='n',type='l',cex.axis=1.65,lwd=3)
+    for (i in 2:N.species)lines(Data.Fig5[[i]]$Ves.Cum.Ca,col=line.col[i],lwd=3,lty=line.type[i])
+    axis(1,seq(0,length(Data.Fig5[[1]]$Ves.Cum.Ca),10),labels=F,tck=-0.015)
+    axis(1,seq(100,length(Data.Fig5[[1]]$Ves.Cum.Ca),100),labels=F,tck=-0.03)
+    legend("bottomright",SPECIES.vec,bty='n',cex=1.5,col=line.col,lwd=3,lty=line.type)
+    
+    plot(Data.Fig5[[1]]$TABLE17$PerCumRecords[1:id]*.99,ylab="", xlab="",xaxt='n',type='l',cex.axis=1.65,lwd=3)
+    for (i in 2:N.species)lines(Data.Fig5[[i]]$TABLE17$PerCumRecords[1:id],col=line.col[i],lwd=3,lty=line.type[i])
+    axis(1,1:length(Data.Fig5[[1]]$TABLE17$PerCumRecords[1:id]),labels=F,tck=-0.015)
+    axis(1,seq(5,length(Data.Fig5[[1]]$TABLE17$PerCumRecords[1:id]),5),
+         labels=seq(5,length(Data.Fig5[[1]]$TABLE17$PerCumRecords[1:id]),5),tck=-0.03,cex.axis=1.65)
+    mtext("Number of blocks",side=1,line=2.5,font=1,las=0,cex=1.5,outer=F)
+    mtext("Cumulative records (%)",side=2,line=2.75,font=1,las=0,cex=1.5,outer=F)
+    
+    
+    plot(Data.Fig5[[1]]$TABLE16$PerCumRecords*.99,ylab="", xlab="",xaxt='n',type='l',cex.axis=1.65,lwd=3)
+    for (i in 2:N.species)lines(Data.Fig5[[i]]$TABLE16$PerCumRecords,col=line.col[i],lwd=3,lty=line.type[i])
+    axis(1,seq(0,length(Data.Fig5[[1]]$TABLE16$PerCumRecords),10),labels=F,tck=-0.015)
+    axis(1,seq(100,length(Data.Fig5[[1]]$TABLE16$PerCumRecords),100),
+         labels=seq(100,length(Data.Fig5[[1]]$TABLE16$PerCumRecords),100),tck=-0.03,cex.axis=1.65)
+    mtext("Number of vessels",side=1,line=2.5,font=1,las=0,cex=1.5,outer=F)
+    
+    
+    #Plot of records per vessel
+    par(fig=c(0.60,1.00,.1,0.35), new = T,mgp=c(.25,.2,0),las=1)
+    fun.rec.per.ves(Data.Fig5[[1]]$Mean_catch_Vessel)
+    dev.off()
+    
+    
+    #Plot effective area
+    Dusky=c(X1=South.WA.long[1],X2=Dusky.range[2],Y1=South.WA.lat[1],Y2=Dusky.range[1])
+    Sandbar=c(X1=South.WA.long[1],X2=Sandbar.range[2],Y1=South.WA.lat[1],Y2=Sandbar.range[1])
+    Whiskery=c(X1=South.WA.long[1],X2=Whiskery.range[2],Y1=South.WA.lat[1],Y2=Whiskery.range[1])
+    Gummy=c(X1=Gummy.range[1],X2=Gummy.range[2],Y1=South.WA.lat[1],Y2=-31.6)
+    LISta=list(Whiskery=Whiskery,Gummy=Gummy,Dusky=Dusky,Sandbar=Sandbar)
+    fn.show=function(X1,X2,Y1,Y2)
+    {
+      plotmap(a,b,PLATE,"grey85",South.WA.long,South.WA.lat)
+      polygon(c(X1,X2,X2,X1),c(Y2,Y2,Y1,Y1),col='grey35',border="transparent")
+      par(new=T)
+      plotmap(a,b,PLATE,"grey85",South.WA.long,South.WA.lat)
+    }
+    jpeg(file="Effective_area.jpeg",width = 2400, height = 2400,units = "px", res = 300)
+    par(mfcol=c(2,2),mai=c(.5,.5,.2,.1),oma=c(.1,.1,.65,.1))
+    for(x in 1:length(LISta))
+    {
+      fn.show(X1=LISta[[x]][[1]],X2=LISta[[x]][[2]],Y1=LISta[[x]][[3]],Y2=LISta[[x]][[4]]) 
+      mtext(names(LISta)[x],3,cex=2)
+      At=c(LISta[[x]][[1]],LISta[[x]][[2]])
+      axis(side = 1, at =At, labels = At, tcl = .35,las=1,cex.axis=1,padj=-0.9)
+      At=c(LISta[[x]][[3]],LISta[[x]][[4]])
+      axis(side = 2, at =At , labels = -At,tcl = .35,las=2,cex.axis=1,hadj=.65)
+    }
+    dev.off()  
+    
+  }
+  couleurs=rev(heat.colors(numInt))
+  
+  
+  #Spatial Catch by year period
+  if(First.run=='YES')
+  {
+    #catch breaks
+    sp=c("whiskery","gummy","dusky","sandbar")
+    MAX.CATCH=data.frame(Period=Yr.range,Max.catch=NA)
+    CATCH.bin=NULL
+    fn.catch.breaks=function(SP)
+    {
+      
+      for (j in 1:length(DATA.lista))
       {
-        FINYrS.gped[[f]]=FINYrS[FINYrS.gp[f]:length(FINYrS)]
-        if(length(FINYrS.gped[[f]]==1))
+        DATA=subset(DATA.lista[[j]],LAT<=(-26) & LAT>(-36.1)&LONG<=(129) & LONG >(111.9) & SPECIES%in%SP)
+        if(nrow(DATA)>0)
         {
-          names(FINYrS.gped)[f]=FINYrS.gped[[f]][1]
-        }else
-        {
-          names(FINYrS.gped)[f]=paste(FINYrS.gped[[f]][1],"to",FINYrS.gped[[f]][length(FINYrS.gped[[f]])])
+          Max.catch=with(DATA,aggregate(LIVEWT.c,list(BLOCKX),FUN=sum,na.rm=T))
+          CATCH.bin=c(CATCH.bin,Max.catch[,2])
+          MAX.CATCH[j,2]=max(Max.catch[,2])
         }
-        
-      }else
-      {
-        FINYrS.gped[[f]]=FINYrS[FINYrS.gp[f]:(FINYrS.gp[f+1]-1)]
-        names(FINYrS.gped)[f]=paste(FINYrS.gped[[f]][1],"to",FINYrS.gped[[f]][length(FINYrS.gped[[f]])])
       }
+      
+      Breaks=quantile(CATCH.bin,probs=seq(0,1,1/numInt),na.rm=T)  #breaks for effort
+      return(Breaks)
     }
-    fn.fig(paste(HnD.ctch.exp,"/",names(Tar)[i],"_grouped.yrs",sep=""),2000, 2400)
-    smart.par(n.plots=length(FINYrS.gped)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.35, 0))
-    fn.ctch.plot.grouped.yrs(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=50,grouping=5)
-    mtext("Latitude (?S)",side=2,line=0.5,las=3,cex=1.1,outer=T)
-    mtext("Longitude (?E)",side=1,line=0.5,cex=1.1,outer=T)
-    dev.off()
     
-    rm(ddd)
-  }
-  
-  #movie
-  Frame.speed=.2  #match to talking speed
-  ani.options(ani.width=480,ani.height=480)
-  fn.ctch.plot.all.yrs.movie=function(DATA,tcl.1,tcl.2,numInt) 
-  {
-    DATA$LIVEWT.c=DATA$LIVEWT.c/1000   #in tonnes
-    DATA$LONG=as.numeric(DATA$LONG)
-    DATA$blk=substr(DATA$BLOCKX,1,4)
-    A=aggregate(LIVEWT.c~FINYEAR+blk,DATA,sum)
-    Ymax=max(A$LIVEWT.c)
-    Ymin=min(A$LIVEWT.c)
-    Breaks=quantile(A$LIVEWT.c,probs=seq(0,1,1/numInt),na.rm=T)
-    #Breaks=c(0,seq(Ymin,Ymax,length.out=(numInt)))
-    DATA$LAT=as.numeric(substr(DATA$LAT,1,3))
-    DATA$LONG=as.numeric(substr(DATA$LONG,1,3))
-    a=South.WA.long[1]:South.WA.long[2]
-    b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
-    DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
-    saveGIF({
+    #Plot catch by 5-year period   
+    fn.catch.plot=function(DATA,SP,tcl.1,tcl.2,BREAKS)
+    {
+      DATA=subset(DATA,LAT<=(-26) & LAT>(-36.1)&LONG<=(129) & LONG >(111.9) & SPECIES%in%SP)
+      DATA$LAT=as.numeric(substr(DATA$LAT,1,3))
+      DATA$LONG=as.numeric(substr(DATA$LONG,1,3))
+      a=South.WA.long[1]:South.WA.long[2]
+      b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
+      
+      if(nrow(DATA)<=2)   plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+      if(nrow(DATA)>2)
+      {
+        DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
+        
+        MapCatch=with(DATA,aggregate(LIVEWT.c,list(BLOCKX.c),FUN=sum,na.rm=T))    
+        colnames(MapCatch)=c("BLOCKX.c","Total Catch")
+        id=unique(match(MapCatch$BLOCKX.c,DATA$BLOCKX.c))
+        MapCatch$LAT=DATA$LAT[id]
+        MapCatch$LONG=DATA$LONG[id]
+        
+        MapCatch$LAT.cen=MapCatch$LAT-.5
+        MapCatch$LONG.cen=MapCatch$LONG+.5  
+        MapCatch=MapCatch[order(MapCatch$LAT.cen,MapCatch$LONG.cen),]
+        MapCatch=subset(MapCatch,LONG.cen<=South.WA.long[2])
+        long=sort(unique(MapCatch$LONG.cen))
+        lat=sort(unique(MapCatch$LAT.cen))      #latitude vector for image  
+        
+        MapCatch=MapCatch[,match(c("LONG.cen","LAT.cen","Total Catch"),names(MapCatch))]  
+        
+        
+        Reshaped=as.matrix(reshape(MapCatch,idvar="LONG.cen",  	#transposed as matrix 	
+                                   timevar="LAT.cen",v.names="Total Catch", direction="wide"))	
+        Reshaped=Reshaped[order(Reshaped[,1]),]
+        Reshaped=Reshaped[,-1]										
+        
+        
+        plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+        image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=BREAKS,axes = FALSE,add=T)			
+        axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
+        axis(side = 4, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.2)
+        
+        par(new=T)
+        plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+        
+      }
+      
+      if(add.depth=="YES") contour(xbat, ybat, reshaped[,2:ncol(reshaped)],ylim=South.WA.lat,xlim=South.WA.long, zlim=c(-1,-300),
+                                   nlevels = 1,labcex=0.1,lty = c(1,2,3),col=c("gray20","gray20","gray20","transparent"),add=T)
+    }
+    hndl.sptl.ktch="C:/Matias/Analyses/Catch and effort/Outputs/Paper/Catch_spatial_temporal/"
+    Tar=TARGETS
+    #Tar[[3]]=18003
+    
+    # for (ss in 1:length(Tar))   
+    # {
+    #   fn.fig(paste(hndl.sptl.ktch,"Spatio.temporal.catch.",sp[ss],".Catch_map",sep=""),2400, 2400) 
+    #   
+    #   opar <- smart.par(n.plots=length(DATA.lista),MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(.1, 0.15, 0))
+    #   for (i in 1:length(DATA.lista))
+    #   {
+    #     Breaks=fn.catch.breaks(Tar[ss])
+    #     fn.catch.plot(DATA.lista[[i]],Tar[ss],tcl.1=.5,tcl.2=.5,Breaks)
+    #     #fn.catch.plot(DATA.lista[[i]],Tar[ss],tcl.1=16,tcl.2=18.15,Breaks)
+    #     mtext(Yr.range[i],side=3,line=-2,cex=.95)
+    #     axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .5,las=1,cex.axis=1,padj=-.15)
+    #     axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .5,las=2,cex.axis=1,hadj=1.1)
+    #     if(i==length(DATA.lista))color.legend(126,-26,129,-30.5,paste(round(Breaks/1000,0),'t'),
+    #                                           rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
+    #     # if(i==1)
+    #     # {
+    #     #   par(fig=c(0.2,.35,.8,0.95), new = T,mgp=c(.25,.2,0),las=1)
+    #     #   plotMap(worldLLhigh, xlim=OZ.long,ylim=OZ.lat,plt = c(.1, 1, 0.075, 1),
+    #     #           col="dark grey",tck = 0.025, tckMinor = 0.0125, xlab="",ylab="",axes=F)
+    #     #   box()
+    #     #   polygon(x=S.WA.long,y=S.WA.lat,lwd=1.5,col=rgb(.1,.1,.1,alpha=.2))
+    #     #   par(opar) 
+    #     # }
+    #   }
+    #   mtext("Latitude (?S)",side=2,line=0.4,las=3,cex=1.3,outer=T)
+    #   mtext("Longitude (?E)",side=1,line=0.6,cex=1.3,outer=T)
+    #   dev.off()
+    # }
+    
+    #plot TDGDLF catch by year and grouped years
+    Colfunc <- colorRampPalette(c("yellow","red"))
+    Couleurs=c("white",Colfunc(numInt-1))
+    #Couleurs=Colfunc(numInt)
+    fn.ctch.plot.all.yrs=function(DATA,tcl.1,tcl.2,numInt) 
+    {
+      DATA$LIVEWT.c=DATA$LIVEWT.c/1000   #in tonnes
+      DATA$LONG=as.numeric(DATA$LONG)
+      DATA$blk=substr(DATA$BLOCKX,1,4)
+      A=aggregate(LIVEWT.c~FINYEAR+blk,DATA,sum)
+      Ymax=max(A$LIVEWT.c)
+      Ymin=min(A$LIVEWT.c)
+      #Breaks=c(0,seq(Ymin,Ymax,length.out=(numInt)))
+      Breaks=quantile(A$LIVEWT.c,probs=seq(0,1,1/numInt),na.rm=T)
+      DATA$LAT=as.numeric(substr(DATA$LAT,1,3))
+      DATA$LONG=as.numeric(substr(DATA$LONG,1,3))
+      a=South.WA.long[1]:South.WA.long[2]
+      b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
+      DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
       for(y in 1:length(FINYrS))
       {
         A=subset(DATA,FINYEAR==FINYrS[y])
@@ -8883,373 +7871,414 @@ if(First.run=='YES')
         legend('top',FINYrS[y],bty='n',cex=1.2)
         axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
         axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
-        mtext("Latitude (?S)",side=2,line=1,las=3,cex=1.75,outer=T)
-        mtext("Longitude (?E)",side=1,line=1,cex=1.75,outer=T)
-        color.legend(quantile(a,probs=.9),quantile(b,probs=.91),quantile(a,probs=.95),quantile(b,probs=.5),
-                     paste(round(Breaks,0),"t"),rect.col=Couleurs,gradient="y",col=colLeg,cex=.95)
       }
-    },movie.name=paste(HnD.ctch.exp,paste(names(Tar)[i],".movie.gif",sep=''),sep="/"),interval=Frame.speed,loop =1)
-  }
-  for(i in 1:length(Tar))
-  {
-    ddd=subset(Data.monthly,Estuary=="NO" & !is.na(LIVEWT.c) &
-                 METHOD%in%c("GN","LL")& LAT<=(-26) & SPECIES==Tar[[i]])
-    FINYrS=unique(ddd$FINYEAR)
-    fn.ctch.plot.all.yrs.movie(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=20)
-    rm(ddd)
-  }
-  
-  
-  
-  
-  #Effort   
-  #km gn days 
-  #Monthly
-  Attach.Effort.monthly.blk.c=aggregate(Km.Gillnet.Days.c~MONTH+BLOCKX+VESSEL+zone+FINYEAR+LAT+LONG,
-                                        data=subset(Effort.monthly,LAT<=(-26)&LAT>(-36.1)&LONG<=(129)&LONG>(111)),max,na.rm=T)
-  Attach.Effort.monthly.blk.c=fn.split.boundary(Attach.Effort.monthly.blk.c,"Km.Gillnet.Days.c")
-  Attach.Effort.monthly.blk.c=aggregate(Km.Gillnet.Days.c~BLOCKX+FINYEAR+LAT+LONG,data=Attach.Effort.monthly.blk.c,sum,na.rm=T)
-  
-  #Daily
-  if(Use.Date=="NO")Attach.Effort.daily.blk.c=aggregate(Km.Gillnet.Days.c~ID+blockx+vessel+finyear+LAT+LONG,
-                                                        data=subset(Effort.daily,LAT<=(-26)&LAT>(-36.1)&LONG<=(129)&LONG>(111)),max,na.rm=T)
-  if(Use.Date=="YES")Attach.Effort.daily.blk.c=aggregate(Km.Gillnet.Days.c~date+blockx+vessel+finyear+LAT+LONG,
-                                                         data=subset(Effort.daily,LAT<=(-26)&LAT>(-36.1)&LONG<=(129)&LONG>(111)),max,na.rm=T) 
-  Attach.Effort.daily.blk.c=aggregate(Km.Gillnet.Days.c~blockx+finyear+LAT+LONG,data=Attach.Effort.daily.blk.c,sum,na.rm=T)
-  names(Attach.Effort.daily.blk.c)=names(Attach.Effort.monthly.blk.c)
-  
-  Effor.monthly.km.gn.d.block=rbind(Attach.Effort.monthly.blk.c,Attach.Effort.daily.blk.c)
-  
-  fn.effort.breaks=function(DD)
-  {
-    Max.eff=Yr.rango
-    for (j in 1:length(Yr.rango))
-    {
-      DATA=subset(DD,FINYEAR%in%Yr.rango[[j]])
-      dummy=with(DATA,aggregate(Km.Gillnet.Days.c,list(BLOCKX),FUN=sum,na.rm=T))
-      Max.eff[[j]]=dummy$x
+      plot(a,b,ann=F,axes=F,col='transparent')
+      color.legend(quantile(a,probs=.25),quantile(b,probs=.95),quantile(a,probs=.6),quantile(b,probs=.25),
+                   paste(round(Breaks,0),"t"),rect.col=Couleurs,gradient="y",col=colLeg,cex=.75)
     }
-    Max.eff=unlist(Max.eff)
-    Breaks=quantile(Max.eff,probs=seq(0,1,1/numInt),na.rm=T)  #breaks for effort
-    return(Breaks)
-  }
-  Yr.rango=vector('list',length(Yr.group))   
-  for(e in 1:length(Yr.rango))
-  {
-    from=seq(Yr.group[e],Yr.group.plus[e])
-    to=substr(seq(Yr.group[e]+1,Yr.group.plus[e]+1),3,4)
-    Yr.rango[[e]]=paste(from,to,sep="-") 
-  }
-  
-  EffortBreakS=fn.effort.breaks(Effor.monthly.km.gn.d.block)
-  
-  
-  #km gn days
-  # fn.fig(paste(hndl.sptl.ktch,"Spatio.temporal.effort.km.gn.d",sep=""),2400, 2400) 
-  # smart.par(n.plots=length(Yr.rango),MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(.1, 0.15, 0))
-  # 
-  # for (i in 1:length(Yr.rango))
-  # {
-  #   fn.eff.plot(subset(Effor.monthly.km.gn.d.block,FINYEAR%in%Yr.rango[[i]]),
-  #               tcl.1=.5,tcl.2=.5,EffortBreakS)
-  #   mtext(Yr.range[i],side=3,line=-1.35,cex=.95)
-  #   axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .5,las=1,cex.axis=1,padj=-.15)
-  #   axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .5,las=2,cex.axis=1,hadj=1.1)
-  #   
-  #   if(i==length(Yr.rango))color.legend(126,-26,129,-30.5,paste(round(EffortBreakS,0),"km gn d"),
-  #                                       rect.col=couleurs,gradient="y",col=colLeg,cex=0.65)
-  # }
-  # mtext("Latitude (?S)",side=2,line=0.4,las=3,cex=1.3,outer=T)
-  # mtext("Longitude (?E)",side=1,line=0.6,cex=1.3,outer=T)
-  # dev.off()
-  
-  
-  
-  #Each year
-  fn.eff.plot.all.yrs=function(DATA,WHAT)   #function plot effort
-  {
-    MapEffort=subset(DATA,!is.na(Km.Gillnet.Days.c))
-    colnames(MapEffort)=c("FINYEAR","BLOCKX.c","LAT","LONG","Total effort")
-    lat=sort(unique(MapEffort$LAT))
-    # ids=match(-27,lat)
-    # if(is.na(ids))      #add dummy for sorting image out of whack when missing Lat
-    # {
-    #   adD=MapEffort[1,]
-    #   adD[,2]=NA
-    #   adD$BLOCKX.c="-27 113"
-    #   adD$LAT=-27
-    #   MapEffort=rbind(MapEffort,adD)
-    # }
-    
-    if(WHAT=="monthly")
+    fn.ctch.plot.grouped.yrs=function(DATA,tcl.1,tcl.2,numInt,grouping) 
     {
-      MapEffort$LAT.cen=MapEffort$LAT-.5
-      MapEffort$LONG.cen=MapEffort$LONG+.5 
-    }else
-    {
-      MapEffort$LAT.cen=MapEffort$LAT
-      MapEffort$LONG.cen=MapEffort$LONG 
+      DATA$LIVEWT.c=DATA$LIVEWT.c/1000   #in tonnes
+      DATA$LONG=as.numeric(DATA$LONG)
+      DATA$blk=substr(DATA$BLOCKX,1,4)
+      DATA$LAT=as.numeric(substr(DATA$LAT,1,3))
+      DATA$LONG=as.numeric(substr(DATA$LONG,1,3))
+      a=South.WA.long[1]:South.WA.long[2]
+      b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
+      DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
       
-    }
-    
-    MapEffort=MapEffort[order(MapEffort$LAT.cen,MapEffort$LONG.cen),]
-    MapEffort=subset(MapEffort,LONG.cen<=South.WA.long[2])
-    long=sort(unique(MapEffort$LONG.cen))
-    lat=sort(unique(MapEffort$LAT.cen))      #latitude vector for image  
-    
-    MapEffort=MapEffort[,match(c("LONG.cen","LAT.cen","Total effort"),names(MapEffort))]  
-    #MapEffort=rbind(MapEffort,dummy)#keep in perspective
-    
-    Reshaped=as.matrix(reshape(MapEffort,idvar="LONG.cen",    #transposed as matrix   
-                               timevar="LAT.cen",v.names="Total effort", direction="wide"))  
-    Reshaped=Reshaped[order(Reshaped[,1]),]
-    Reshaped=Reshaped[,-1]  									
-    
-    a=South.WA.long[1]:South.WA.long[2]
-    b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
-    #plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-    #image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=EffortBreaks,axes = FALSE,add=T)			
-    #par(new=T)
-    #plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-    image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,ylim=c(-36,-26),xlim=c(113,129),breaks=EffortBreaks,axes = FALSE)
-    box()
-    
-  }
-  HnD.eff.exp="C:/Matias/Analyses/Catch and effort/Outputs/Expansion_Effort"
-  
-  #Monthly
-  s1=subset(Eff.monthly.c,LAT<=(-26) & !FINYEAR%in%This)
-  s1$BLOCKX=substr(s1$BLOCKX,1,4)
-  s1=aggregate(Km.Gillnet.Days.c~FINYEAR+BLOCKX+LAT+LONG,s1,sum)
-  
-  tiff(file=paste(HnD.eff.exp,"Effort dynamics.gillnets_all.yrs_monthly.tiff",sep="/"),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-  smart.par(n.plots=length(Mn.yrs)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-  Mn.yrs=sort(unique(s1$FINYEAR))
-  EffortBreaks=quantile(s1$Km.Gillnet.Days.c,probs=seq(0,1,1/numInt),na.rm=T)
-  for (i in 1:length(Mn.yrs))
-  {
-    fn.eff.plot.all.yrs(DATA=subset(s1,FINYEAR== Mn.yrs[i]),WHAT="monthly")
-    mtext(Mn.yrs[i],side=3,line=0,cex=.95)
-    axis(side = 1, at =Long.seq, labels = F, tcl = .35,las=1,cex.axis=1,padj=-0.9)
-    axis(side = 2, at = Lat.seq, labels = F,tcl = .35,las=2,cex.axis=1,hadj=.65)
-    axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-0.9)
-    axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=.65)
-  }  
-  plot(1:1,col="transparent",axes=F,ylab="",xlab="")
-  color.legend(xl=0.72,yb=0.39,xr=1.29,yt=1.4,round(EffortBreaks,0),rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
-  mtext("Latitude (?S)",side=2,line=.5,las=3,cex=1.25,outer=T)
-  mtext("Longitude (?E)",side=1,line=.8,cex=1.25,outer=T)
-  dev.off()
-  
-  
-  #Daily
-  s2=subset(Eff.daily.c.daily,LAT<=(-26))
-  s2$LatDeg=with(s2,as.numeric(substr(block10,1,2)))  
-  s2$LatMin=with(s2,10*as.numeric(substr(block10,3,3)))  
-  s2$LongDeg=with(s2,100+as.numeric(substr(block10,4,5)))
-  s2$LongMin=with(s2,10*as.numeric(substr(block10,6,6)))
-  s2$LAT=-with(s2,LatDeg+(LatMin/60))
-  s2$LONG=with(s2,LongDeg+(LongMin/60))
-  s2=aggregate(Km.Gillnet.Days.c~finyear+block10+LAT+LONG,s2,sum)
-  
-  Dy.yrs=sort(unique(s2$finyear))
-  tiff(file=paste(HnD.eff.exp,"Effort dynamics.gillnets_all.yrs_daily.tiff",sep="/"),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-  smart.par(n.plots=length(Dy.yrs)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-  for (i in 1:length(Dy.yrs))
-  {
-    EffortBreaks=quantile(s2$Km.Gillnet.Days.c,probs=seq(0,1,1/numInt),na.rm=T)
-    fn.eff.plot.all.yrs(DATA=subset(s2,finyear== Dy.yrs[i]),WHAT="daily")
-    axis(side = 1, at =Long.seq, labels =F, tcl = .35,las=1,cex.axis=1,padj=-0.9)
-    axis(side = 2, at = Lat.seq, labels = F,tcl = .35,las=2,cex.axis=1,hadj=.65)
-    mtext(Dy.yrs[i],side=3,line=0,cex=.95)
-    axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-0.9)
-    axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=.65)
-  }  
-  plot(1:1,col="transparent",axes=F,ylab="",xlab="")
-  color.legend(xl=0.72,yb=0.5,xr=1.29,yt=1.4,round(EffortBreaks,0),rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
-  mtext("Latitude (?S)",side=2,line=.5,las=3,cex=1.25,outer=T)
-  mtext("Longitude (?E)",side=1,line=.8,cex=1.25,outer=T)
-  dev.off()
-  
-  
-  #Monthly and years in same plot
-  fn.eff.plot.all.yrs.mon.and.daily=function(DATA,tcl.1,tcl.2,numInt) 
-  {
-    DATA$blk=with(DATA,paste(LAT,LONG))
-    A=aggregate(km.gillnet.days.c~finyear+blk,DATA,sum)
-    Ymax=max(A$km.gillnet.days.c)
-    Ymin=min(A$km.gillnet.days.c)
-    Breaks=quantile(A$km.gillnet.days.c,probs=seq(0,1,1/numInt),na.rm=T)
-    #Breaks=seq(Ymin,Ymax,length.out=(numInt+1))
-    a=South.WA.long[1]:South.WA.long[2]
-    b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
-    DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
-    colfunc <- colorRampPalette(c("yellow", "red"))
-    couleurs=colfunc(numInt)
-    
-    numberLab=10
-    colLeg=(rep(c("black",rep("transparent",numberLab-1)),(numInt+1)/numberLab))
-    
-    for(y in 1:length(FINYrS))
-    {
-      A=subset(DATA,finyear==FINYrS[y])
-      MapEffrt=with(A,aggregate(km.gillnet.days.c,list(BLOCKX.c),FUN=sum,na.rm=T))
-      colnames(MapEffrt)=c("BLOCKX.c","Effort")
-      id=unique(match(MapEffrt$BLOCKX.c,DATA$BLOCKX.c))
-      MapEffrt$LAT=DATA$LAT[id]
-      MapEffrt$LONG=DATA$LONG[id]
-      MapEffrt$LAT.cen=MapEffrt$LAT-.5
-      MapEffrt$LONG.cen=MapEffrt$LONG+.5  
-      MapEffrt=MapEffrt[order(MapEffrt$LAT.cen,MapEffrt$LONG.cen),]
-      MapEffrt=subset(MapEffrt,LONG.cen<=South.WA.long[2])
-      long=sort(unique(MapEffrt$LONG.cen))
-      lat=sort(unique(MapEffrt$LAT.cen))      #latitude vector for image  
-      MapEffrt=MapEffrt[,match(c("LONG.cen","LAT.cen","Effort"),names(MapEffrt))]  
-      Reshaped=as.matrix(reshape(MapEffrt,idvar="LONG.cen",  	#transposed as matrix 	
-                                 timevar="LAT.cen",v.names="Effort", direction="wide"))	
-      Reshaped=Reshaped[order(Reshaped[,1]),]
-      Reshaped=Reshaped[,-1]	
+      DATA=subset(DATA,FINYEAR%in%FINYrS)
+      DATA$yyr=as.numeric(substr(DATA$FINYEAR,1,4))
       
-      plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-      image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=Breaks,axes = FALSE,add=T)			
-      axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
-      axis(side = 4, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.2)
-      par(new=T)
-      plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-      legend('top',FINYrS[y],bty='n',cex=1.2)
-      axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
-      axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
-    }
-    plot(a,b,ann=F,axes=F,col='transparent')
-    color.legend(quantile(a,probs=.8),quantile(b,probs=.91),quantile(a,probs=.95),quantile(b,probs=.25),
-                 paste(round(Breaks,0),"km gn d"),rect.col=couleurs,gradient="y",col=colLeg,cex=.7)
-  }
-  s1=subset(Eff.monthly.c,LAT<=(-26) &FINYEAR%in% Mn.yrs)
-  s1$BLOCKX=substr(s1$BLOCKX,1,4)
-  names(s1) =  casefold(names(s1))
-  s2=subset(Eff.daily.c,LAT<=(-26) &!finyear%in% Mn.yrs)
-  names(s2) =  casefold(names(s2))
-  ddd=rbind(s1[,match(names(s2),names(s1))],s2)
-  FINYrS=sort(unique(ddd$finyear))
-  ddd$LAT=as.numeric(substr(ddd$lat,1,3))
-  ddd$LONG=as.numeric(substr(ddd$long,1,3))
-  fn.fig(paste(HnD.eff.exp,"Effort dynamics.gillnets_all.yrs",sep="/"),2400, 2400)
-  smart.par(n.plots=length(FINYrS)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.35, 0))
-  fn.eff.plot.all.yrs.mon.and.daily(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=50)
-  mtext("Latitude (?S)",side=2,line=0.5,las=3,cex=1.1,outer=T)
-  mtext("Longitude (?E)",side=1,line=0.5,cex=1.1,outer=T)
-  dev.off()
-  
-    #grouped years
-  fn.eff.plot.grouped.yrs.mon.and.daily=function(DATA,tcl.1,tcl.2,numInt,grouping) 
-  {
-    DATA$blk=with(DATA,paste(LAT,LONG))
-    a=South.WA.long[1]:South.WA.long[2]
-    b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
-    DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
-    AA=vector('list',length(FINYrS.gped))
-    for(y in 1:length(FINYrS.gped))
-    {
-      A=aggregate(km.gillnet.days.c~blk,subset(DATA,finyear%in%FINYrS.gped[[y]]),sum,na.rm=T)
-      A$y.group=y
-      AA[[y]]=A
-    }
-    A=do.call(rbind,AA)
-    Ymax=max(A$km.gillnet.days.c)
-    Ymin=min(A$km.gillnet.days.c)
-    Breaks=quantile(A$km.gillnet.days.c,probs=seq(0,1,1/numInt),na.rm=T)
-    couleurs=rev(heat.colors(numInt))
-    numberLab=10
-    colLeg=(rep(c("black",rep("transparent",numberLab-1)),(numInt+1)/numberLab))
-    
-    for(y in 1:length(FINYrS.gped))
-    {
-      A=subset(DATA,finyear%in%FINYrS.gped[[y]])
-      MapEffrt=with(A,aggregate(km.gillnet.days.c,list(BLOCKX.c),FUN=sum,na.rm=T))
-      colnames(MapEffrt)=c("BLOCKX.c","Effort")
-      id=unique(match(MapEffrt$BLOCKX.c,DATA$BLOCKX.c))
-      MapEffrt$LAT=DATA$LAT[id]
-      MapEffrt$LONG=DATA$LONG[id]
-      MapEffrt$LAT.cen=MapEffrt$LAT-.5
-      MapEffrt$LONG.cen=MapEffrt$LONG+.5  
-      MapEffrt=MapEffrt[order(MapEffrt$LAT.cen,MapEffrt$LONG.cen),]
-      MapEffrt=subset(MapEffrt,LONG.cen<=South.WA.long[2])
-      long=sort(unique(MapEffrt$LONG.cen))
-      lat=sort(unique(MapEffrt$LAT.cen))      #latitude vector for image  
-      MapEffrt=MapEffrt[,match(c("LONG.cen","LAT.cen","Effort"),names(MapEffrt))]  
-      Reshaped=as.matrix(reshape(MapEffrt,idvar="LONG.cen",  	#transposed as matrix 	
-                                 timevar="LAT.cen",v.names="Effort", direction="wide"))	
-      Reshaped=Reshaped[order(Reshaped[,1]),]
-      Reshaped=Reshaped[,-1]	
-      
-      plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-      image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=Breaks,axes = FALSE,add=T)			
-      axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
-      axis(side = 4, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.2)
-      par(new=T)
-      plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-      text(115.60,-31.96,"Perth",pos=4,cex=1.2)
-      legend('top',names(FINYrS.gped)[y],bty='n',cex=1.2)
-      axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
-      axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
-    }
-    plot(a,b,ann=F,axes=F,col='transparent')
-    color.legend(quantile(a,probs=.8),quantile(b,probs=.91),quantile(a,probs=.95),quantile(b,probs=.25),
-                 paste(round(Breaks,0),"km gn d"),rect.col=couleurs,gradient="y",col=colLeg,cex=.7)
-  }
-  grouping=5
-  FINYrS.gp=seq(1,length(FINYrS),by=grouping)
-  FINYrS.gped=vector('list',length(FINYrS.gp))
-  for(f in 1:length(FINYrS.gped))
-  {
-    if(f==length(FINYrS.gped))
-    {
-      FINYrS.gped[[f]]=FINYrS[FINYrS.gp[f]:length(FINYrS)]
-      if(length(FINYrS.gped[[f]]==1))
+      AA=vector('list',length(FINYrS.gped))
+      for(y in 1:length(FINYrS.gped))
       {
-        names(FINYrS.gped)[f]=FINYrS.gped[[f]][1]
+        A=aggregate(LIVEWT.c~blk,subset(DATA,FINYEAR%in%FINYrS.gped[[y]]),sum,na.rm=T)
+        A$y.group=y
+        AA[[y]]=A
+      }
+      A=do.call(rbind,AA)
+      
+      Ymax=max(A$LIVEWT.c)
+      Ymin=min(A$LIVEWT.c)
+      Breaks=quantile(A$LIVEWT.c,probs=seq(0,1,1/numInt),na.rm=T)
+      
+      couleurs=rev(heat.colors(numInt))
+      
+      for(y in 1:length(FINYrS.gped))
+      {
+        A=subset(DATA,FINYEAR%in%FINYrS.gped[[y]])
+        MapCatch=with(A,aggregate(LIVEWT.c,list(BLOCKX.c),FUN=sum,na.rm=T))
+        colnames(MapCatch)=c("BLOCKX.c","Total Catch")
+        id=unique(match(MapCatch$BLOCKX.c,DATA$BLOCKX.c))
+        MapCatch$LAT=DATA$LAT[id]
+        MapCatch$LONG=DATA$LONG[id]
+        msn.lat=seq(min(MapCatch$LAT),max(MapCatch$LAT))
+        msn.lat=msn.lat[which(!msn.lat%in%MapCatch$LAT)]
+        if(length(msn.lat)>0)
+        {
+          dummy=MapCatch[1:length(msn.lat),]
+          dummy$`Total Catch`=0
+          dummy$LAT=msn.lat
+          dummy$BLOCKX.c=with(dummy,paste(LAT,LONG))
+          MapCatch=rbind(MapCatch,dummy)
+        }
+        
+        if(unique(min(A$YEAR.c))>2007)
+        {
+          MapCatch$`Total Catch`=ifelse(MapCatch$LAT>=(-32) & MapCatch$LAT<=(-31) & MapCatch$LONG<116,0,MapCatch$`Total Catch`)
+        }
+        MapCatch$LAT.cen=MapCatch$LAT-.5
+        MapCatch$LONG.cen=MapCatch$LONG+.5  
+        MapCatch=MapCatch[order(MapCatch$LAT.cen,MapCatch$LONG.cen),]
+        MapCatch=subset(MapCatch,LONG.cen<=South.WA.long[2])
+        long=sort(unique(MapCatch$LONG.cen))
+        lat=sort(unique(MapCatch$LAT.cen))      #latitude vector for image  
+        MapCatch=MapCatch[,match(c("LONG.cen","LAT.cen","Total Catch"),names(MapCatch))]  
+        Reshaped=as.matrix(reshape(MapCatch,idvar="LONG.cen",  	#transposed as matrix 	
+                                   timevar="LAT.cen",v.names="Total Catch", direction="wide"))	
+        Reshaped=Reshaped[order(Reshaped[,1]),]
+        Reshaped=Reshaped[,-1]	
+        numberLab=10
+        colLeg=(rep(c("black",rep("transparent",numberLab-1)),(numInt+1)/numberLab))
+        
+        plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+        image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=Breaks,axes = FALSE,add=T)			
+        axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
+        axis(side = 4, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.2)
+        par(new=T)
+        plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+        text(115.60,-31.96,"Perth",pos=4,cex=1.2)
+        legend('top',names(FINYrS.gped)[y],bty='n',cex=1.2)
+        axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
+        axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
+      }
+      plot(a,b,ann=F,axes=F,col='transparent')
+      color.legend(quantile(a,probs=.25),quantile(b,probs=.95),quantile(a,probs=.6),quantile(b,probs=.25),
+                   paste(round(Breaks,0),"t"),rect.col=Couleurs,gradient="y",col=colLeg,cex=.75)
+    }
+    HnD.ctch.exp="C:/Matias/Analyses/Catch and effort/Outputs/Expansion_Catch"    
+    for(i in 1:length(Tar))
+    {
+      ddd=subset(Data.monthly,Estuary=="NO" & !is.na(LIVEWT.c) &
+                   METHOD%in%c("GN","LL")& LAT<=(-26) & SPECIES%in%Tar[[i]])
+      FINYrS=unique(ddd$FINYEAR)
+      
+      #all years
+      fn.fig(paste(HnD.ctch.exp,names(Tar)[i],sep="/"),2400, 2400)
+      smart.par(n.plots=length(FINYrS)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.35, 0))
+      fn.ctch.plot.all.yrs(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=20)
+      mtext("Latitude (?S)",side=2,line=0.5,las=3,cex=1.1,outer=T)
+      mtext("Longitude (?E)",side=1,line=0.5,cex=1.1,outer=T)
+      dev.off()
+      
+      #grouped years
+      grouping=5
+      FINYrS.gp=seq(1,length(FINYrS),by=grouping)
+      FINYrS.gped=vector('list',length(FINYrS.gp))
+      for(f in 1:length(FINYrS.gped))
+      {
+        if(f==length(FINYrS.gped))
+        {
+          FINYrS.gped[[f]]=FINYrS[FINYrS.gp[f]:length(FINYrS)]
+          if(length(FINYrS.gped[[f]]==1))
+          {
+            names(FINYrS.gped)[f]=FINYrS.gped[[f]][1]
+          }else
+          {
+            names(FINYrS.gped)[f]=paste(FINYrS.gped[[f]][1],"to",FINYrS.gped[[f]][length(FINYrS.gped[[f]])])
+          }
+          
+        }else
+        {
+          FINYrS.gped[[f]]=FINYrS[FINYrS.gp[f]:(FINYrS.gp[f+1]-1)]
+          names(FINYrS.gped)[f]=paste(FINYrS.gped[[f]][1],"to",FINYrS.gped[[f]][length(FINYrS.gped[[f]])])
+        }
+      }
+      fn.fig(paste(HnD.ctch.exp,"/",names(Tar)[i],"_grouped.yrs",sep=""),2000, 2400)
+      smart.par(n.plots=length(FINYrS.gped)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.35, 0))
+      fn.ctch.plot.grouped.yrs(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=50,grouping=5)
+      mtext("Latitude (?S)",side=2,line=0.5,las=3,cex=1.1,outer=T)
+      mtext("Longitude (?E)",side=1,line=0.5,cex=1.1,outer=T)
+      dev.off()
+      
+      rm(ddd)
+    }
+    
+    #movie
+    Frame.speed=.2  #match to talking speed
+    ani.options(ani.width=480,ani.height=480)
+    fn.ctch.plot.all.yrs.movie=function(DATA,tcl.1,tcl.2,numInt) 
+    {
+      DATA$LIVEWT.c=DATA$LIVEWT.c/1000   #in tonnes
+      DATA$LONG=as.numeric(DATA$LONG)
+      DATA$blk=substr(DATA$BLOCKX,1,4)
+      A=aggregate(LIVEWT.c~FINYEAR+blk,DATA,sum)
+      Ymax=max(A$LIVEWT.c)
+      Ymin=min(A$LIVEWT.c)
+      Breaks=quantile(A$LIVEWT.c,probs=seq(0,1,1/numInt),na.rm=T)
+      #Breaks=c(0,seq(Ymin,Ymax,length.out=(numInt)))
+      DATA$LAT=as.numeric(substr(DATA$LAT,1,3))
+      DATA$LONG=as.numeric(substr(DATA$LONG,1,3))
+      a=South.WA.long[1]:South.WA.long[2]
+      b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
+      DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
+      saveGIF({
+        for(y in 1:length(FINYrS))
+        {
+          A=subset(DATA,FINYEAR==FINYrS[y])
+          MapCatch=with(A,aggregate(LIVEWT.c,list(BLOCKX.c),FUN=sum,na.rm=T))
+          colnames(MapCatch)=c("BLOCKX.c","Total Catch")
+          id=unique(match(MapCatch$BLOCKX.c,DATA$BLOCKX.c))
+          MapCatch$LAT=DATA$LAT[id]
+          MapCatch$LONG=DATA$LONG[id]
+          msn.lat=seq(min(MapCatch$LAT),max(MapCatch$LAT))
+          msn.lat=msn.lat[which(!msn.lat%in%MapCatch$LAT)]
+          if(length(msn.lat)>0)
+          {
+            dummy=MapCatch[1:length(msn.lat),]
+            dummy$`Total Catch`=0
+            dummy$LAT=msn.lat
+            dummy$BLOCKX.c=with(dummy,paste(LAT,LONG))
+            MapCatch=rbind(MapCatch,dummy)
+          }
+          
+          if(unique(min(A$YEAR.c))>2007)
+          {
+            MapCatch$`Total Catch`=ifelse(MapCatch$LAT>=(-32) & MapCatch$LAT<=(-31) & MapCatch$LONG<116,0,MapCatch$`Total Catch`)
+          }
+          MapCatch$LAT.cen=MapCatch$LAT-.5
+          MapCatch$LONG.cen=MapCatch$LONG+.5  
+          MapCatch=MapCatch[order(MapCatch$LAT.cen,MapCatch$LONG.cen),]
+          MapCatch=subset(MapCatch,LONG.cen<=South.WA.long[2])
+          long=sort(unique(MapCatch$LONG.cen))
+          lat=sort(unique(MapCatch$LAT.cen))      #latitude vector for image  
+          MapCatch=MapCatch[,match(c("LONG.cen","LAT.cen","Total Catch"),names(MapCatch))]  
+          Reshaped=as.matrix(reshape(MapCatch,idvar="LONG.cen",  	#transposed as matrix 	
+                                     timevar="LAT.cen",v.names="Total Catch", direction="wide"))	
+          Reshaped=Reshaped[order(Reshaped[,1]),]
+          Reshaped=Reshaped[,-1]	
+          numberLab=10
+          colLeg=(rep(c("black",rep("transparent",numberLab-1)),(numInt+1)/numberLab))
+          
+          plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+          image(long,lat,z=Reshaped,xlab="",ylab="",col =Couleurs,breaks=Breaks,axes = FALSE,add=T)			
+          axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
+          axis(side = 4, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.2)
+          par(new=T)
+          plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+          legend('top',FINYrS[y],bty='n',cex=1.2)
+          axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
+          axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
+          mtext("Latitude (?S)",side=2,line=1,las=3,cex=1.75,outer=T)
+          mtext("Longitude (?E)",side=1,line=1,cex=1.75,outer=T)
+          color.legend(quantile(a,probs=.9),quantile(b,probs=.91),quantile(a,probs=.95),quantile(b,probs=.5),
+                       paste(round(Breaks,0),"t"),rect.col=Couleurs,gradient="y",col=colLeg,cex=.95)
+        }
+      },movie.name=paste(HnD.ctch.exp,paste(names(Tar)[i],".movie.gif",sep=''),sep="/"),interval=Frame.speed,loop =1)
+    }
+    for(i in 1:length(Tar))
+    {
+      ddd=subset(Data.monthly,Estuary=="NO" & !is.na(LIVEWT.c) &
+                   METHOD%in%c("GN","LL")& LAT<=(-26) & SPECIES==Tar[[i]])
+      FINYrS=unique(ddd$FINYEAR)
+      fn.ctch.plot.all.yrs.movie(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=20)
+      rm(ddd)
+    }
+    
+    
+    
+    
+    #Effort   
+    #km gn days 
+    #Monthly
+    Attach.Effort.monthly.blk.c=aggregate(Km.Gillnet.Days.c~MONTH+BLOCKX+VESSEL+zone+FINYEAR+LAT+LONG,
+                                          data=subset(Effort.monthly,LAT<=(-26)&LAT>(-36.1)&LONG<=(129)&LONG>(111)),max,na.rm=T)
+    Attach.Effort.monthly.blk.c=fn.split.boundary(Attach.Effort.monthly.blk.c,"Km.Gillnet.Days.c")
+    Attach.Effort.monthly.blk.c=aggregate(Km.Gillnet.Days.c~BLOCKX+FINYEAR+LAT+LONG,data=Attach.Effort.monthly.blk.c,sum,na.rm=T)
+    
+    #Daily
+    if(Use.Date=="NO")Attach.Effort.daily.blk.c=aggregate(Km.Gillnet.Days.c~ID+blockx+vessel+finyear+LAT+LONG,
+                                                          data=subset(Effort.daily,LAT<=(-26)&LAT>(-36.1)&LONG<=(129)&LONG>(111)),max,na.rm=T)
+    if(Use.Date=="YES")Attach.Effort.daily.blk.c=aggregate(Km.Gillnet.Days.c~date+blockx+vessel+finyear+LAT+LONG,
+                                                           data=subset(Effort.daily,LAT<=(-26)&LAT>(-36.1)&LONG<=(129)&LONG>(111)),max,na.rm=T) 
+    Attach.Effort.daily.blk.c=aggregate(Km.Gillnet.Days.c~blockx+finyear+LAT+LONG,data=Attach.Effort.daily.blk.c,sum,na.rm=T)
+    names(Attach.Effort.daily.blk.c)=names(Attach.Effort.monthly.blk.c)
+    
+    Effor.monthly.km.gn.d.block=rbind(Attach.Effort.monthly.blk.c,Attach.Effort.daily.blk.c)
+    
+    fn.effort.breaks=function(DD)
+    {
+      Max.eff=Yr.rango
+      for (j in 1:length(Yr.rango))
+      {
+        DATA=subset(DD,FINYEAR%in%Yr.rango[[j]])
+        dummy=with(DATA,aggregate(Km.Gillnet.Days.c,list(BLOCKX),FUN=sum,na.rm=T))
+        Max.eff[[j]]=dummy$x
+      }
+      Max.eff=unlist(Max.eff)
+      Breaks=quantile(Max.eff,probs=seq(0,1,1/numInt),na.rm=T)  #breaks for effort
+      return(Breaks)
+    }
+    Yr.rango=vector('list',length(Yr.group))   
+    for(e in 1:length(Yr.rango))
+    {
+      from=seq(Yr.group[e],Yr.group.plus[e])
+      to=substr(seq(Yr.group[e]+1,Yr.group.plus[e]+1),3,4)
+      Yr.rango[[e]]=paste(from,to,sep="-") 
+    }
+    
+    EffortBreakS=fn.effort.breaks(Effor.monthly.km.gn.d.block)
+    
+    
+    #km gn days
+    # fn.fig(paste(hndl.sptl.ktch,"Spatio.temporal.effort.km.gn.d",sep=""),2400, 2400) 
+    # smart.par(n.plots=length(Yr.rango),MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(.1, 0.15, 0))
+    # 
+    # for (i in 1:length(Yr.rango))
+    # {
+    #   fn.eff.plot(subset(Effor.monthly.km.gn.d.block,FINYEAR%in%Yr.rango[[i]]),
+    #               tcl.1=.5,tcl.2=.5,EffortBreakS)
+    #   mtext(Yr.range[i],side=3,line=-1.35,cex=.95)
+    #   axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .5,las=1,cex.axis=1,padj=-.15)
+    #   axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .5,las=2,cex.axis=1,hadj=1.1)
+    #   
+    #   if(i==length(Yr.rango))color.legend(126,-26,129,-30.5,paste(round(EffortBreakS,0),"km gn d"),
+    #                                       rect.col=couleurs,gradient="y",col=colLeg,cex=0.65)
+    # }
+    # mtext("Latitude (?S)",side=2,line=0.4,las=3,cex=1.3,outer=T)
+    # mtext("Longitude (?E)",side=1,line=0.6,cex=1.3,outer=T)
+    # dev.off()
+    
+    
+    
+    #Each year
+    fn.eff.plot.all.yrs=function(DATA,WHAT)   #function plot effort
+    {
+      MapEffort=subset(DATA,!is.na(Km.Gillnet.Days.c))
+      colnames(MapEffort)=c("FINYEAR","BLOCKX.c","LAT","LONG","Total effort")
+      lat=sort(unique(MapEffort$LAT))
+      # ids=match(-27,lat)
+      # if(is.na(ids))      #add dummy for sorting image out of whack when missing Lat
+      # {
+      #   adD=MapEffort[1,]
+      #   adD[,2]=NA
+      #   adD$BLOCKX.c="-27 113"
+      #   adD$LAT=-27
+      #   MapEffort=rbind(MapEffort,adD)
+      # }
+      
+      if(WHAT=="monthly")
+      {
+        MapEffort$LAT.cen=MapEffort$LAT-.5
+        MapEffort$LONG.cen=MapEffort$LONG+.5 
       }else
       {
-        names(FINYrS.gped)[f]=paste(FINYrS.gped[[f]][1],"to",FINYrS.gped[[f]][length(FINYrS.gped[[f]])])
+        MapEffort$LAT.cen=MapEffort$LAT
+        MapEffort$LONG.cen=MapEffort$LONG 
+        
       }
       
-    }else
-    {
-      FINYrS.gped[[f]]=FINYrS[FINYrS.gp[f]:(FINYrS.gp[f+1]-1)]
-      names(FINYrS.gped)[f]=paste(FINYrS.gped[[f]][1],"to",FINYrS.gped[[f]][length(FINYrS.gped[[f]])])
+      MapEffort=MapEffort[order(MapEffort$LAT.cen,MapEffort$LONG.cen),]
+      MapEffort=subset(MapEffort,LONG.cen<=South.WA.long[2])
+      long=sort(unique(MapEffort$LONG.cen))
+      lat=sort(unique(MapEffort$LAT.cen))      #latitude vector for image  
+      
+      MapEffort=MapEffort[,match(c("LONG.cen","LAT.cen","Total effort"),names(MapEffort))]  
+      #MapEffort=rbind(MapEffort,dummy)#keep in perspective
+      
+      Reshaped=as.matrix(reshape(MapEffort,idvar="LONG.cen",    #transposed as matrix   
+                                 timevar="LAT.cen",v.names="Total effort", direction="wide"))  
+      Reshaped=Reshaped[order(Reshaped[,1]),]
+      Reshaped=Reshaped[,-1]  									
+      
+      a=South.WA.long[1]:South.WA.long[2]
+      b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
+      #plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+      #image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=EffortBreaks,axes = FALSE,add=T)			
+      #par(new=T)
+      #plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+      image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,ylim=c(-36,-26),xlim=c(113,129),breaks=EffortBreaks,axes = FALSE)
+      box()
+      
     }
-  }
-  
-  fn.fig(paste(HnD.eff.exp,"Effort dynamics.gillnets_grouped.yrs",sep="/"),2000, 2400)
-  smart.par(n.plots=length(FINYrS.gped)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.35, 0))
-  fn.eff.plot.grouped.yrs.mon.and.daily(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=50,grouping=grouping)
-  mtext("Latitude (?S)",side=2,line=0.5,las=3,cex=1.1,outer=T)
-  mtext("Longitude (?E)",side=1,line=0.5,cex=1.1,outer=T)
-  dev.off()
-  
-  #MOVIE_Monthly and years in same plot
-  Frame.speed=.2  #match to talking speed
-  ani.options(ani.width=480,ani.height=480)
-  movie.fn.eff.plot.all.yrs.mon.and.daily=function(DATA,tcl.1,tcl.2,numInt) 
-  {
-    DATA$blk=with(DATA,paste(LAT,LONG))
-    A=aggregate(km.gillnet.days.c~finyear+blk,DATA,sum)
-    Ymax=max(A$km.gillnet.days.c)
-    Ymin=min(A$km.gillnet.days.c)
-    Breaks=quantile(A$km.gillnet.days.c,probs=seq(0,1,1/numInt),na.rm=T)
-    #Breaks=seq(Ymin,Ymax,length.out=(numInt+1))
-    a=South.WA.long[1]:South.WA.long[2]
-    b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
-    DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
-    colfunc <- colorRampPalette(c("yellow", "red"))
-    couleurs=colfunc(numInt)
+    HnD.eff.exp="C:/Matias/Analyses/Catch and effort/Outputs/Expansion_Effort"
     
-    numberLab=10
-    colLeg=(rep(c("black",rep("transparent",numberLab-1)),(numInt+1)/numberLab))
-    saveGIF({
+    #Monthly
+    s1=subset(Eff.monthly.c,LAT<=(-26) & !FINYEAR%in%This)
+    s1$BLOCKX=substr(s1$BLOCKX,1,4)
+    s1=aggregate(Km.Gillnet.Days.c~FINYEAR+BLOCKX+LAT+LONG,s1,sum)
+    
+    tiff(file=paste(HnD.eff.exp,"Effort dynamics.gillnets_all.yrs_monthly.tiff",sep="/"),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    smart.par(n.plots=length(Mn.yrs)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
+    Mn.yrs=sort(unique(s1$FINYEAR))
+    EffortBreaks=quantile(s1$Km.Gillnet.Days.c,probs=seq(0,1,1/numInt),na.rm=T)
+    for (i in 1:length(Mn.yrs))
+    {
+      fn.eff.plot.all.yrs(DATA=subset(s1,FINYEAR== Mn.yrs[i]),WHAT="monthly")
+      mtext(Mn.yrs[i],side=3,line=0,cex=.95)
+      axis(side = 1, at =Long.seq, labels = F, tcl = .35,las=1,cex.axis=1,padj=-0.9)
+      axis(side = 2, at = Lat.seq, labels = F,tcl = .35,las=2,cex.axis=1,hadj=.65)
+      axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-0.9)
+      axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=.65)
+    }  
+    plot(1:1,col="transparent",axes=F,ylab="",xlab="")
+    color.legend(xl=0.72,yb=0.39,xr=1.29,yt=1.4,round(EffortBreaks,0),rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
+    mtext("Latitude (?S)",side=2,line=.5,las=3,cex=1.25,outer=T)
+    mtext("Longitude (?E)",side=1,line=.8,cex=1.25,outer=T)
+    dev.off()
+    
+    
+    #Daily
+    s2=subset(Eff.daily.c.daily,LAT<=(-26))
+    s2$LatDeg=with(s2,as.numeric(substr(block10,1,2)))  
+    s2$LatMin=with(s2,10*as.numeric(substr(block10,3,3)))  
+    s2$LongDeg=with(s2,100+as.numeric(substr(block10,4,5)))
+    s2$LongMin=with(s2,10*as.numeric(substr(block10,6,6)))
+    s2$LAT=-with(s2,LatDeg+(LatMin/60))
+    s2$LONG=with(s2,LongDeg+(LongMin/60))
+    s2=aggregate(Km.Gillnet.Days.c~finyear+block10+LAT+LONG,s2,sum)
+    
+    Dy.yrs=sort(unique(s2$finyear))
+    tiff(file=paste(HnD.eff.exp,"Effort dynamics.gillnets_all.yrs_daily.tiff",sep="/"),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    smart.par(n.plots=length(Dy.yrs)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
+    for (i in 1:length(Dy.yrs))
+    {
+      EffortBreaks=quantile(s2$Km.Gillnet.Days.c,probs=seq(0,1,1/numInt),na.rm=T)
+      fn.eff.plot.all.yrs(DATA=subset(s2,finyear== Dy.yrs[i]),WHAT="daily")
+      axis(side = 1, at =Long.seq, labels =F, tcl = .35,las=1,cex.axis=1,padj=-0.9)
+      axis(side = 2, at = Lat.seq, labels = F,tcl = .35,las=2,cex.axis=1,hadj=.65)
+      mtext(Dy.yrs[i],side=3,line=0,cex=.95)
+      axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-0.9)
+      axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=.65)
+    }  
+    plot(1:1,col="transparent",axes=F,ylab="",xlab="")
+    color.legend(xl=0.72,yb=0.5,xr=1.29,yt=1.4,round(EffortBreaks,0),rect.col=couleurs,gradient="y",col=colLeg,cex=0.75)
+    mtext("Latitude (?S)",side=2,line=.5,las=3,cex=1.25,outer=T)
+    mtext("Longitude (?E)",side=1,line=.8,cex=1.25,outer=T)
+    dev.off()
+    
+    
+    #Monthly and years in same plot
+    fn.eff.plot.all.yrs.mon.and.daily=function(DATA,tcl.1,tcl.2,numInt) 
+    {
+      DATA$blk=with(DATA,paste(LAT,LONG))
+      A=aggregate(km.gillnet.days.c~finyear+blk,DATA,sum)
+      Ymax=max(A$km.gillnet.days.c)
+      Ymin=min(A$km.gillnet.days.c)
+      Breaks=quantile(A$km.gillnet.days.c,probs=seq(0,1,1/numInt),na.rm=T)
+      #Breaks=seq(Ymin,Ymax,length.out=(numInt+1))
+      a=South.WA.long[1]:South.WA.long[2]
+      b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
+      DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
+      colfunc <- colorRampPalette(c("yellow", "red"))
+      couleurs=colfunc(numInt)
+      
+      numberLab=10
+      colLeg=(rep(c("black",rep("transparent",numberLab-1)),(numInt+1)/numberLab))
+      
       for(y in 1:length(FINYrS))
       {
-        par(las=1,mar=c(1,1,.1,1),oma=c(3,4,.1,.1),mgp=c(3.5,.5,0))
         A=subset(DATA,finyear==FINYrS[y])
         MapEffrt=with(A,aggregate(km.gillnet.days.c,list(BLOCKX.c),FUN=sum,na.rm=T))
         colnames(MapEffrt)=c("BLOCKX.c","Effort")
@@ -9274,36 +8303,193 @@ if(First.run=='YES')
         axis(side = 4, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.2)
         par(new=T)
         plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
-        legend('top',FINYrS[y],bty='n',cex=1.75)
+        legend('top',FINYrS[y],bty='n',cex=1.2)
         axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
         axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
-        mtext("Latitude (?S)",side=2,line=1,las=3,cex=1.75,outer=T)
-        mtext("Longitude (?E)",side=1,line=1,cex=1.75,outer=T)
-        color.legend(quantile(a,probs=.9),quantile(b,probs=.91),quantile(a,probs=.95),quantile(b,probs=.5),
-                     paste(round(Breaks,0),"km gn d"),rect.col=couleurs,gradient="y",col=colLeg,cex=1)
-        
       }
-    },movie.name=paste(HnD.eff.exp,"Effort.movie.gif",sep="/"),interval=Frame.speed,loop =1)
+      plot(a,b,ann=F,axes=F,col='transparent')
+      color.legend(quantile(a,probs=.8),quantile(b,probs=.91),quantile(a,probs=.95),quantile(b,probs=.25),
+                   paste(round(Breaks,0),"km gn d"),rect.col=couleurs,gradient="y",col=colLeg,cex=.7)
+    }
+    s1=subset(Eff.monthly.c,LAT<=(-26) &FINYEAR%in% Mn.yrs)
+    s1$BLOCKX=substr(s1$BLOCKX,1,4)
+    names(s1) =  casefold(names(s1))
+    s2=subset(Eff.daily.c,LAT<=(-26) &!finyear%in% Mn.yrs)
+    names(s2) =  casefold(names(s2))
+    ddd=rbind(s1[,match(names(s2),names(s1))],s2)
+    FINYrS=sort(unique(ddd$finyear))
+    ddd$LAT=as.numeric(substr(ddd$lat,1,3))
+    ddd$LONG=as.numeric(substr(ddd$long,1,3))
+    fn.fig(paste(HnD.eff.exp,"Effort dynamics.gillnets_all.yrs",sep="/"),2400, 2400)
+    smart.par(n.plots=length(FINYrS)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.35, 0))
+    fn.eff.plot.all.yrs.mon.and.daily(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=50)
+    mtext("Latitude (?S)",side=2,line=0.5,las=3,cex=1.1,outer=T)
+    mtext("Longitude (?E)",side=1,line=0.5,cex=1.1,outer=T)
+    dev.off()
     
+    #grouped years
+    fn.eff.plot.grouped.yrs.mon.and.daily=function(DATA,tcl.1,tcl.2,numInt,grouping) 
+    {
+      DATA$blk=with(DATA,paste(LAT,LONG))
+      a=South.WA.long[1]:South.WA.long[2]
+      b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
+      DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
+      AA=vector('list',length(FINYrS.gped))
+      for(y in 1:length(FINYrS.gped))
+      {
+        A=aggregate(km.gillnet.days.c~blk,subset(DATA,finyear%in%FINYrS.gped[[y]]),sum,na.rm=T)
+        A$y.group=y
+        AA[[y]]=A
+      }
+      A=do.call(rbind,AA)
+      Ymax=max(A$km.gillnet.days.c)
+      Ymin=min(A$km.gillnet.days.c)
+      Breaks=quantile(A$km.gillnet.days.c,probs=seq(0,1,1/numInt),na.rm=T)
+      couleurs=rev(heat.colors(numInt))
+      numberLab=10
+      colLeg=(rep(c("black",rep("transparent",numberLab-1)),(numInt+1)/numberLab))
+      
+      for(y in 1:length(FINYrS.gped))
+      {
+        A=subset(DATA,finyear%in%FINYrS.gped[[y]])
+        MapEffrt=with(A,aggregate(km.gillnet.days.c,list(BLOCKX.c),FUN=sum,na.rm=T))
+        colnames(MapEffrt)=c("BLOCKX.c","Effort")
+        id=unique(match(MapEffrt$BLOCKX.c,DATA$BLOCKX.c))
+        MapEffrt$LAT=DATA$LAT[id]
+        MapEffrt$LONG=DATA$LONG[id]
+        MapEffrt$LAT.cen=MapEffrt$LAT-.5
+        MapEffrt$LONG.cen=MapEffrt$LONG+.5  
+        MapEffrt=MapEffrt[order(MapEffrt$LAT.cen,MapEffrt$LONG.cen),]
+        MapEffrt=subset(MapEffrt,LONG.cen<=South.WA.long[2])
+        long=sort(unique(MapEffrt$LONG.cen))
+        lat=sort(unique(MapEffrt$LAT.cen))      #latitude vector for image  
+        MapEffrt=MapEffrt[,match(c("LONG.cen","LAT.cen","Effort"),names(MapEffrt))]  
+        Reshaped=as.matrix(reshape(MapEffrt,idvar="LONG.cen",  	#transposed as matrix 	
+                                   timevar="LAT.cen",v.names="Effort", direction="wide"))	
+        Reshaped=Reshaped[order(Reshaped[,1]),]
+        Reshaped=Reshaped[,-1]	
+        
+        plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+        image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=Breaks,axes = FALSE,add=T)			
+        axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
+        axis(side = 4, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.2)
+        par(new=T)
+        plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+        text(115.60,-31.96,"Perth",pos=4,cex=1.2)
+        legend('top',names(FINYrS.gped)[y],bty='n',cex=1.2)
+        axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
+        axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
+      }
+      plot(a,b,ann=F,axes=F,col='transparent')
+      color.legend(quantile(a,probs=.8),quantile(b,probs=.91),quantile(a,probs=.95),quantile(b,probs=.25),
+                   paste(round(Breaks,0),"km gn d"),rect.col=couleurs,gradient="y",col=colLeg,cex=.7)
+    }
+    grouping=5
+    FINYrS.gp=seq(1,length(FINYrS),by=grouping)
+    FINYrS.gped=vector('list',length(FINYrS.gp))
+    for(f in 1:length(FINYrS.gped))
+    {
+      if(f==length(FINYrS.gped))
+      {
+        FINYrS.gped[[f]]=FINYrS[FINYrS.gp[f]:length(FINYrS)]
+        if(length(FINYrS.gped[[f]]==1))
+        {
+          names(FINYrS.gped)[f]=FINYrS.gped[[f]][1]
+        }else
+        {
+          names(FINYrS.gped)[f]=paste(FINYrS.gped[[f]][1],"to",FINYrS.gped[[f]][length(FINYrS.gped[[f]])])
+        }
+        
+      }else
+      {
+        FINYrS.gped[[f]]=FINYrS[FINYrS.gp[f]:(FINYrS.gp[f+1]-1)]
+        names(FINYrS.gped)[f]=paste(FINYrS.gped[[f]][1],"to",FINYrS.gped[[f]][length(FINYrS.gped[[f]])])
+      }
+    }
+    
+    fn.fig(paste(HnD.eff.exp,"Effort dynamics.gillnets_grouped.yrs",sep="/"),2000, 2400)
+    smart.par(n.plots=length(FINYrS.gped)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.35, 0))
+    fn.eff.plot.grouped.yrs.mon.and.daily(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=50,grouping=grouping)
+    mtext("Latitude (?S)",side=2,line=0.5,las=3,cex=1.1,outer=T)
+    mtext("Longitude (?E)",side=1,line=0.5,cex=1.1,outer=T)
+    dev.off()
+    
+    #MOVIE_Monthly and years in same plot
+    Frame.speed=.2  #match to talking speed
+    ani.options(ani.width=480,ani.height=480)
+    movie.fn.eff.plot.all.yrs.mon.and.daily=function(DATA,tcl.1,tcl.2,numInt) 
+    {
+      DATA$blk=with(DATA,paste(LAT,LONG))
+      A=aggregate(km.gillnet.days.c~finyear+blk,DATA,sum)
+      Ymax=max(A$km.gillnet.days.c)
+      Ymin=min(A$km.gillnet.days.c)
+      Breaks=quantile(A$km.gillnet.days.c,probs=seq(0,1,1/numInt),na.rm=T)
+      #Breaks=seq(Ymin,Ymax,length.out=(numInt+1))
+      a=South.WA.long[1]:South.WA.long[2]
+      b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
+      DATA$BLOCKX.c=with(DATA,paste(LAT,LONG))
+      colfunc <- colorRampPalette(c("yellow", "red"))
+      couleurs=colfunc(numInt)
+      
+      numberLab=10
+      colLeg=(rep(c("black",rep("transparent",numberLab-1)),(numInt+1)/numberLab))
+      saveGIF({
+        for(y in 1:length(FINYrS))
+        {
+          par(las=1,mar=c(1,1,.1,1),oma=c(3,4,.1,.1),mgp=c(3.5,.5,0))
+          A=subset(DATA,finyear==FINYrS[y])
+          MapEffrt=with(A,aggregate(km.gillnet.days.c,list(BLOCKX.c),FUN=sum,na.rm=T))
+          colnames(MapEffrt)=c("BLOCKX.c","Effort")
+          id=unique(match(MapEffrt$BLOCKX.c,DATA$BLOCKX.c))
+          MapEffrt$LAT=DATA$LAT[id]
+          MapEffrt$LONG=DATA$LONG[id]
+          MapEffrt$LAT.cen=MapEffrt$LAT-.5
+          MapEffrt$LONG.cen=MapEffrt$LONG+.5  
+          MapEffrt=MapEffrt[order(MapEffrt$LAT.cen,MapEffrt$LONG.cen),]
+          MapEffrt=subset(MapEffrt,LONG.cen<=South.WA.long[2])
+          long=sort(unique(MapEffrt$LONG.cen))
+          lat=sort(unique(MapEffrt$LAT.cen))      #latitude vector for image  
+          MapEffrt=MapEffrt[,match(c("LONG.cen","LAT.cen","Effort"),names(MapEffrt))]  
+          Reshaped=as.matrix(reshape(MapEffrt,idvar="LONG.cen",  	#transposed as matrix 	
+                                     timevar="LAT.cen",v.names="Effort", direction="wide"))	
+          Reshaped=Reshaped[order(Reshaped[,1]),]
+          Reshaped=Reshaped[,-1]	
+          
+          plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+          image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=Breaks,axes = FALSE,add=T)			
+          axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
+          axis(side = 4, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.2)
+          par(new=T)
+          plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
+          legend('top',FINYrS[y],bty='n',cex=1.75)
+          axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
+          axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
+          mtext("Latitude (?S)",side=2,line=1,las=3,cex=1.75,outer=T)
+          mtext("Longitude (?E)",side=1,line=1,cex=1.75,outer=T)
+          color.legend(quantile(a,probs=.9),quantile(b,probs=.91),quantile(a,probs=.95),quantile(b,probs=.5),
+                       paste(round(Breaks,0),"km gn d"),rect.col=couleurs,gradient="y",col=colLeg,cex=1)
+          
+        }
+      },movie.name=paste(HnD.eff.exp,"Effort.movie.gif",sep="/"),interval=Frame.speed,loop =1)
+      
+      
+    }
+    s1=subset(Eff.monthly.c,LAT<=(-26) &FINYEAR%in% Mn.yrs)
+    s1$BLOCKX=substr(s1$BLOCKX,1,4)
+    names(s1) =  casefold(names(s1))
+    s2=subset(Eff.daily.c,LAT<=(-26) &!finyear%in% Mn.yrs)
+    names(s2) =  casefold(names(s2))
+    ddd=rbind(s1[,match(names(s2),names(s1))],s2)
+    FINYrS=sort(unique(ddd$finyear))
+    ddd$LAT=as.numeric(substr(ddd$lat,1,3))
+    ddd$LONG=as.numeric(substr(ddd$long,1,3))
+    movie.fn.eff.plot.all.yrs.mon.and.daily(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=50)
     
   }
-  s1=subset(Eff.monthly.c,LAT<=(-26) &FINYEAR%in% Mn.yrs)
-  s1$BLOCKX=substr(s1$BLOCKX,1,4)
-  names(s1) =  casefold(names(s1))
-  s2=subset(Eff.daily.c,LAT<=(-26) &!finyear%in% Mn.yrs)
-  names(s2) =  casefold(names(s2))
-  ddd=rbind(s1[,match(names(s2),names(s1))],s2)
-  FINYrS=sort(unique(ddd$finyear))
-  ddd$LAT=as.numeric(substr(ddd$lat,1,3))
-  ddd$LONG=as.numeric(substr(ddd$long,1,3))
-  movie.fn.eff.plot.all.yrs.mon.and.daily(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=50)
   
 }
 
-
-
-
-#------ G 4. DATA REQUESTS ------
+#------ G 2. DATA REQUESTS ------
 hndl="C:/Matias/Analyses/Catch and effort/Data_Resquests"
 
 #G 4.1 AUDITS
