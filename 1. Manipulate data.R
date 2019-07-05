@@ -7077,12 +7077,13 @@ crap=c("GoodsplitID","Prop.sandbar","SanBar.rep",
        "Prop.Gum.Zone.Good.spl","Prop.Whi.Zone.Good.spl","Prop.Dus.Mon.Good.spl",
        "Prop.Gum.Mon.Good.spl","Prop.Whi.Mon.Good.spl","Prop.Dus.YrZn.Good.spl",
        "Prop.Gum.YrZn.Good.spl","Prop.Whi.YrZn.Good.spl")
-crap.daily=c("YEAR","Sch.or.DogS","GoodsplitID","GoodsplitID","BlockAveID",
-             "AnnualVesselAveID","MonthlyID","BlockID","ZoneID","ZnID",
+crap.daily=c("YEAR","GoodsplitID","GoodsplitID","BlockAveID",
+             "AnnualVesselAveID","MonthlyID","BlockID","ZoneID",
              "Prop.Sch.Ves.ID","Prop.DogS.Ves.ID")
 crap.ef=c("AnnualVesselAveID_BDAYS.m","AnnualVesselAveID_HOURS.m","AnnualVesselAveID_SHOTS.m", 
        "AnnualVesselAveID_NETLEN.m","MonthlyZoneID_BDAYS.m","MonthlyZoneID_HOURS.m",     
        "MonthlyZoneID_SHOTS.m","MonthlyZoneID_NETLEN.m")
+
 
 #Export all these objects
 #note: Total.effort... : annual effort reported in SOFAR (GN plus LL equivalent)
@@ -7096,6 +7097,8 @@ Exprt.list=list(
   Annual.total.eff_NSF=Total.effort_NFS,
   Effort.monthly=Effort.monthly[,-match(crap.ef,names(Effort.monthly))],
   Effort.daily=Effort.daily[,-match(crap.ef,names(Effort.daily))],
+  Mesh.monthly=Mesh.monthly,
+  Mesh.size=Mesh.size,
   TEPS.current=TEPS.current,
   Rec.fish.catch=Rec.fish.catch,
   Data.current.Sofar=Data.current.Sofar,
@@ -7126,12 +7129,6 @@ if(Export.SAFS=="YES")
   write.csv(Eva.SAFS,"M:/Fisheries Research/Common Data Area/Matias/For Eva/SAFS.csv",row.names=F)
   rm(Eva.SAFS.north,Eva.SAFS)  
 }
-
-
-
-          
-
-
 
 
 ##################--- G. REPORT SECTION ---##############
