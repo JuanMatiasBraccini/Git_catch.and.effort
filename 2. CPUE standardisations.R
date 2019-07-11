@@ -2,8 +2,9 @@
 
 #NOTE:  This script standardises the catch and effort data for the 4 commercial shark species,
 
-#       To update Mean Freo Sealevel each year, extract csv data from "http://uhslc.soest.hawaii.edu/data/download/fd"
-#       and run the script "Get.Freo.R" to get the mean monthly value from the daily records
+# missing: Vessel Characteristics from annual survey and Questionnaires (see 'Vessel characteristics from DoF's annual survey')
+
+#       To update SOI and Mean Freo Sealevel each year, run "Get.SOI.Freo.R" 
 
 
 #Index:  #----1. DATA SECTION-----#  
@@ -139,12 +140,11 @@ names(BlOCK_10)=c("block10","LAT","LONG")
 Metro_BlOCK_10=subset(BlOCK_10, LAT>(-33) & LAT<=(-31) & LONG<116)
 
 #Southern Oscillation Index
-SOI=read.csv("C:/Matias/Data/SOI.1975_2013.csv")
-names(SOI)[1]="Month.soi"
+SOI=read.csv("C:/Matias/Data/Oceanography/SOI.csv")
 
 #Mean Freo sea level
-Freo=read.csv("C:/Matias/Data/Freo_mean_sea_level.csv")  
-names(Freo)[c(1,3)]=c('Year',"Freo")
+Freo=read.csv("C:/Matias/Data/Oceanography/Freo_mean_sea_level.csv")  
+
 
 #Fishable areas       
 Depth.range="species_specific"
@@ -173,7 +173,7 @@ if(Depth.range=="species_specific")
 }
 
 
-#Vessel characteristics from DoF's annual survey    MISSING
+#Vessel characteristics from DoF's annual survey                MISSING
 #note: must update ""VesselGearSurveyData.csv" in C:\Matias\Data\Fishing power
 #source("C:/Matias/Analyses/Catch and effort/Git_catch_and_effort/5.Vessel_characteristics.R")
 
@@ -2373,6 +2373,7 @@ Core$"Gummy Shark"$Long=Gummy.range
 get.dates=subset(Effort.daily,Same.return.SNo%in%unique(Data.daily.GN$Same.return.SNo),select=c(Same.return.SNo,date))
 get.dates=get.dates[!duplicated(get.dates$Same.return.SNo),]
 Data.daily.GN=merge(Data.daily.GN,get.dates,"Same.return.SNo",all.x=T)
+Data.daily.GN$date=as.Date(Data.daily.GN$date)
 
 #create some useful vars
 Post.yrs=max(unique(sort(Data.monthly.GN$YEAR.c)))
@@ -2428,6 +2429,24 @@ Data.daily.GN$Same.return=with(Data.daily.GN,paste(FINYEAR,MONTH,VESSEL,METHOD,B
 
 #Create Km.Gillnet.Hours_shot.c
 Eff.daily$Km.Gillnet.Hours_shot.c=with(Eff.daily,Km.Gillnet.Hours.c*shots.c)
+
+
+# Add T, SOI, Freo and Moon (the later to daily only) 
+Freo=Freo%>%rename(Freo=MeanSeaLevel)%>%
+            mutate(Freo_lag6=lag(Freo,6),
+                   Freo_lag12=lag(Freo,12))
+
+  #Monthly
+Data.monthly.GN=Data.monthly.GN%>%left_join(SOI,by=c("YEAR.c"="Year","MONTH"="Month"))%>%
+                                   left_join(Freo,by=c("YEAR.c"="Year","MONTH"="Month")) 
+  
+
+
+  #Daily
+Data.daily.GN=Data.daily.GN%>%left_join(SOI,by=c("YEAR.c"="Year","MONTH"="Month"))%>%
+                              left_join(Freo,by=c("YEAR.c"="Year","MONTH"="Month")) %>%
+                              mutate(Lunar=lunar.phase(date,name=T))
+
 
 
 
@@ -2836,42 +2855,7 @@ for ( i in 1:N.species)
   DATA.list.LIVEWT.c.daily[[i]]=subset(DATA.list.LIVEWT.c.daily[[i]],!is.na(Km.Gillnet.Days.c))
 }
 
-#4.11 Add SOI and Freo SNo    
-Freo$Freo.Lag6=c(rep(NA,6),Freo$Freo[1:(length(Freo$Freo)-6)])
-Freo$Freo.Lag12=c(rep(NA,12),Freo$Freo[1:(length(Freo$Freo)-12)])
-Freo=subset(Freo,Year>1973)
-for(i in 1:N.species)
-{
-  #monthly
-  a=SOI
-  a$dummy=with(a,paste(Year.soi, Month.soi))
-  a=subset(a,dummy%in%unique(with(DATA.list.LIVEWT.c[[i]],paste(YEAR.c, MONTH))))
-  a=a[,-match('dummy',names(a))]
-  DATA.list.LIVEWT.c[[i]]=merge(DATA.list.LIVEWT.c[[i]],a, by.x=c("YEAR.c","MONTH"),
-                                by.y=c("Year.soi","Month.soi"),all.x=T)
-  
-  a=Freo
-  a$dummy=with(a,paste(Year, Month))
-  a=subset(a,dummy%in%unique(with(DATA.list.LIVEWT.c[[i]],paste(YEAR.c, MONTH))))
-  a=a[,-match('dummy',names(a))]
-  DATA.list.LIVEWT.c[[i]]=merge(DATA.list.LIVEWT.c[[i]],a, by.x=c("YEAR.c","MONTH"),
-                                by.y=c("Year","Month"),all.x=T)
-  
-  #daily
-  a=SOI
-  a$dummy=with(a,paste(Year.soi, Month.soi))
-  a=subset(a,dummy%in%unique(with(DATA.list.LIVEWT.c.daily[[i]],paste(YEAR.c, MONTH))))
-  a=a[,-match('dummy',names(a))]
-  DATA.list.LIVEWT.c.daily[[i]]=merge(DATA.list.LIVEWT.c.daily[[i]],a, by.x=c("YEAR.c","MONTH"),
-                                      by.y=c("Year.soi","Month.soi"),all.x=T)
-  
-  a=Freo
-  a$dummy=with(a,paste(Year, Month))
-  a=subset(a,dummy%in%unique(with(DATA.list.LIVEWT.c.daily[[i]],paste(YEAR.c, MONTH))))
-  a=a[,-match('dummy',names(a))]
-  DATA.list.LIVEWT.c.daily[[i]]=merge(DATA.list.LIVEWT.c.daily[[i]],a, by.x=c("YEAR.c","MONTH"),
-                                      by.y=c("Year","Month"),all.x=T)
-}
+
 
 
 #Explore cpue by block
