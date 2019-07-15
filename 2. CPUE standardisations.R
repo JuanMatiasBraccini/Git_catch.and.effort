@@ -468,82 +468,85 @@ fn.scale=function(x,scaler) ((x/max(x,na.rm=T))^0.5)*scaler
 #functions for creating species data lists
 fn.cpue.data=function(Dat,EffrrT,sp)
 {
-  #aggregate records by Same return (drop issues with Condition and Bioregion...)
-  Dat=Dat%>%group_by(FINYEAR,MONTH,VESSEL,METHOD,BLOCKX,Boundary.blk,SPECIES,SNAME,YEAR.c,
-                     LAT,LONG,Same.return,TYPE.DATA,zone,Reporter,Sch.or.DogS,
-                     Temperature,SOI,Freo,Freo_lag6,Freo_lag12)%>%
-            summarise(LIVEWT = sum(LIVEWT),
-                      LIVEWT.c = sum(LIVEWT.c))%>%
-            data.frame()
-
-  #add effort
-  Ids=match(c("LAT","LONG"),names(EffrrT))
-  Dat=Dat%>%left_join(EffrrT[,-Ids],by=c("BLOCKX","FINYEAR","MONTH","VESSEL"))
-  
-  #consider effor reporter
-  Dat$Reporter=with(Dat,ifelse(Eff.Reporter=="bad","bad",Reporter))  
-  
-  #remove records with NA effort
-  Dat=subset(Dat,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
-  
-  #remove school shark or dogfish shots if not the target species
-  idd=which(sp%in%c(17008,20000))
-  if(length(idd)==0) Dat=subset(Dat,!(Sch.or.DogS=="Yes"))
-  
-  #keep records from first year with data as some species (e.g. Sandbars) 
-  # didn't have a code for reporting early on
-  TAB=with(subset(Dat,SPECIES%in%sp),table(YEAR.c))
-  Dat=subset(Dat,YEAR.c>=as.numeric(names(TAB[1])))
-  
-  #for greynurse, drop years post protection
-  idd=which(sp%in%8001)
-  if(length(idd)==1 & length(sp)<3)
+  TAB=with(subset(Dat,SPECIES%in%sp),unique(YEAR.c))
+  if(length(TAB)>=N.keep)
   {
-    Greyn.yrs=sort(unique(Dat$FINYEAR))
-    Greyn.yrs=Greyn.yrs[1:match(Greynurse.protection,Greyn.yrs)]
-    Dat=subset(Dat,FINYEAR%in%Greyn.yrs)
+    #aggregate records by Same return (drop issues with Condition and Bioregion...)
+    Dat=Dat%>%group_by(FINYEAR,MONTH,VESSEL,METHOD,BLOCKX,Boundary.blk,SPECIES,SNAME,YEAR.c,
+                       LAT,LONG,Same.return,TYPE.DATA,zone,Reporter,Sch.or.DogS,
+                       Temperature,Temp.res,SOI,Freo,Freo_lag6,Freo_lag12)%>%
+      summarise(LIVEWT = sum(LIVEWT),
+                LIVEWT.c = sum(LIVEWT.c))%>%
+      data.frame()
+    
+    #add effort
+    Ids=match(c("LAT","LONG"),names(EffrrT))
+    Dat=Dat%>%left_join(EffrrT[,-Ids],by=c("BLOCKX","FINYEAR","MONTH","VESSEL"))
+    
+    #consider effor reporter
+    Dat$Reporter=with(Dat,ifelse(Eff.Reporter=="bad","bad",Reporter))  
+    
+    #remove records with NA effort
+    Dat=subset(Dat,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
+    
+    #remove school shark or dogfish shots if not the target species
+    idd=which(sp%in%c(17008,20000))
+    if(length(idd)==0) Dat=subset(Dat,!(Sch.or.DogS=="Yes"))
+    
+    #keep records from first year with data as some species (e.g. Sandbars) 
+    # didn't have a code for reporting early on
+    TAB=with(subset(Dat,SPECIES%in%sp),table(YEAR.c))
+    Dat=subset(Dat,YEAR.c>=as.numeric(names(TAB[1])))
+    
+    #for greynurse, drop years post protection
+    idd=which(sp%in%8001)
+    if(length(idd)==1 & length(sp)<3)
+    {
+      Greyn.yrs=sort(unique(Dat$FINYEAR))
+      Greyn.yrs=Greyn.yrs[1:match(Greynurse.protection,Greyn.yrs)]
+      Dat=subset(Dat,FINYEAR%in%Greyn.yrs)
+    }
+  }else
+  {
+    Dat=NULL
   }
-  
   return(Dat)
 }
 fn.cpue.data.daily=function(Dat,EffrrT,sp)
 {
-  Dat=Dat%>%group_by(date,Same.return.SNo,TSNo,Same.return,FINYEAR,MONTH,
+  TAB=with(subset(Dat,SPECIES%in%sp),unique(YEAR.c))
+  if(length(TAB)>=N.keep)
+  {
+    Dat=Dat%>%group_by(date,Same.return.SNo,TSNo,Same.return,FINYEAR,MONTH,
                        VESSEL,METHOD,BLOCKX,block10,SPECIES,SNAME,YEAR.c,LAT,LONG,
                        TYPE.DATA,zone,Reporter,Sch.or.DogS,ZnID,
-                     Temperature,SOI,Freo,Freo_lag6,Freo_lag12,Lunar)%>%
-            summarise(LIVEWT = sum(LIVEWT),
-                      LIVEWT.c = sum(LIVEWT.c),
-                      nfish = sum(nfish))%>%
-            data.frame()
-
-  #add effort
-  Ids=match(c("BLOCKX","FINYEAR","MONTH","LAT","LONG","VESSEL","block10"),names(EffrrT))
-  Dat=Dat%>%left_join(EffrrT[,-Ids],by=c("Same.return.SNo"))
-
-  #consider effor reporter
-  Dat$Reporter=with(Dat,ifelse(Eff.Reporter=="bad","bad",Reporter))  
-  
-  #remove records with NA effort
-  Dat=subset(Dat,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
-  
-  #remove school shark or dogfish shots if not the target species
-  idd=which(sp%in%c(17008,20000))
-  if(length(idd)==0) Dat=subset(Dat,!(Sch.or.DogS=="Yes"))
-  
+                       Temperature,Temp.res,SOI,Freo,Freo_lag6,Freo_lag12,Lunar)%>%
+      summarise(LIVEWT = sum(LIVEWT),
+                LIVEWT.c = sum(LIVEWT.c),
+                nfish = sum(nfish))%>%
+      data.frame()
+    
+    #add effort
+    Ids=match(c("BLOCKX","FINYEAR","MONTH","LAT","LONG","VESSEL","block10"),names(EffrrT))
+    Dat=Dat%>%left_join(EffrrT[,-Ids],by=c("Same.return.SNo"))
+    
+    #consider effor reporter
+    Dat$Reporter=with(Dat,ifelse(Eff.Reporter=="bad","bad",Reporter))  
+    
+    #remove records with NA effort
+    Dat=subset(Dat,!(is.na(Km.Gillnet.Days.c) | is.na(Km.Gillnet.Hours.c)))
+    
+    #remove school shark or dogfish shots if not the target species
+    idd=which(sp%in%c(17008,20000))
+    if(length(idd)==0) Dat=subset(Dat,!(Sch.or.DogS=="Yes"))
+  }else
+  {
+    Dat=NULL
+  }
   return(Dat)
 }
 
 smart.par=function(n.plots,MAR,OMA,MGP) return(par(mfrow=n2mfrow(n.plots),mar=MAR,oma=OMA,las=1,mgp=MGP))
-
-fn.n.vessels=function(dat,dat1)  return(length(unique(c(dat$VESSEL,dat1$VESSEL))))
-
-fn.n.blk.caught=function(Dat,Dat1,SPEC)  #total number of bloks where shark caught
-{
-  Dat=subset(Dat,SPECIES%in%SPEC & LIVEWT.c>0)
-  Dat1=subset(Dat1,SPECIES%in%SPEC & LIVEWT.c>0)
-  return(unique(c(Dat$BLOCKX,Dat1$BLOCKX)))
-}
 
 fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC,BLK.sel.sens,Min.ktch)
 {
@@ -726,47 +729,59 @@ Effort.data.fun=function(DATA,target,ktch)
   ID=c(ID,which(is.na(DATA$Km.Gillnet.Days.c))) #NA records
   if(length(ID)>0)DATA=DATA[-ID,]
   
-  #remove nonsense lat
-  DATA=subset(DATA,LAT>=(-36))
-  
-  #calculate effort (only need max effort)
-  Match.these.eff=match(These.efforts,names(DATA))
-  Effort.data1=DATA[,Match.these.eff]
-  Effort.data=Effort.data1%>%
-                  group_by(zone,FINYEAR,Same.return,MONTH,BLOCKX,SHOTS.c,BDAYS.c,HOURS.c,NETLEN.c)%>%
-                  summarise(Km.Gillnet.Days.inv = max(Km.Gillnet.Days.inv),
-                            Km.Gillnet.Days.c = max(Km.Gillnet.Days.c),
-                            Km.Gillnet.Hours.c = max(Km.Gillnet.Hours.c),
-                            Km.Gillnet.Hours_shot.c = max(Km.Gillnet.Hours_shot.c))%>%
-                  data.frame()
-
-  #target species catch 
+  if(nrow(DATA)>0)
+  {
+    #remove nonsense lat
+    DATA=subset(DATA,LAT>=(-36))
+    
+    #calculate effort (only need max effort)
+    Match.these.eff=match(These.efforts,names(DATA))
+    Effort.data1=DATA[,Match.these.eff]
+    Effort.data=Effort.data1%>%
+      group_by(zone,FINYEAR,Same.return,MONTH,BLOCKX,SHOTS.c,BDAYS.c,HOURS.c,NETLEN.c)%>%
+      summarise(Km.Gillnet.Days.inv = max(Km.Gillnet.Days.inv),
+                Km.Gillnet.Days.c = max(Km.Gillnet.Days.c),
+                Km.Gillnet.Hours.c = max(Km.Gillnet.Hours.c),
+                Km.Gillnet.Hours_shot.c = max(Km.Gillnet.Hours_shot.c))%>%
+      data.frame()
+    
+    #target species catch 
     #note: catch targeted at other species: pointless as these are multiple trips combined in one month
-  ID=match(c(ktch),colnames(DATA))
-  DATA$Catch.Target=with(DATA,ifelse(SPECIES%in%target,DATA[,ID],0))
-  DATA$Catch.Total=with(DATA,ifelse(SPECIES%in%c(5001:24900,25000:31000,188000:599001),DATA[,ID],0))
-  
-  #reshape catch data
-  TABLE=DATA%>%group_by(MONTH,FINYEAR,BLOCKX,VESSEL,Same.return,LAT,LONG,YEAR.c)%>%
-               summarise(Catch.Target = sum(Catch.Target,na.rm=T),
-                         Catch.Total = sum(Catch.Total,na.rm=T))
-  Enviro=DATA%>%group_by(MONTH,FINYEAR,BLOCKX)%>%
-                summarise(Temperature=mean(Temperature),SOI=mean(SOI),Freo=mean(Freo),
-                          Freo_lag6=mean(Freo_lag6),Freo_lag12=mean(Freo_lag12))
-  TABLE=TABLE%>%left_join(Enviro,by=c("FINYEAR","MONTH","BLOCKX"))    %>%
-                arrange(FINYEAR,MONTH,BLOCKX) %>%
-                data.frame()
- 
-  #proportion of records with target catch
-  prop.with.catch=round(100*sum(TABLE$Catch.Target>0)/length(TABLE$Catch.Target),0)
-  
-  #merge catch and effort
-  dat=TABLE%>%left_join(Effort.data,by=c("Same.return","FINYEAR","MONTH","BLOCKX"))
-
-  #Add mesh size                                
-  d=subset(DATA,select=c(Same.return,mesh))
-  d=d[!duplicated(d$Same.return),]
-  dat=dat%>%left_join(d,by=c("Same.return"))
+    ID=match(c(ktch),colnames(DATA))
+    DATA$Catch.Target=with(DATA,ifelse(SPECIES%in%target,DATA[,ID],0))
+    DATA$Catch.Total=with(DATA,ifelse(SPECIES%in%c(5001:24900,25000:31000,188000:599001),DATA[,ID],0))
+    
+    #reshape catch data
+    TABLE=DATA%>%group_by(MONTH,FINYEAR,BLOCKX,VESSEL,Same.return,LAT,LONG,YEAR.c)%>%
+      summarise(Catch.Target = sum(Catch.Target,na.rm=T),
+                Catch.Total = sum(Catch.Total,na.rm=T))
+    Enviro=DATA%>%group_by(MONTH,FINYEAR,BLOCKX)%>%
+      summarise(Temperature=mean(Temperature),
+                Temp.res=mean(Temp.res),
+                SOI=mean(SOI),
+                Freo=mean(Freo),
+                Freo_lag6=mean(Freo_lag6),
+                Freo_lag12=mean(Freo_lag12))
+    TABLE=TABLE%>%left_join(Enviro,by=c("FINYEAR","MONTH","BLOCKX"))    %>%
+      arrange(FINYEAR,MONTH,BLOCKX) %>%
+      data.frame()
+    
+    #proportion of records with target catch
+    prop.with.catch=round(100*sum(TABLE$Catch.Target>0)/length(TABLE$Catch.Target),0)
+    
+    #merge catch and effort
+    dat=TABLE%>%left_join(Effort.data,by=c("Same.return","FINYEAR","MONTH","BLOCKX"))
+    
+    #Add mesh size                                
+    d=subset(DATA,select=c(Same.return,mesh))
+    d=d[!duplicated(d$Same.return),]
+    dat=dat%>%left_join(d,by=c("Same.return"))
+    
+  }else
+  {
+    dat=DATA
+    prop.with.catch=0
+  }
   return(list(dat=dat,prop.with.catch=prop.with.catch))
 }
 
@@ -778,102 +793,113 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
   ID=c(ID,which(is.na(DATA$Km.Gillnet.Days.c))) #NA records
   if(length(ID)>0)DATA=DATA[-ID,]
   
-  #remove nonsense lat
-  DATA=subset(DATA,LAT>=(-36))
-  
-  #calculate effort
-  Match.these.eff=match(These.efforts.daily,names(DATA))
-  Effort.data1=DATA[,Match.these.eff]
-  
-  #aggregate at shot level
-  if(Use.Date=="NO")
+  if(nrow(DATA)>0)
   {
-    #max effort by Sno, DsNo & TSNo
-    Effort.data=Effort.data1%>%      
-                  group_by(zone,FINYEAR,Same.return.SNo,MONTH,BLOCKX,block10,shots.c,hours.c,netlen.c)%>%
-                  summarise(Km.Gillnet.Days.inv = max(Km.Gillnet.Days.inv),
-                            Km.Gillnet.Days.c = max(Km.Gillnet.Days.c),
-                            Km.Gillnet.Hours.c = max(Km.Gillnet.Hours.c),
-                            Km.Gillnet.Hours_shot.c = max(Km.Gillnet.Hours_shot.c))%>%
-                  data.frame()
-
-    #aggregate at TSNo if required
-    if(Aggregtn=="TSNo")
+    #remove nonsense lat
+    DATA=subset(DATA,LAT>=(-36))
+    
+    #calculate effort
+    Match.these.eff=match(These.efforts.daily,names(DATA))
+    Effort.data1=DATA[,Match.these.eff]
+    
+    #aggregate at shot level
+    if(Use.Date=="NO")
     {
-      Effort.data$TSNo=word(Effort.data$Same.return.SNo,3)
-      Effort.data=aggregate(cbind(Km.Gillnet.Days.c,Km.Gillnet.Hours.c,Km.Gillnet.Hours_shot.c)~zone+
-                              FINYEAR+TSNo+MONTH+BLOCKX,Effort.data,sum)
+      #max effort by Sno, DsNo & TSNo
+      Effort.data=Effort.data1%>%      
+        group_by(zone,FINYEAR,Same.return.SNo,MONTH,BLOCKX,block10,shots.c,hours.c,netlen.c)%>%
+        summarise(Km.Gillnet.Days.inv = max(Km.Gillnet.Days.inv),
+                  Km.Gillnet.Days.c = max(Km.Gillnet.Days.c),
+                  Km.Gillnet.Hours.c = max(Km.Gillnet.Hours.c),
+                  Km.Gillnet.Hours_shot.c = max(Km.Gillnet.Hours_shot.c))%>%
+        data.frame()
+      
+      #aggregate at TSNo if required
+      if(Aggregtn=="TSNo")
+      {
+        Effort.data$TSNo=word(Effort.data$Same.return.SNo,3)
+        Effort.data=aggregate(cbind(Km.Gillnet.Days.c,Km.Gillnet.Hours.c,Km.Gillnet.Hours_shot.c)~zone+
+                                FINYEAR+TSNo+MONTH+BLOCKX,Effort.data,sum)
+      }
     }
-  }
-  
-  #target species catch 
-  ID=match(c(ktch),colnames(DATA))
-  DATA$Catch.Target=with(DATA,ifelse(SPECIES%in%target,DATA[,ID],0))
-  
-  #catch targeted at other species
-  DATA$Catch.Gummy=with(DATA,ifelse(SPECIES==17001,DATA[,ID],0))
-  DATA$Catch.Whiskery=with(DATA,ifelse(SPECIES==17003,DATA[,ID],0))
-  DATA$Catch.Dusky=with(DATA,ifelse(SPECIES%in%c(18003,18001),DATA[,ID],0))
-  DATA$Catch.Sandbar=with(DATA,ifelse(SPECIES==18007,DATA[,ID],0))
-  DATA$Catch.Groper=with(DATA,ifelse(SPECIES%in%c(384002),DATA[,ID],0))
-  DATA$Catch.Snapper=with(DATA,ifelse(SPECIES%in%c(353001),DATA[,ID],0))
-  DATA$Catch.Blue_mor=with(DATA,ifelse(SPECIES%in%c(377004),DATA[,ID],0))
-  DATA$Catch.Dhufish=with(DATA,ifelse(SPECIES%in%c(320000),DATA[,ID],0))
-  
-  #reshape catch data
-  if(Use.Date=="NO")
+    
+    #target species catch 
+    ID=match(c(ktch),colnames(DATA))
+    DATA$Catch.Target=with(DATA,ifelse(SPECIES%in%target,DATA[,ID],0))
+    
+    #catch targeted at other species
+    DATA$Catch.Gummy=with(DATA,ifelse(SPECIES==17001,DATA[,ID],0))
+    DATA$Catch.Whiskery=with(DATA,ifelse(SPECIES==17003,DATA[,ID],0))
+    DATA$Catch.Dusky=with(DATA,ifelse(SPECIES%in%c(18003,18001),DATA[,ID],0))
+    DATA$Catch.Sandbar=with(DATA,ifelse(SPECIES==18007,DATA[,ID],0))
+    DATA$Catch.Groper=with(DATA,ifelse(SPECIES%in%c(384002),DATA[,ID],0))
+    DATA$Catch.Snapper=with(DATA,ifelse(SPECIES%in%c(353001),DATA[,ID],0))
+    DATA$Catch.Blue_mor=with(DATA,ifelse(SPECIES%in%c(377004),DATA[,ID],0))
+    DATA$Catch.Dhufish=with(DATA,ifelse(SPECIES%in%c(320000),DATA[,ID],0))
+    
+    #reshape catch data
+    if(Use.Date=="NO")
+    {
+      if(Aggregtn=="SNo") 
+      {
+        TABLE=DATA%>%group_by(MONTH,FINYEAR,BLOCKX,block10,VESSEL,Same.return.SNo,date,LAT,LONG,YEAR.c,Lunar)%>%
+          summarise(Catch.Target = sum(Catch.Target,na.rm=T),
+                    Catch.Gummy=sum(Catch.Gummy,na.rm=T),
+                    Catch.Whiskery=sum(Catch.Whiskery,na.rm=T),
+                    Catch.Dusky=sum(Catch.Dusky,na.rm=T),
+                    Catch.Sandbar=sum(Catch.Sandbar,na.rm=T),
+                    Catch.Groper=sum(Catch.Groper,na.rm=T),
+                    Catch.Snapper=sum(Catch.Snapper,na.rm=T),
+                    Catch.Blue_mor=sum(Catch.Blue_mor,na.rm=T),
+                    Catch.Dhufish=sum(Catch.Dhufish,na.rm=T))
+        Enviro=DATA%>%group_by(MONTH,FINYEAR,BLOCKX)%>%
+          summarise(Temperature=mean(Temperature),
+                    Temp.res=mean(Temp.res),
+                    SOI=mean(SOI),
+                    Freo=mean(Freo),
+                    Freo_lag6=mean(Freo_lag6),
+                    Freo_lag12=mean(Freo_lag12))
+        TABLE=TABLE%>%left_join(Enviro,by=c("FINYEAR","MONTH","BLOCKX"))    %>%
+          arrange(Same.return.SNo,FINYEAR,MONTH,BLOCKX) %>%
+          data.frame()
+      }
+      #aggregating by trip
+      if(Aggregtn=="TSNo")   
+      {
+        TABLE=aggregate(cbind(Catch.Target,Catch.Gummy,Catch.Whiskery,Catch.Dusky,Catch.Sandbar,
+                              Catch.Groper,Catch.Snapper,Catch.Blue_mor,Catch.Dhufish,
+                              Catch.Other.shrk,Catch.Other.scalefish,
+                              Catch.non_indicators,Catch.Total)~MONTH+FINYEAR+BLOCKX+VESSEL+
+                          TSNo+YEAR.c,data=DATA,sum,na.rm=T)
+        xx=subset(DATA,select=c(BLOCKX,LAT,LONG))
+        xx=xx[!duplicated(xx$BLOCKX),]
+        xx$LAT=round(xx$LAT)
+        xx$LONG=round(xx$LONG)
+        TABLE=merge(TABLE,xx,by="BLOCKX",all.x=T)
+        TABLE=TABLE[order(TABLE$TSNo,TABLE$FINYEAR,TABLE$MONTH,TABLE$BLOCKX),]
+      }
+    }
+    
+    #proportion of records with target catch
+    prop.with.catch=round(100*sum(TABLE$Catch.Target>0)/length(TABLE$Catch.Target),0)
+    
+    #merge catch and effort
+    if(Aggregtn=="SNo") dat=TABLE%>%left_join(Effort.data,by=c("Same.return.SNo","FINYEAR","MONTH","BLOCKX","block10"))
+    if(Aggregtn=="TSNo") dat=TABLE%>%left_join(Effort.data,by=c("TSNo","FINYEAR","MONTH","BLOCKX","block10"))
+    
+    
+    #Add mesh size, shots, depth and nlines for each session
+    if(Aggregtn=="SNo")
+    {
+      d=subset(DATA,select=c(Same.return.SNo,VESSEL,mesh,nlines.c,Mean.depth))
+      d=d[!duplicated(paste(d$Same.return.SNo,d$VESSEL)),]
+      dat=dat%>%left_join(d,by=c("Same.return.SNo","VESSEL"))
+    }
+    
+  }else
   {
-    if(Aggregtn=="SNo") 
-    {
-      TABLE=DATA%>%group_by(MONTH,FINYEAR,BLOCKX,block10,VESSEL,Same.return.SNo,date,LAT,LONG,YEAR.c,Lunar)%>%
-        summarise(Catch.Target = sum(Catch.Target,na.rm=T),
-                  Catch.Gummy=sum(Catch.Gummy,na.rm=T),
-                  Catch.Whiskery=sum(Catch.Whiskery,na.rm=T),
-                  Catch.Dusky=sum(Catch.Dusky,na.rm=T),
-                  Catch.Sandbar=sum(Catch.Sandbar,na.rm=T),
-                  Catch.Groper=sum(Catch.Groper,na.rm=T),
-                  Catch.Snapper=sum(Catch.Snapper,na.rm=T),
-                  Catch.Blue_mor=sum(Catch.Blue_mor,na.rm=T),
-                  Catch.Dhufish=sum(Catch.Dhufish,na.rm=T))
-
-      Enviro=DATA%>%group_by(MONTH,FINYEAR,BLOCKX)%>%
-                    summarise(Temperature=mean(Temperature),SOI=mean(SOI),Freo=mean(Freo),
-                              Freo_lag6=mean(Freo_lag6),Freo_lag12=mean(Freo_lag12))
-      TABLE=TABLE%>%left_join(Enviro,by=c("FINYEAR","MONTH","BLOCKX"))    %>%
-                  arrange(Same.return.SNo,FINYEAR,MONTH,BLOCKX) %>%
-                  data.frame()
-    }
-    #aggregating by trip
-    if(Aggregtn=="TSNo")   
-    {
-      TABLE=aggregate(cbind(Catch.Target,Catch.Gummy,Catch.Whiskery,Catch.Dusky,Catch.Sandbar,
-                            Catch.Groper,Catch.Snapper,Catch.Blue_mor,Catch.Dhufish,
-                            Catch.Other.shrk,Catch.Other.scalefish,
-                            Catch.non_indicators,Catch.Total)~MONTH+FINYEAR+BLOCKX+VESSEL+
-                        TSNo+YEAR.c,data=DATA,sum,na.rm=T)
-      xx=subset(DATA,select=c(BLOCKX,LAT,LONG))
-      xx=xx[!duplicated(xx$BLOCKX),]
-      xx$LAT=round(xx$LAT)
-      xx$LONG=round(xx$LONG)
-      TABLE=merge(TABLE,xx,by="BLOCKX",all.x=T)
-      TABLE=TABLE[order(TABLE$TSNo,TABLE$FINYEAR,TABLE$MONTH,TABLE$BLOCKX),]
-    }
-  }
-
-  #proportion of records with target catch
-  prop.with.catch=round(100*sum(TABLE$Catch.Target>0)/length(TABLE$Catch.Target),0)
-  
-  #merge catch and effort
-  if(Aggregtn=="SNo") dat=TABLE%>%left_join(Effort.data,by=c("Same.return.SNo","FINYEAR","MONTH","BLOCKX","block10"))
-  if(Aggregtn=="TSNo") dat=TABLE%>%left_join(Effort.data,by=c("TSNo","FINYEAR","MONTH","BLOCKX","block10"))
-  
-
-  #Add mesh size, shots, depth and nlines for each session
-  if(Aggregtn=="SNo")
-  {
-    d=subset(DATA,select=c(Same.return.SNo,VESSEL,mesh,nlines.c,Mean.depth))
-    d=d[!duplicated(paste(d$Same.return.SNo,d$VESSEL)),]
-    dat=dat%>%left_join(d,by=c("Same.return.SNo","VESSEL"))
+    dat=DATA
+    prop.with.catch=0
   }
   
   return(list(dat=dat,prop.with.catch=prop.with.catch))
@@ -2322,8 +2348,11 @@ names(SpiSis)=nms
 SpiSis=SpiSis[-match(c(22999),SpiSis)]
 SP.list=as.list(SpiSis)
 
-SP.list=SP.list[-match(c('Dusky Whaler','Bronze Whaler'),names(SP.list))]  #combine dusky and bronzy (Rory request due to species id)
+#combine dusky and bronzy (Rory request due to species id) and sawsharks general with common saw
+SP.list=SP.list[-match(c("Common Sawshark","SawShark",'Dusky Whaler','Bronze Whaler'),names(SP.list))]  
+
 SP.list$'Dusky Whaler Bronze Whaler'=c(18003,18001)
+SP.list$'Sawsharks'=c(23900,23002)
 SP.list$All.Non.indicators=Shark.species[-match(Indicator.sp,Shark.species)]    
 nnn=1:length(SP.list)
 
@@ -2427,30 +2456,31 @@ Data.daily.GN$Same.return=with(Data.daily.GN,paste(FINYEAR,MONTH,VESSEL,METHOD,B
 Eff.daily$Km.Gillnet.Hours_shot.c=with(Eff.daily,Km.Gillnet.Hours.c*shots.c)
 
 
-# Add T
+# Add T and T residuals 
 Lat.rng=seq(min(Data.monthly.GN$LAT),max(Data.monthly.GN$LAT),1)
 Long.rng=seq(min(Data.monthly.GN$LONG),max(Data.monthly.GN$LONG),1)
 SST=SST%>%filter(Lat%in%Lat.rng & Long%in%Long.rng)%>%
-          rename(Temperature=value) 
-
+          rename(Temperature=value)
+  
   #Monthly
 Data.monthly.GN=Data.monthly.GN %>%
                   left_join(SST,by=c("YEAR.c"="year","MONTH"="month","LONG"="Long","LAT"="Lat"))%>% 
                   arrange(YEAR.c,MONTH,LAT,LONG)%>%
-                  mutate(Temperature=ifelse(is.na(Temperature),na.approx(Temperature),Temperature))
+                  mutate(Temperature=ifelse(is.na(Temperature),na.approx(Temperature),Temperature),
+                         Temp.res=Temperature/mean(Temperature,na.rm=T))
 
 #Monthly
 Data.daily.GN=Data.daily.GN %>%
                   mutate(LAT.round=-floor(abs(LAT)),LONG.round=floor(LONG)) %>%
                   left_join(SST,by=c("YEAR.c"="year","MONTH"="month","LONG.round"="Long","LAT.round"="Lat"))%>% 
                   arrange(YEAR.c,MONTH,LAT.round,LONG.round)%>%
-                  mutate(Temperature=ifelse(is.na(Temperature),na.approx(Temperature),Temperature))%>%
+                  mutate(Temperature=ifelse(is.na(Temperature),na.approx(Temperature),Temperature),
+                         Temp.res=Temperature/mean(Temperature,na.rm=T))%>%
                   select(-c(LONG.round,LAT.round))
   
 
 
 # Add SOI, Freo and Moon (the later to daily only) 
-
 Freo=Freo%>%rename(Freo=MeanSeaLevel)%>%
             mutate(Freo_lag6=lag(Freo,6),
                    Freo_lag12=lag(Freo,12))
@@ -2510,11 +2540,15 @@ if(exists("TDGDLF.survey"))  TDGDLF.survey=subset(TDGDLF.survey, BOATREGO%in%
 
 
 #4.2 Extract number of vessels reporting catch of species per species range
-N.VES=matrix(rep(0,length(nnn)),ncol=length(nnn))
+N.VES=matrix(rep(NA,length(nnn)),ncol=length(nnn))
 colnames(N.VES)=names(SP.list)
-for(i in nnn) N.VES[,i]=fn.n.vessels(subset(Species.list[[i]],SPECIES%in%SP.list[[i]]),
-                           subset(Species.list.daily[[i]],SPECIES%in%SP.list[[i]]))
-
+for(i in nnn)
+{
+  a=b=NULL
+  if(!is.null(Species.list[[i]]))a=unique(subset(Species.list[[i]],SPECIES%in%SP.list[[i]])$VESSEL)
+  if(!is.null(Species.list.daily[[i]]))b=unique(subset(Species.list.daily[[i]],SPECIES%in%SP.list[[i]])$VESSEL)
+  N.VES[,i]=length(unique(c(a,b)))
+}
 setwd('C:/Matias/Analyses/Catch and effort')
 hndl=paste(getwd(),"/Outputs/Paper/",sep="")
 write.csv(N.VES,paste(hndl,"All.Vessels.by.species.csv",sep=""),row.names=T)
@@ -2522,7 +2556,13 @@ write.csv(N.VES,paste(hndl,"All.Vessels.by.species.csv",sep=""),row.names=T)
 
 #4.2.1 Extract number of blocks where shark has been caught within effective area
 Tol.blks=SP.list
-for(i in nnn) Tol.blks[[i]]=length(fn.n.blk.caught(Species.list[[i]],Species.list.daily[[i]],SP.list[[i]]))
+for(i in nnn)
+{
+  a=b=NULL
+  if(!is.null(Species.list[[i]]))a=unique(subset(Species.list[[i]],SPECIES%in%SP.list[[i]] & LIVEWT.c>0)$BLOCKX)
+  if(!is.null(Species.list.daily[[i]]))b=unique(subset(Species.list.daily[[i]],SPECIES%in%SP.list[[i]] & LIVEWT.c>0)$BLOCKX)
+  Tol.blks[[i]]=sort(unique(c(a,b)))
+}
 Blks.by.species=do.call(c,Tol.blks)
 write.csv(Blks.by.species,paste(hndl,"All.Blks.by.species.csv",sep=""),row.names=T)
 
@@ -2616,7 +2656,8 @@ dev.off()
 #steps: 1. select vessels that meet criteria (fishing for at least Threshold.n.yrs/Threshold.n.yrs.daily
 #         and catching at least MIN.ktch)
 #       2. for those vessels, select blocks with at least MIN.obs.BLK years of observations
-BLKS.used=SP.list 
+BLKS.used=vector('list',length(SP.list)) 
+names(BLKS.used)=names(SP.list)
 BLKS.not.used=VES.used=VES.not.used=
 BLKS.used.daily=BLKS.not.used.daily=VES.used.daily=VES.not.used.daily=BLKS.used
 if(Remove.blk.by=="blk_only")  
@@ -2624,56 +2665,65 @@ if(Remove.blk.by=="blk_only")
   for(i in nnn)
   {
     #monthly
-    finy=sort(unique(Species.list[[i]]$FINYEAR))
-    Ves.sel.BC=0
-    BLK.sel.BC=0
-    Min.ktch=1
-    if(length(SP.list[[i]])<3)
+    if(!is.null(Species.list[[i]]))
     {
-      if(SP.list[[i]][1]%in%Indicator.sp)
+      finy=sort(unique(Species.list[[i]]$FINYEAR))
+      Ves.sel.BC=0
+      BLK.sel.BC=0
+      Min.ktch=1
+      if(length(SP.list[[i]])<3)
       {
-        Ves.sel.BC=Threshold.n.yrs.monthly
-        BLK.sel.BC=MIN.obs.BLK
-        Min.ktch=MIN.ktch 
-        if(18007%in%SP.list[[i]]) finy=finy[-match(c("1985-86","1986-87","1987-88"),finy)]
+        if(SP.list[[i]][1]%in%Indicator.sp)
+        {
+          Ves.sel.BC=Threshold.n.yrs.monthly
+          BLK.sel.BC=MIN.obs.BLK
+          Min.ktch=MIN.ktch 
+          if(18007%in%SP.list[[i]]) finy=finy[-match(c("1985-86","1986-87","1987-88"),finy)]
+        }
       }
+      dummy=fn.see.all.yrs.ves.blks(a=subset(Species.list[[i]],FINYEAR%in%finy),SP=SP.list[[i]],
+                                    NM=names(SP.list)[i],what=".monthly",
+                                    Ves.sel.BC=Ves.sel.BC,Ves.sel.sens=Threshold.n.yrs.sens,
+                                    BLK.sel.BC=BLK.sel.BC,BLK.sel.sens=MIN.obs.BLK.sens,Min.ktch=Min.ktch)
+      if(!is.null(dummy))
+      {
+        BLKS.used[[i]]=dummy$Blks.BC
+        BLKS.not.used[[i]]=dummy$Drop.blks
+        VES.used[[i]]=dummy$Ves.BC
+        VES.not.used[[i]]=dummy$Drop.ves
+      }
+      
     }
-    dummy=fn.see.all.yrs.ves.blks(a=subset(Species.list[[i]],FINYEAR%in%finy),SP=SP.list[[i]],
-                                  NM=names(SP.list)[i],what=".monthly",
-                                  Ves.sel.BC=Ves.sel.BC,Ves.sel.sens=Threshold.n.yrs.sens,
-                                  BLK.sel.BC=BLK.sel.BC,BLK.sel.sens=MIN.obs.BLK.sens,Min.ktch=Min.ktch)
-    BLKS.used[[i]]=dummy$Blks.BC
-    BLKS.not.used[[i]]=dummy$Drop.blks
-    VES.used[[i]]=dummy$Ves.BC
-    VES.not.used[[i]]=dummy$Drop.ves
-    
-    
     #Daily
-    Ves.sel.BC=0
-    BLK.sel.BC=0
-    Min.ktch=1
-    finy=unique(Species.list.daily[[i]]$FINYEAR)
-    if(length(SP.list[[i]])<3)
+    if(!is.null(Species.list.daily[[i]]))
     {
-      if(SP.list[[i]][1]%in%Indicator.sp)
+      Ves.sel.BC=0
+      BLK.sel.BC=0
+      Min.ktch=1
+      finy=unique(Species.list.daily[[i]]$FINYEAR)
+      if(length(SP.list[[i]])<3)
       {
-        Ves.sel.BC=Threshold.n.yrs.daily
-        BLK.sel.BC=MIN.obs.BLK
-        Min.ktch=MIN.ktch 
+        if(SP.list[[i]][1]%in%Indicator.sp)
+        {
+          Ves.sel.BC=Threshold.n.yrs.daily
+          BLK.sel.BC=MIN.obs.BLK
+          Min.ktch=MIN.ktch 
+        }
+      }
+      dummy=fn.see.all.yrs.ves.blks(a=subset(Species.list.daily[[i]],FINYEAR%in%finy),SP=SP.list[[i]],
+                                    NM=names(SP.list)[i],what=".daily",
+                                    Ves.sel.BC=Ves.sel.BC,Ves.sel.sens=Threshold.n.yrs.sens,
+                                    BLK.sel.BC=BLK.sel.BC,BLK.sel.sens=MIN.obs.BLK.sens,Min.ktch=Min.ktch)
+      if(!is.null(dummy))
+      {
+        BLKS.used.daily[[i]]=dummy$Blks.BC
+        BLKS.not.used.daily[[i]]=dummy$Drop.blks
+        VES.used.daily[[i]]=dummy$Ves.BC
+        VES.not.used.daily[[i]]=dummy$Drop.ves
       }
     }
-    dummy=fn.see.all.yrs.ves.blks(a=subset(Species.list.daily[[i]],FINYEAR%in%finy),SP=SP.list[[i]],
-                                  NM=names(SP.list)[i],what=".daily",
-                                  Ves.sel.BC=Ves.sel.BC,Ves.sel.sens=Threshold.n.yrs.sens,
-                                  BLK.sel.BC=BLK.sel.BC,BLK.sel.sens=MIN.obs.BLK.sens,Min.ktch=Min.ktch)
-    BLKS.used.daily[[i]]=dummy$Blks.BC
-    BLKS.not.used.daily[[i]]=dummy$Drop.blks
-    VES.used.daily[[i]]=dummy$Ves.BC
-    VES.not.used.daily[[i]]=dummy$Drop.ves
-    
   }
 }
-
 
 # Illustrate folly effect: mean Vs sum
 if(Show.folly.eg=="YES")
@@ -2807,58 +2857,61 @@ if(Show.variability.cpue.eg=="YES")
 #      returns and 'year-Session-vessel-block10-gear' for daily logbooks), with catch of target
 #      and other species as separate columns, giving a 0 catch for column "target" if no catch
 
+DATA.list.LIVEWT.c=vector('list',length(SP.list)) 
+names(DATA.list.LIVEWT.c)=names(SP.list)
+DATA.list.LIVEWT.c.daily=DATA.list.LIVEWT.c
+Prop.Catch=rep(NA,length(SP.list))
+names(Prop.Catch)=names(SP.list)
+Prop.Catch.daily=Prop.Catch
 
   #monthly  
-DATA.list.LIVEWT.c=Prop.Catch=SP.list
 These.efforts=c("FINYEAR","Same.return","Km.Gillnet.Days.inv",
                 "Km.Gillnet.Hours.c","Km.Gillnet.Days.c","Km.Gillnet.Hours_shot.c",
                 "zone","MONTH","BLOCKX","mesh","SHOTS.c","BDAYS.c","HOURS.c","NETLEN.c")
-for ( i in 1:N.species)
+for(i in nnn)
 {
-  dummy=Effort.data.fun(subset(Species.list[[i]],Reporter=="good"),SP.list[[i]],"LIVEWT.c")  
-  DATA.list.LIVEWT.c[[i]]=dummy$dat   
-  Prop.Catch[i]=dummy$prop.with.catch   
+  if(!is.null(Species.list[[i]]))
+  {
+    dummy=Effort.data.fun(subset(Species.list[[i]],Reporter=="good"),SP.list[[i]],"LIVEWT.c")  
+    DATA.list.LIVEWT.c[[i]]=dummy$dat   
+    Prop.Catch[i]=dummy$prop.with.catch 
+  }
 }
 
 
   #daily 
-DATA.list.LIVEWT.c.daily=Prop.Catch.daily=SP.list
 These.efforts.daily=c("FINYEAR","date","TSNo","Km.Gillnet.Days.inv",
                       "Km.Gillnet.Hours.c","Km.Gillnet.Days.c","Km.Gillnet.Hours_shot.c",
                       "zone","MONTH","BLOCKX","block10","VESSEL","mesh",
                       "Same.return.SNo","nlines.c","shots.c","netlen.c","hours.c")
-for ( i in 1:N.species)
+for(i in nnn)
 {
-  # #set Reporter to Bad if average weight is outside species range
-  # #note: some records have dodgy nfish so class as 'bad reporters'
-  # Species.list.daily[[i]]$Avrg.w=Species.list.daily[[i]]$LIVEWT.c/Species.list.daily[[i]]$nfish
-  # Species.list.daily[[i]]$Reporter=with(Species.list.daily[[i]],
-  #                                       ifelse((Avrg.w>Max.weight[i]| Avrg.w<Min.weight[i]) & SPECIES==SPvec[i],"bad",Reporter))                    
-  dummy=Effort.data.fun.daily(subset(Species.list.daily[[i]],Reporter=="good"),SP.list[[i]],
-                              ktch="LIVEWT.c",Aggregtn="SNo")
-  DATA.list.LIVEWT.c.daily[[i]]=dummy$dat
-  Prop.Catch.daily[i]=dummy$prop.with.catch   
+  if(!is.null(Species.list.daily[[i]]))
+  {
+     # #set Reporter to Bad if average weight is outside species range
+    # #note: some records have dodgy nfish so class as 'bad reporters'
+    # Species.list.daily[[i]]$Avrg.w=Species.list.daily[[i]]$LIVEWT.c/Species.list.daily[[i]]$nfish
+    # Species.list.daily[[i]]$Reporter=with(Species.list.daily[[i]],
+    #                                       ifelse((Avrg.w>Max.weight[i]| Avrg.w<Min.weight[i]) & SPECIES==SPvec[i],"bad",Reporter))                    
+    dummy=Effort.data.fun.daily(subset(Species.list.daily[[i]],Reporter=="good"),SP.list[[i]],
+                                ktch="LIVEWT.c",Aggregtn="SNo")
+    DATA.list.LIVEWT.c.daily[[i]]=dummy$dat
+    Prop.Catch.daily[i]=dummy$prop.with.catch   
+  }
 }
+
+#Export proportions with Catch
 write.csv(Prop.Catch,paste(hndl,"Prop.records.with.catch.monthly.csv",sep=""),row.names=T)
 write.csv(Prop.Catch.daily,paste(hndl,"Prop.records.with.catch.daily.csv",sep=""),row.names=T)
 
 
-#ACA
 
-
-#Remove NA effort
-for ( i in 1:N.species)
-{
-  DATA.list.LIVEWT.c[[i]]=subset(DATA.list.LIVEWT.c[[i]],!is.na(Km.Gillnet.Days.c))
-  DATA.list.LIVEWT.c.daily[[i]]=subset(DATA.list.LIVEWT.c.daily[[i]],!is.na(Km.Gillnet.Days.c))
-}
-
-
-
+#Define target species index
+Tar.sp=match(TARGETS,SP.list)
 
 #Explore cpue by block
 HnDl="C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/Boxplots_year_blocks/"
-for(i in 1:N.species)
+for(i in Tar.sp)
 {
   pdf(paste(HnDl,names(DATA.list.LIVEWT.c)[i],"_daily",".pdf",sep=""))
   fn.box.plt.year(d=subset(DATA.list.LIVEWT.c.daily[[i]],Catch.Target>0))
@@ -2871,26 +2924,14 @@ for(i in 1:N.species)
 
 
 #4.12 Drop first years of sandbar data because vessels don't meet selection criteria and no positive catch
-DD=subset(DATA.list.LIVEWT.c$sandbar,BLOCKX%in%as.numeric(BLKS.used$`Sandbar shark`))      
-DD=subset(DD,VESSEL%in%VES.used$`Sandbar shark`)
+DD=subset(DATA.list.LIVEWT.c$"Sandbar Shark",BLOCKX%in%as.numeric(BLKS.used$"Sandbar Shark"))      
+DD=subset(DD,VESSEL%in%VES.used$"Sandbar Shark")
 San.Yrs=fn.sel.yrs.used(DD,ThrShld.n.vess=5)
 rm(DD)
-DATA.list.LIVEWT.c$sandbar=subset(DATA.list.LIVEWT.c$sandbar,FINYEAR%in%San.Yrs)
+DATA.list.LIVEWT.c$"Sandbar Shark"=subset(DATA.list.LIVEWT.c$"Sandbar Shark",FINYEAR%in%San.Yrs)
 
 
-
-#4.13 Corroborate effective area  
-if(Model.run=="First")for(s in 1:N.species)
-{
-  #Daily
-  fn.check.eff.area(ALL=DATA.list.LIVEWT.c.daily,WHAT="TSNo",
-                    Effrt='km.gillnet.days.c',
-                    QL_prop_ktch=.9,
-                    spname=casefold(unlist(strsplit(SPECIES.vec[s], " "))[1]),
-                    TYPE='Daily')
-}
-
-
+#ACA
 #4.14  Identify targeting behaviour   
 #not applicable given that daily records are aggregated by trip given the nature of data reporting
 # look at script in 2.CPUE standardisations_delta.R
