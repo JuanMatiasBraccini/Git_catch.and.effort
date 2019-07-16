@@ -97,6 +97,9 @@ library(fitdistrplus)  #select distribution
 library(coefplot)  #visualise coefficients
 library(emmeans)  #for model predictions
 library(doParallel)
+library(tibble)
+library(cluster)
+library(factoextra) #for plotting
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)   
 
@@ -720,6 +723,54 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
   }
 }
 
+#clustering analysis
+fn.cluster=function(data,TarSp,target,varS,scaling,check.clustrbl,n.clus)
+{
+  a=data[[TarSp]]%>% column_to_rownames(var = "Same.return.SNo")%>%
+    select(varS[-match(target,varS)])
+  if(scaling=="YES")a=scale(a)
+  
+  #step 1. Define if data are clusterable
+  if(check.clustrbl=="YES")
+  {
+    #random sample to reduce computation time
+    ran.samp=sample(1:nrow(a),15000,replace=F)
+    
+    res <- get_clust_tendency(a[ran.samp,], n = nrow(a[ran.samp,])-1, graph = FALSE)
+    if(1-res$hopkins_stat>0.75) clusterable="YES"else  clusterable="NO"
+    print(clusterable)
+  }
+  
+  #step 2. Determine optimum number of clusters
+  if(check.clustrbl=="YES")
+  {
+    fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_optimal_numbers_",target,sep=""),2400,2400)
+    b=fviz_nbclust(a, clara, method = "silhouette",print.summary=T)
+    b+theme_classic()
+    dev.off()
+    num.clus=as.numeric(as.character(b$data$clusters[match(max(b$data$y),b$data$y)]))
+  }
+  
+  #step 3. fit clara
+  if(!exists("num.clus")) num.clus=n.clus
+  clara.res <- clara(a, num.clus, samples = 50, pamLike = TRUE)
+  
+  #step 4. visualize CLARA clusters in data scattergram
+  fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_cluster_",target,sep=""),2400,2400)
+  fviz_cluster(clara.res, 
+               palette = rainbow(num.clus), # color palette
+               ellipse.type = "t", # Concentration ellipse
+               geom = "point", pointsize = 1,
+               ggtheme = theme_classic())
+  dev.off()
+  
+  #step 5. add cluster to input data
+  dd.clara <- cbind(as.data.frame(a), cluster_clara = clara.res$cluster)
+  dd.clara=dd.clara%>%rownames_to_column(var = "Same.return.SNo")%>%
+    select(cluster_clara,Same.return.SNo)%>%remove_rownames()
+  return(dd.clara)
+}
+
 #functions for reshaping data
   #monthly data
 Effort.data.fun=function(DATA,target,ktch)
@@ -835,7 +886,7 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
     DATA$Catch.Groper=with(DATA,ifelse(SPECIES%in%c(384002),DATA[,ID],0))
     DATA$Catch.Snapper=with(DATA,ifelse(SPECIES%in%c(353001),DATA[,ID],0))
     DATA$Catch.Blue_mor=with(DATA,ifelse(SPECIES%in%c(377004),DATA[,ID],0))
-    DATA$Catch.Dhufish=with(DATA,ifelse(SPECIES%in%c(320000),DATA[,ID],0))
+    DATA$Catch.Total=with(DATA,ifelse(SPECIES%in%c(5001:24900,25000:31000,188000:599001),DATA[,ID],0))
     
     #reshape catch data
     if(Use.Date=="NO")
@@ -851,7 +902,7 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
                     Catch.Groper=sum(Catch.Groper,na.rm=T),
                     Catch.Snapper=sum(Catch.Snapper,na.rm=T),
                     Catch.Blue_mor=sum(Catch.Blue_mor,na.rm=T),
-                    Catch.Dhufish=sum(Catch.Dhufish,na.rm=T))
+                    Catch.Total=sum(Catch.Total,na.rm=T))
         Enviro=DATA%>%group_by(MONTH,FINYEAR,BLOCKX)%>%
           summarise(Temperature=mean(Temperature),
                     Temp.res=mean(Temp.res),
@@ -2931,10 +2982,39 @@ rm(DD)
 DATA.list.LIVEWT.c$"Sandbar Shark"=subset(DATA.list.LIVEWT.c$"Sandbar Shark",FINYEAR%in%San.Yrs)
 
 
-#ACA
-#4.14  Identify targeting behaviour   
-#not applicable given that daily records are aggregated by trip given the nature of data reporting
-# look at script in 2.CPUE standardisations_delta.R
+#4.14  Identify targeting behaviour   (more in 2.CPUE standardisations_delta.R)
+#note: CLARA analysis as per Campbell et al 2017 on nfish as this has data at Sesssion level
+#       The CLARA (Clustering Large Applications) algorithm is an extension to the 
+#       PAM (Partitioning Around Medoids) clustering method for large data sets. It intended to 
+#       reduce the computation time in the case of large data set.
+Clus.vars=c("Catch.Target","Catch.Gummy","Catch.Whiskery","Catch.Dusky","Catch.Sandbar",
+            "Catch.Groper","Catch.Snapper","Catch.Blue_mor")
+Tar.clus.vars=c("Catch.Whiskery","Catch.Gummy","Catch.Dusky","Catch.Sandbar")
+n.clus=c(2,2,2,2)  #from initial optimum number
+HndL.Species_targeting="C:/Matias/Analyses/Catch and effort/Outputs/Paper/Species_targeting/"
+scalem="YES"
+
+Store.cluster=vector('list',length(SP.list)) 
+names(Store.cluster)=names(SP.list)
+for(i in 1:length(Tar.sp))
+{
+  Store.cluster[[Tar.sp[i]]]=fn.cluster(data=DATA.list.LIVEWT.c.daily,TarSp=Tar.sp[i],target=Tar.clus.vars[i],
+                                        varS=Clus.vars,scaling=scalem,check.clustrbl="NO",n.clus=n.clus[i])
+}
+
+  #add cluster to original data for use in standardisations
+for(i in Tar.sp)
+{
+  DATA.list.LIVEWT.c.daily[[i]]=left_join(DATA.list.LIVEWT.c.daily[[i]],Store.cluster[[i]],by=c("Same.return.SNo"))
+}
+rm(Store.cluster)
+
+#check cpue by cluster group
+fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_cluster.boxplot",sep=""),2400,2400)
+par(mfcol=c(2,2),mar=c(1,3,3,1),oma=c(2,1,.1,.5),las=1,mgp=c(2,.6,0))
+for(i in Tar.sp) boxplot((Catch.Target/Km.Gillnet.Hours.c)~cluster_clara,DATA.list.LIVEWT.c.daily[[i]],
+                         main=names(DATA.list.LIVEWT.c.daily)[i],ylab="cpue")
+dev.off()
 
 
 #4.15 Table of sensitivity scenarios       
@@ -2959,54 +3039,58 @@ fn.word.table(WD=getwd(),TBL=Tab.Sensi,Doc.nm="Sensitivity tests",caption=NA,par
 #note: As done by Rory, the Foly (ie Effective) index has all records (good  & bad reporters) from all blocks 
 #       and vessels within effective area without 0 catches
 
-#monthly  
-DATA.list.LIVEWT.c_all_reporters=DATA.list.LIVEWT.c
-for ( i in 1:N.species)
+DATA.list.LIVEWT.c_all_reporters=vector('list',length(SP.list)) 
+names(DATA.list.LIVEWT.c_all_reporters)=names(SP.list)
+DATA.list.LIVEWT.c.daily_all_reporters=List.foly.nom=DATA.list.LIVEWT.c_all_reporters
+
+    #monthly  
+for ( i in Tar.sp)
 {
   #create data sets 
-  dummy=Effort.data.fun(Species.list[[i]],TARGETS[[i]],"LIVEWT.c")  
+  dummy=Effort.data.fun(Species.list[[i]],SP.list[[i]],"LIVEWT.c")  
   DATA.list.LIVEWT.c_all_reporters[[i]]=dummy$dat  
 }
 
-#daily 
-DATA.list.LIVEWT.c.daily_all_reporters=DATA.list.LIVEWT.c.daily
-for ( i in 1:N.species)
+    #daily 
+for ( i in Tar.sp)
 {
   #create data sets 
-  dummy=Effort.data.fun.daily(Species.list.daily[[i]],TARGETS[[i]],"LIVEWT.c",Aggregtn="TSNo")
+  dummy=Effort.data.fun.daily(Species.list.daily[[i]],SP.list[[i]],"LIVEWT.c",Aggregtn="SNo")
   DATA.list.LIVEWT.c.daily_all_reporters[[i]]=dummy$dat
 }
 
-Foly.whis=export.foly(DATA.list.LIVEWT.c_all_reporters$whiskery,DATA.list.LIVEWT.c.daily_all_reporters$whiskery)
-Foly.gum=export.foly(DATA.list.LIVEWT.c_all_reporters$gummy,DATA.list.LIVEWT.c.daily_all_reporters$gummy)
-Foly.dus=export.foly(DATA.list.LIVEWT.c_all_reporters$dusky,DATA.list.LIVEWT.c.daily_all_reporters$dusky)
-Foly.san=export.foly(DATA.list.LIVEWT.c_all_reporters$sandbar,DATA.list.LIVEWT.c.daily_all_reporters$sandbar)
-List.foly.nom=list(whis=list(Foly=Foly.whis),gum=list(Foly=Foly.gum),dus=list(Foly=Foly.dus),san=list(Foly=Foly.san))
+#calculate foly
+for ( i in Tar.sp)
+{
+  List.foly.nom[[i]]=export.foly(DATA.list.LIVEWT.c_all_reporters[[i]],DATA.list.LIVEWT.c.daily_all_reporters[[i]])
+}
 
-
+#ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for names(SP.list)
 #-- Nominal 
 #note: Ratio = mean(catch)/mean(effort)
 #      Mean = mean(cpue)
 #     LnMean= exp(mean(log(cpue))+bias corr)
 #     DLnMean = exp(log(prop pos)+exp(mean(log(cpue))+bias corr)
 
-Store_nom_cpues_monthly=Store_nom_cpues_daily=DATA.list.LIVEWT.c.daily
+Store_nom_cpues_monthly=vector('list',length(SP.list)) 
+names(Store_nom_cpues_monthly)=names(SP.list)
+Store_nom_cpues_daily=Store_nom_cpues_monthly
 Hnd.ains="C:/Matias/Analyses/Catch and effort/Outputs/Paper/Ainsline_different_cpues/"
 
-for(s in 1:N.species)
+for(s in Tar.sp)
 {
   #Monthly
   Store_nom_cpues_monthly[[s]]=fn.ainslie(dat=DATA.list.LIVEWT.c[[s]],Ktch.targt='catch.target',
                    Effrt=c('km.gillnet.days.c','km.gillnet.hours.c'),
                   explr="NO",QL_prop_ktch=QL_expl_ktch_prop,Prop.Malcolm=PRP.MLCLM,
-                 cpue.units = c("kg/km gillnet day","kg/km gillnet hour"),spname=SPECIES.vec[s],
+                 cpue.units = c("kg/km gillnet day","kg/km gillnet hour"),spname=names(SP.list)[s],
                  BLks=as.numeric(BLKS.used[[s]]),VesL=VES.used[[s]],Type="_monthly_")
   
   #Daily weight
   Store_nom_cpues_daily[[s]]=fn.ainslie(dat=DATA.list.LIVEWT.c.daily[[s]],Ktch.targt='catch.target',
                 Effrt=c('km.gillnet.days.c','km.gillnet.hours.c'),
                explr="NO",QL_prop_ktch=QL_expl_ktch_prop,Prop.Malcolm=PRP.MLCLM,
-               cpue.units = c("kg/km gillnet day","kg/km gillnet hour"),spname=SPECIES.vec[s],
+               cpue.units = c("kg/km gillnet day","kg/km gillnet hour"),spname=names(SP.list)[s],
               BLks=as.numeric(BLKS.used.daily[[s]]),VesL=VES.used.daily[[s]],Type="_daily_")
 }
 
@@ -4500,9 +4584,11 @@ Effort.data.fun=function(DATA,target,ktch)
   DATA$Catch.Dusky=with(DATA,ifelse(SPECIES%in%c(18003,18001),DATA[,ID],0))
   DATA$Catch.Sandbar=with(DATA,ifelse(SPECIES==18007,DATA[,ID],0))
   DATA$Catch.Scalefish=with(DATA,ifelse(SPECIES%in%188000:599001,DATA[,ID],0))
+  DATA$Catch.Total=with(DATA,ifelse(SPECIES%in%c(5001:24900,25000:31000,188000:599001),DATA[,ID],0))
   
   #reshape catch data
-  TABLE=aggregate(cbind(Catch.Target,Catch.Gummy,Catch.Whiskery,Catch.Scalefish,Catch.Dusky,Catch.Sandbar)~MONTH+
+  TABLE=aggregate(cbind(Catch.Target,Catch.Gummy,Catch.Whiskery,Catch.Scalefish,
+                        Catch.Dusky,Catch.Sandbar,Catch.Total)~MONTH+
                     FINYEAR+BLOCKX+VESSEL+Same.return+LAT+LONG+YEAR.c,data=DATA,sum,na.rm=T)
   TABLE=TABLE[order(TABLE$FINYEAR,TABLE$MONTH,TABLE$BLOCKX),]
   
