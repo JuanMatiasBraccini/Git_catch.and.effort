@@ -10513,8 +10513,41 @@ if(do.Parks.Australia=="YES")
     summarise(Unique_TSNo=n_distinct(TSNo))%>%
     data.frame
   
+  #Who's been using hooks?
+  TAB3_trips=aa%>%group_by(METHOD,FINYEAR,VESSEL)%>%
+    summarise(Trips=n_distinct(TSNo))%>%
+    spread(METHOD, Trips)%>%
+    replace(is.na(.), "")%>%
+    data.frame
+
+  
+  bb=aa%>%filter(METHOD=="LL")%>%
+          distinct(Same.return.SNo,.keep_all =T) %>%
+          select(VESSEL,BoatName,MastersName,port,block10,FINYEAR,MONTH,bioregion,Lat,Long,depthMax,
+                 NilCatch,species,nfish,livewt,
+                 HookSize,HookType,HOOKS,HOURS,nlines,SHOTS)
+  
+  TAB4=bb%>%group_by(VESSEL,BoatName,MastersName,port)%>%
+            summarise(mean.hook.n=mean(HOOKS,na.rm=T),
+                      mean.hook.size=mean(HookSize,na.rm=T),
+                      mean.hook.hours=mean(HOURS,na.rm=T))%>%
+              replace(is.na(.), "")%>%
+            data.frame
+  library(gridExtra)
+  library(grid)
+  mytheme <- gridExtra::ttheme_default(
+    base_size = 10,
+    core = list(padding=unit(c(1, 1), "mm"),fg_params=list(cex = .65)),
+    colhead = list(fg_params=list(cex = .75)),
+    rowhead = list(fg_params=list(cex = .75)))
   
   pdf(file=paste(hndl,"/Parks Australia/Parks_Australia_2018-19.effort_catch.pdf",sep=""))
+  
+  grid.draw(gridExtra::tableGrob(TAB3_trips, theme = mytheme,rows = NULL))
+  grid.newpage()
+  
+  grid.draw(gridExtra::tableGrob(TAB4, theme = mytheme,rows = NULL))
+  
   #effort
   b=aa %>% filter(METHOD=="GN") %>%
     mutate(Km.Gillnet.Hours=HOURS*NETLEN/1000)%>%

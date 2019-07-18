@@ -1392,7 +1392,10 @@ Get.Mns=function(d,grp,Vars,LGND,add.arrow)
       
     }
     if(!Vars[v]%in%c("HOURS.c","SHOTS.c")){
-      B= d[,match(c(grp,Vars[v]),names(d))]%>%group_by(FINYEAR) %>% summarise_all(funs(mean=mean,sd=sd,n=length))%>%
+      B= d[,match(c(grp,Vars[v]),names(d))] %>%
+        na.omit()%>%
+        group_by(FINYEAR) %>%
+        summarise_all(funs(mean=mean,sd=sd,n=length)) %>%
         mutate(lowCL = mean - 1.96*sd/sqrt(n),
                uppCL = mean + 1.96*sd/sqrt(n)) %>%
         as.data.frame
@@ -3067,7 +3070,7 @@ for ( i in Tar.sp)
   List.foly.nom[[i]]=export.foly(DATA.list.LIVEWT.c_all_reporters[[i]],DATA.list.LIVEWT.c.daily_all_reporters[[i]])
 }
 
-#ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for names(SP.list)
+
 #-- Nominal 
 #note: Ratio = mean(catch)/mean(effort)
 #      Mean = mean(cpue)
@@ -3078,7 +3081,6 @@ Store_nom_cpues_monthly=vector('list',length(SP.list))
 names(Store_nom_cpues_monthly)=names(SP.list)
 Store_nom_cpues_daily=Store_nom_cpues_monthly
 Hnd.ains="C:/Matias/Analyses/Catch and effort/Outputs/Paper/Ainsline_different_cpues/"
-
 for(s in Tar.sp)
 {
   #Monthly
@@ -3096,7 +3098,6 @@ for(s in Tar.sp)
               BLks=as.numeric(BLKS.used.daily[[s]]),VesL=VES.used.daily[[s]],Type="_daily_")
 }
 
-
 #4.17 Evaluate balance of data subset based on QL  
 #note: remove vessels with less than Min.Vess.yr (monthly) and Min.Vess.yr.d (daily)
 #      for those vessels, keep blocks with more than Min.Vess.yr / Min.Vess.yr.d
@@ -3109,30 +3110,29 @@ if(!exists('BLKS.used.indi'))
 }
 hndl.kept="C:/Matias/Analyses/Catch and effort/Outputs/Kept_blocks_vessels/"
 HndL=paste(hndl.kept,'QL_balanced_design/',sep="")
-for(s in 1:N.species)
+for(s in Tar.sp)
 {
   #monthly
-  a=fn.check.balanced(d=Store_nom_cpues_monthly[[s]]$QL_dat,SP=SPECIES.vec[s],
+  a=fn.check.balanced(d=Store_nom_cpues_monthly[[s]]$QL_dat,SP=names(SP.list)[s],
                       what="monthly",MN.YR=Min.Vess.yr,pLot=T)
   BLKS.used[[s]]=a$this.blks
   VES.used[[s]]=a$this.ves
-  write.csv(BLKS.used[[s]],paste(hndl.kept,"blocks_used_",SPECIES.vec[s],"_monthly.csv",sep=""))
+  write.csv(BLKS.used[[s]],paste(hndl.kept,"blocks_used_",names(SP.list)[s],"_monthly.csv",sep=""))
   
   #daily
-  a=fn.check.balanced(d=Store_nom_cpues_daily[[s]]$QL_dat,SP=SPECIES.vec[s],
+  a=fn.check.balanced(d=Store_nom_cpues_daily[[s]]$QL_dat,SP=names(SP.list)[s],
                       what="daily",MN.YR=Min.Vess.yr.d,pLot=T)
   BLKS.used.daily[[s]]=a$this.blks
   VES.used.daily[[s]]=a$this.ves
-  write.csv(BLKS.used.daily[[s]],paste(hndl.kept,"blocks_used_",SPECIES.vec[s],"_daily.csv",sep=""))
+  write.csv(BLKS.used.daily[[s]],paste(hndl.kept,"blocks_used_",names(SP.list)[s],"_daily.csv",sep=""))
 }
 
 #show blocks kept
 CEX=.85
 SRt=45
-  
 fn.fig(paste(hndl.kept,"block_used_map",sep=""),2400, 2400)    
 par(mfrow=c(4,2),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
-for(s in 1:N.species)
+for(s in Tar.sp)
 {
   #Monthly
   fn.show.blk(dat=BLKS.used[[s]],CEX=CEX,SRt=SRt)
@@ -3141,7 +3141,7 @@ for(s in 1:N.species)
   #Daily
   fn.show.blk(dat=BLKS.used.daily[[s]],CEX=CEX,SRt=SRt)
   if(s==1)mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
-  legend("topright",SPECIES.vec[s],bty='n',cex=1.5)
+  legend("topright",names(SP.list)[s],bty='n',cex=1.5)
 }
 mtext("Longitude",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
 mtext("Latitude",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
@@ -3154,7 +3154,7 @@ setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper")
 #Show proportion of selected records by year
 fn.fig("Appendix4_proportion_records_selected",2000, 2400)    
 par(mfrow=c(4,2),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
-for(s in 1:N.species)
+for(s in Tar.sp)
 {
   #Monthly
   with(subset(Store_nom_cpues_monthly[[s]]$Prop.selected,target==1),plot(yr,freq,ylim=c(0,1),
@@ -3165,7 +3165,7 @@ for(s in 1:N.species)
   with(subset(Store_nom_cpues_daily[[s]]$Prop.selected,target==1),plot(yr,freq,ylim=c(0,1),
               las=1,pch=19,cex=1.25,ylab="",xlab=""))
   if(s==1)mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
-  legend("topright",SPECIES.vec[s],bty='n',cex=1.5)
+  legend("topright",names(SP.list)[s],bty='n',cex=1.5)
 }
 mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
 mtext("Proportion of records selected",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
@@ -3177,7 +3177,7 @@ if(Model.run=="First")
 {
   fn.fig("Appendix5_Gummy_km.gn.d_VS_km.gn.h",2400,2400)
   par(mfrow=c(4,2),mar=c(1,3,2,1),oma=c(2,.5,.5,1.75),mgp=c(1.5,.5,0),cex.lab=1.5)
-  Get.Mns(d=DATA.list.LIVEWT.c$gummy,grp="FINYEAR",
+  Get.Mns(d=DATA.list.LIVEWT.c$"Gummy Shark",grp="FINYEAR",
           Vars=c("HOURS.c","SHOTS.c",'Km.Gillnet.Days.c','Km.Gillnet.Hours.c','Km.Gillnet.Hours_shot.c','Catch.Target'),
           LGND=c("Hours fished per day","Number of shots",
                  'km gillnet days','km gillnet hours','km gillnet hours shot','Catch (kg)'),
@@ -3190,7 +3190,7 @@ if(Model.run=="First")
 Exprt_Ainslie="NO"
 if(Exprt_Ainslie=="YES")
 {
-  for(s in 1:N.species)
+  for(s in Tar.sp)
   {
     write.csv(DATA.list.LIVEWT.c[[s]],paste("For_Ainslie/",names(DATA.list.LIVEWT.c[s]),"_monthly.csv",sep=""),row.names=F)
     write.csv(DATA.list.LIVEWT.c.daily[[s]],paste("For_Ainslie/",names(DATA.list.LIVEWT.c.daily[s]),"_daily.csv",sep=""),row.names=F)
@@ -3198,12 +3198,11 @@ if(Exprt_Ainslie=="YES")
 }
 
 
-
 #4.20 Output data tables  
 #Output table with number of records available in effective area and numbers used in standardisation
-TABle=vector('list',N.species)
-names(TABle)=SPECIES.vec
-for(s in 1:N.species)
+TABle=vector('list',length(SP.list))
+names(TABle)=names(SP.list)
+for(s in Tar.sp)
 {
   
   #total records
@@ -3252,6 +3251,7 @@ for(s in 1:N.species)
   
 }
 
+TABle=TABle[lengths(TABle) != 0]
 Table.nsamp <- Reduce(function(x, y) merge(x, y, all=T,by=c("Year", "Record")), TABle, accumulate=F)
 Table.nsamp=Table.nsamp[,c("Year", "Record",sort(names(Table.nsamp[3:ncol(Table.nsamp)])))]
 Export.tbl(WD=getwd(),Tbl=Table.nsamp,Doc.nm="Sample_sizes",caption=NA,paragph=NA,
@@ -3267,14 +3267,18 @@ Export.tbl(WD=getwd(),Tbl=Table.nsamp,Doc.nm="Sample_sizes",caption=NA,paragph=N
 #4.21 Check outliers in catch and effort for removing nonsense values   
 #note: max monthly ktch, effort (~ 40 tonnes, ~ 5800 km gn h (@ 30 days X 24 h X 8000 m), respectively) 
 #      max trip (daily kg) ktch, effort (~ 15 tonnes, ~ 1900 km gn h (@ 10 days X 24 h X 8000 m), respectively) 
-pdf("C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/Check.outliers.pdf") 
-for(i in 1:N.species)
+if(Model.run=="First")
 {
-  check.cpue(Store_nom_cpues_monthly[[i]]$QL_dat,paste("monthly",names(DATA.list.LIVEWT.c)[i]),4)
-  check.cpue(Store_nom_cpues_daily[[i]]$QL_dat,paste("daily",names(DATA.list.LIVEWT.c)[i]),4)  
+  pdf("C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/Check.outliers.pdf") 
+  for(i in Tar.sp)
+  {
+    check.cpue(Store_nom_cpues_monthly[[i]]$QL_dat,paste("monthly",names(DATA.list.LIVEWT.c)[i]),4)
+    check.cpue(Store_nom_cpues_daily[[i]]$QL_dat,paste("daily",names(DATA.list.LIVEWT.c)[i]),4)  
+  }
+  dev.off()
 }
-dev.off()
 
+#ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for names(SP.list)
 
 #4.22 Construct index of abundance     
 ZONES=c("West","Zone1","Zone2")
