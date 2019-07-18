@@ -2517,16 +2517,18 @@ SST=SST%>%filter(Lat%in%Lat.rng & Long%in%Long.rng)%>%
 Data.monthly.GN=Data.monthly.GN %>%
                   left_join(SST,by=c("YEAR.c"="year","MONTH"="month","LONG"="Long","LAT"="Lat"))%>% 
                   arrange(YEAR.c,MONTH,LAT,LONG)%>%
-                  mutate(Temperature=ifelse(is.na(Temperature),na.approx(Temperature),Temperature),
-                         Temp.res=Temperature/mean(Temperature,na.rm=T))
+                  mutate(Temperature=ifelse(is.na(Temperature),na.approx(Temperature),Temperature))%>%
+                  group_by(MONTH,YEAR.c)%>%
+                  mutate(Temp.res=Temperature/mean(Temperature,na.rm=T))
 
-#Monthly
+#Daily
 Data.daily.GN=Data.daily.GN %>%
                   mutate(LAT.round=-floor(abs(LAT)),LONG.round=floor(LONG)) %>%
                   left_join(SST,by=c("YEAR.c"="year","MONTH"="month","LONG.round"="Long","LAT.round"="Lat"))%>% 
                   arrange(YEAR.c,MONTH,LAT.round,LONG.round)%>%
-                  mutate(Temperature=ifelse(is.na(Temperature),na.approx(Temperature),Temperature),
-                         Temp.res=Temperature/mean(Temperature,na.rm=T))%>%
+                  mutate(Temperature=ifelse(is.na(Temperature),na.approx(Temperature),Temperature))%>%
+                  group_by(MONTH,YEAR.c)%>%
+                  mutate(Temp.res=Temperature/mean(Temperature,na.rm=T))%>%
                   select(-c(LONG.round,LAT.round))
   
 
