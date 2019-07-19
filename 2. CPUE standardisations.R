@@ -3517,7 +3517,7 @@ if(Def.mod.Str=="YES")     #takes 40 minutes
   
   #4.22.3.3. show selection outcomes
   hndl.modl.sel="C:/Matias/Analyses/Catch and effort/Outputs/Model Selection/"
-  for(s in 1:Tar.sp)
+  for(s in Tar.sp)
   {
     pdf(paste(hndl.modl.sel,names(SP.list)[s],"_monthly.pdf",sep=""))
     fn.show.mod.sel(MODS=Store.Best.Model[[s]]$res,outs=length(Store.Best.Model[[s]]$res@objects))
