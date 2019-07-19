@@ -331,6 +331,8 @@ do.colors="NO"  #grey scale
 if(do.colors=="YES") what.color="cols"
 if(do.colors=="NO") what.color="black"
 
+#Control if doing exploratory analyses
+do.Exploratory="NO"
 
 #Control of showing relative cpue
 Show.relative.index="YES"
@@ -723,6 +725,70 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
   }
 }
 
+#function for converting continuous var to factor
+cfac=function(x,breaks=NULL)  
+{
+  if(is.null(breaks)) breaks=unique(quantile(x,probs = seq(0, 1, 0.1)))
+  x=cut(x,breaks,include.lowest=T,right=F)
+  levels(x)=paste(breaks[-length(breaks)],ifelse(diff(breaks)>1,
+           c(paste('-',breaks[-c(1,length(breaks))]-1,sep=''),'+'),''),sep='')
+  return(x)
+}
+
+clog=function(x) log(x+0.05)   #function for applying log
+
+#function for correlations
+panel.cor <- function(x, y, digits=2, prefix="", cex.cor, ...)   
+{
+  usr <- par("usr"); on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  r <- abs(cor(x, y))
+  txt <- format(c(r, 0.123456789), digits=digits)[1]
+  txt <- paste(prefix, txt, sep="")
+  if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+
+#predictors effect
+fn.pred.effect <- function(DATA,PREDS) 
+{
+  colnames(DATA)=tolower(colnames(DATA))
+  PREDS=PREDS[which(PREDS%in%colnames(DATA))]
+  DATA=DATA %>% mutate_each_(funs(factor(.)),PREDS[which(PREDS%in%Categorical)])%>%
+    mutate(cpue=catch.target/km.gillnet.hours.c)
+  
+  par(mfcol=c(3,2),mai=c(.6,.65,.3,.1),oma=c(.2,.2,.1,.1))
+  hist(log(DATA$cpue),main="hist log(cpue)",xlab="log(cpue)",ylab="Count")
+  
+  boxcox(cpue+0.00001 ~ log(year.c), data = DATA,lambda = seq(0, 1, length = 10))
+  legend("topright","Box Cox (should be small)",bty='n')
+  
+  # Cook distance to see outliers or overdisperse data (if distance >1)
+  M1.1=glm(log(cpue+0.00001)~finyear,family=gaussian,data=DATA)
+  plot(M1.1,which=4)
+  legend("topright","outliers or overdispersion if distance >1",bty='n',cex=.85, text.col=2)
+  
+  plot(table(DATA$catch.target),type='h',xlab="Catch",ylab="Count",main="Catch zero inflation and right tail")
+  
+  #Outliers response var
+  boxplot(DATA$cpue~DATA$finyear,main="Outliers in response var?",ylab="cpue (kg/km.gn.day)")
+  
+  #boxplot of response var and predictors
+  smart.par(length(PREDS),c(2,2,2,.1),c(.1,.3,.1,.1),c(1.1,.35,0))
+  for(d in 1:length(PREDS))
+  {
+    a=DATA[,match(c("cpue",PREDS[d]),names(DATA))]
+    if(!is.factor(a[,2])) a[,2]=cfac(a[,2])
+    plot(clog(a[,1])~a[,2],main=PREDS[d],ylab="",xlab="")
+  }
+  mtext("log(cpue)",side=2,line=-1,las=3,outer=T)
+  
+  #Covariate correlations.
+  Covars=DATA%>%mutate(month=as.numeric(as.character(month)))%>%
+    select(month,PREDS[which(!PREDS%in%Categorical)])
+  pairs(Covars, lower.panel=panel.smooth, upper.panel=panel.cor)
+}
+
 #clustering analysis
 fn.cluster=function(data,TarSp,target,varS,scaling,check.clustrbl,n.clus)
 {
@@ -1080,7 +1146,7 @@ export.foly=function(DATA,DATA1)     #function for creating foly indices
   return(rbind(subset(foly,select=c(FINYEAR,cpue)),subset(foly_d,select=c(FINYEAR,cpue))))
 }
 
-#calculate 4 different nominal cpues
+#calculate 4 different nominal cpues and choose data based on qualification level (90% of years catch)
 fn.ainslie=function(dat,Ktch.targt,Effrt,explr,QL_prop_ktch,Prop.Malcolm,cpue.units,spname,BLks,VesL,Type)
 {
   names(dat) =  casefold(names(dat))
@@ -1539,19 +1605,22 @@ check.cpue=function(DATA,NAME,cl)   #function for checking cpue outliers
   legend("topright",paste("median=",round(CPUE.q[6],3),"       "),text.col=cl,cex=1.15,bty='n')
 }           
 
+fn.plt=function(a,y,TITL)
+{
+  plot(1:nrow(a),ylim=c(0,max(a,na.rm=T)),col="transparent",ann=F,axes=F)
+  CL=rainbow(ncol(a))
+  for(pp in 1:ncol(a)) lines(1:nrow(a),a[,pp],col=CL[pp],lwd=4)
+  axis(1,1:nrow(a),rownames(a))
+  nn=seq(0,max(a,na.rm=T),length.out=5)
+  axis(2,nn,round(nn))
+  mtext(y,2,3,las=3,cex=1.5)
+  legend("topright",colnames(a),text.col=CL,bty='n',title=TITL)
+}
+
 fn.expl.cede=function(d,PREDS,kg,Do.ggplts)    #function for exploratory analysis
 {
-  fn.plt=function(a,y,TITL)
-  {
-    plot(1:nrow(a),ylim=c(0,max(a,na.rm=T)),col="transparent",ann=F,axes=F)
-    CL=rainbow(ncol(a))
-    for(pp in 1:ncol(a)) lines(1:nrow(a),a[,pp],col=CL[pp],lwd=4)
-    axis(1,1:nrow(a),rownames(a))
-    nn=seq(0,max(a,na.rm=T),length.out=5)
-    axis(2,nn,round(nn))
-    mtext(y,2,3,las=3,cex=1.5)
-    legend("topright",colnames(a),text.col=CL,bty='n',title=TITL)
-  }
+  PREDS=PREDS[which(PREDS%in%colnames(d))]
+  
   Yrs=length(unique(d$year.c))
   div=1
   if(kg) div=1000  #in tonnes
@@ -1571,7 +1640,7 @@ fn.expl.cede=function(d,PREDS,kg,Do.ggplts)    #function for exploratory analysi
   grid.table(to)
   
   #depth bin selection
-  if(!is.na(match("DepCat",PREDS)))
+  if(!is.na(match("mean.depth",PREDS)))
   {
     par(mfcol=c(2,2),mar=c(2,2,2,.1))
     barplot(table(trunc(d$mean.depth/2) * 2),main="2 m bin")
@@ -1658,7 +1727,7 @@ fn.expl.cede=function(d,PREDS,kg,Do.ggplts)    #function for exploratory analysi
     ggplot(dd, aes(x = vessel, y = year.c)) +  geom_jitter()
     ggplot(dd, aes(x = year.c, y = cpue)) + geom_jitter(alpha = 0.6) + facet_wrap( ~ vessel) + coord_flip()
     ggplot(dd, aes(x = cpue, fill = vessel)) +geom_histogram(bins = 25)
-    #ggplot(dd, aes(x = month, y = cpue, color = cluster_clara)) +   geom_boxplot()
+    ggplot(dd, aes(x = month, y = cpue, color = cluster_clara)) +   geom_boxplot()
   }
   
 }
@@ -1685,18 +1754,19 @@ fn.show.mod.sel=function(MODS,outs)
 fn.modl.sel=function(Inter,RESPNS)   #function for model structure selection
 {
   PREDS[id.cov]=paste("LN",PREDS[id.cov],sep="")
-  
+  PREDS=PREDS[-match(always,PREDS)]
   Pos.mod=2^length(PREDS)
   if(RESPNS=="LNcpue")Formula=formula(paste("LNcpue",paste(PREDS,collapse="+"),sep="~"))
-  
   if(RESPNS=="catch")Formula=formula(paste(Response,paste(paste(PREDS,collapse="+"),
-                                                          paste("offset(","LN",efrt,")",sep=""),sep="+"),sep="~"))
+                              paste("offset(","LN",efrt,")",sep=""),sep="+"),sep="~"))
   
   Level=ifelse(Inter=="MainTerm",1,ifelse(Inter=="2way",2,"3way"))
   MeThod="h"
   
-  res <- glmulti(Formula,data=d, level=Level,method=MeThod, fitfunction=fitFun,
-                 crit="aicc", confsetsize=Pos.mod,plotty = F, report = T)
+  res <- glmulti(Formula,data=d,level=Level,method=MeThod,fitfunction=fitFun,
+                 always=paste('+',paste(always,collapse="+"),sep=""),
+                 crit="aicc",confsetsize=Pos.mod,plotty=F,report=T)
+  
   return(list(res=res,BEST=res@formulas[[1]]))
 }
 
@@ -2965,19 +3035,6 @@ write.csv(Prop.Catch.daily,paste(hndl,"Prop.records.with.catch.daily.csv",sep=""
 #Define target species index
 Tar.sp=match(TARGETS,SP.list)
 
-#Explore cpue by block
-HnDl="C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/Boxplots_year_blocks/"
-for(i in Tar.sp)
-{
-  pdf(paste(HnDl,names(DATA.list.LIVEWT.c)[i],"_daily",".pdf",sep=""))
-  fn.box.plt.year(d=subset(DATA.list.LIVEWT.c.daily[[i]],Catch.Target>0))
-  dev.off()
-  
-  pdf(paste(HnDl,names(DATA.list.LIVEWT.c)[i],"_monthly",".pdf",sep=""))
-  fn.box.plt.year(d=subset(DATA.list.LIVEWT.c[[i]],Catch.Target>0))
-  dev.off()
-}
-
 
 #4.12 Drop first years of sandbar data because vessels don't meet selection criteria and no positive catch
 DD=subset(DATA.list.LIVEWT.c$"Sandbar Shark",BLOCKX%in%as.numeric(BLKS.used$"Sandbar Shark"))      
@@ -3264,42 +3321,63 @@ Export.tbl(WD=getwd(),Tbl=Table.nsamp,Doc.nm="Sample_sizes",caption=NA,paragph=N
            HDR.2nd=c("","",rep(c("Dusky","Gummy","Sandbar","Whiskery"),3)))
 
 
-#4.21 Check outliers in catch and effort for removing nonsense values   
-#note: max monthly ktch, effort (~ 40 tonnes, ~ 5800 km gn h (@ 30 days X 24 h X 8000 m), respectively) 
-#      max trip (daily kg) ktch, effort (~ 15 tonnes, ~ 1900 km gn h (@ 10 days X 24 h X 8000 m), respectively) 
-if(Model.run=="First")
-{
-  pdf("C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/Check.outliers.pdf") 
-  for(i in Tar.sp)
-  {
-    check.cpue(Store_nom_cpues_monthly[[i]]$QL_dat,paste("monthly",names(DATA.list.LIVEWT.c)[i]),4)
-    check.cpue(Store_nom_cpues_daily[[i]]$QL_dat,paste("daily",names(DATA.list.LIVEWT.c)[i]),4)  
-  }
-  dev.off()
-}
-
-#ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for names(SP.list)
-
 #4.22 Construct index of abundance     
 ZONES=c("West","Zone1","Zone2")
-Eff.vars=c("km.gillnet.hours.c","km.gillnet.hours_shot.c")
-Covariates=c("freo")
+Eff.vars=c("km.gillnet.hours.c")
+Covariates=c("temp.res","soi","freo","freo_lag6","freo_lag12")
 Predictors_monthly=c("finyear","vessel","month","blockx",Covariates) 
-Predictors_daily=Predictors_monthly
+Predictors_daily=c("finyear","vessel","month","block10","shots.c","lunar","cluster_clara","mean.depth",
+                   "nlines.c","mesh",Covariates)
 Response="catch.target"    #note that cpue is calculated inside stand function
 
-Categorical=c("finyear","vessel","month","blockx",
-              "cluster_clara","moon","depcat","linecat","meshcat")
+Categorical=c("finyear","vessel","month","blockx","block10","shots.c",
+              "cluster_clara","lunar","mean.depth","nlines.c","mesh")
 
-  
 
 #   4.22.1 Explore data used for standardisation
+#note: this applies cede() exploration, and checks for outliers in catch and effort
+#      max monthly ktch, effort (~ 40 tonnes, ~ 5800 km gn h (@ 30 days X 24 h X 8000 m), respectively) 
+#      max trip (daily kg) ktch, effort (~ 15 tonnes, ~ 1900 km gn h (@ 10 days X 24 h X 8000 m), respectively) 
+
+  #check potential effect of predictors
+if(do.Exploratory=="YES")
+{
+  hndl.expl="C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/"
+  for(s in nnn)
+  {
+      #monthly
+    pdf(paste(hndl.expl,names(SP.list)[s],"_monthly.pdf",sep="")) 
+    if(!is.null(Store_nom_cpues_monthly[[s]]))
+    {
+      dummy=subset(Store_nom_cpues_monthly[[s]]$QL_dat,vessel%in%VES.used[[s]])
+      dummy=subset(dummy,blockx%in%BLKS.used[[s]])
+      fn.expl.cede(d=dummy,PREDS=Predictors_monthly,kg=TRUE,Do.ggplts=F)
+    }
+    if(!is.null(DATA.list.LIVEWT.c[[s]])) fn.box.plt.year(d=subset(DATA.list.LIVEWT.c[[s]],Catch.Target>0))
+    if(!is.null(Store_nom_cpues_monthly[[s]])) check.cpue(Store_nom_cpues_monthly[[s]]$QL_dat,paste("monthly",names(DATA.list.LIVEWT.c)[s]),4)
+    if(names(SP.list)[s]=="Whiskery Shark") fn.pred.effect(DATA=DATA.list.LIVEWT.c[[s]],PREDS=Predictors_monthly)
+    dev.off()
+    
+      #daily
+    pdf(paste(hndl.expl,names(SP.list)[s],"_daily.pdf",sep=""))
+    if(!is.null(Store_nom_cpues_daily[[s]]))
+    {
+      dummy=subset(Store_nom_cpues_daily[[s]]$QL_dat,vessel%in%VES.used.daily[[s]])
+      dummy=subset(dummy,blockx%in%BLKS.used.daily[[s]])
+      fn.expl.cede(d=dummy,PREDS=Predictors_daily,kg=TRUE,Do.ggplts=T)
+    }
+    if(!is.null(DATA.list.LIVEWT.c.daily[[s]])) fn.box.plt.year(d=subset(DATA.list.LIVEWT.c.daily[[s]],Catch.Target>0))
+    if(!is.null(Store_nom_cpues_daily[[s]])) check.cpue(Store_nom_cpues_daily[[s]]$QL_dat,paste("daily",names(DATA.list.LIVEWT.c)[s]),4) 
+    if(names(SP.list)[s]=="Whiskery Shark") fn.pred.effect(DATA=DATA.list.LIVEWT.c.daily[[s]],PREDS=Predictors_daily)
+    dev.off()
+  }
+}
 
   #check data properties and degrees of freedom   
 if(Model.run=="First")
 {
   Prop.deg.free.m=Prop.deg.free.d=Prop.deg.free.d_n=Store_nom_cpues_monthly
-  for(s in 1:N.species)
+  for(s in Tar.sp)
   {
     dummy=subset(Store_nom_cpues_monthly[[s]]$QL_dat,vessel%in%VES.used[[s]])
     dummy=subset(dummy,blockx%in%BLKS.used[[s]])
@@ -3319,34 +3397,12 @@ if(Model.run=="First")
   }
 }
 
-  #apply cede() functions    
-if(Model.run=="First")
-{
-  hndl.cede="C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/cede/"
-  for(s in 1:N.species)
-  {
-    #monthly
-    pdf(paste(hndl.cede,SPECIES.vec[s],"_monthly.pdf",sep="")) 
-    dummy=subset(Store_nom_cpues_monthly[[s]]$QL_dat,vessel%in%VES.used[[s]])
-    dummy=subset(dummy,blockx%in%BLKS.used[[s]])
-    fn.expl.cede(d=dummy,PREDS=Predictors_monthly,kg=TRUE,Do.ggplts=FALSE)
-    dev.off()
-    
-    #daily
-    pdf(paste(hndl.cede,SPECIES.vec[s],"_daily.pdf",sep=""))
-    dummy=subset(Store_nom_cpues_daily[[s]]$QL_dat,vessel%in%VES.used.daily[[s]])
-    dummy=subset(dummy,blockx%in%BLKS.used.daily[[s]])
-    fn.expl.cede(d=dummy,PREDS=Predictors_daily,kg=TRUE,Do.ggplts=FALSE)
-    dev.off()
-  }
-}
-
   #show records dropped by data selection process (starting from good records)
 if(Model.run=="First")
 {
   fn.fig("show_how_records_drop",2400, 2400) 
   par(mfrow=c(4,2),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,1),las=1,mgp=c(1.9,.7,0))
-  for(s in 1:N.species)
+  for(s in Tar.sp)
   {
     #Monthly
     first=table(DATA.list.LIVEWT.c_all_reporters[[s]]$FINYEAR)
@@ -3357,7 +3413,7 @@ if(Model.run=="First")
     dummy=subset(dummy,blockx%in%BLKS.used[[s]])
     fourth=table(dummy$finyear)
     LGTXT=NULL
-    if(s==4)LGTXT=c("whole data set","QL","QL_sel. vess.","QL_sel. vess. & block")
+    if(SP.list[[s]]==18007)LGTXT=c("whole data set","QL","QL_sel. vess.","QL_sel. vess. & block")
     barplot(rbind(first,second,third,fourth),legend.text=LGTXT,
             args.legend=list(x="topright",cex=.9,bty='n',xjust=0))
     box()
@@ -3373,11 +3429,12 @@ if(Model.run=="First")
     fourth=table(dummy$finyear)
     barplot(rbind(first,second,third,fourth))
     box()
-    mtext(SPECIES.vec[s],4,0.5,cex=1.5,las=3)
+    mtext(names(SP.list)[s],4,0.5,cex=1,las=3)
   }
   mtext("Frequency",2,-0.75,las=3,outer=T,cex=1.5)
   dev.off()
 }
+
 
 #   4.22.2 Show applied effort creep
 Fish.pow.inc=FINYEAR.ALL
@@ -3402,69 +3459,101 @@ Eff.creep=data.frame(finyear=FINYEAR.ALL,effort.creep=Fish.pow.inc)
 
 #   4.22.3 Select model structure
 
+    #remove predictors identified as highly correlated
+Predictors_monthly=Predictors_monthly[-match(c('soi','freo','freo_lag6','freo_lag12'),Predictors_monthly)]
+Predictors_daily=Predictors_daily[-match(c('nlines.c','soi','freo','freo_lag6','freo_lag12'),Predictors_daily)]
+cNSTNT=c('finyear','vessel','month','blockx')
+cNSTNT.daily=c('finyear','vessel','month','block10')
+
       #4.22.3.1 extract best model
-Best.Model=vector('list',N.species)
-names(Best.Model)=SPECIES.vec
+Best.Model=vector('list',length(SP.list)) 
+names(Best.Model)=names(SP.list)
 Best.Model.daily=Store.Best.Model=Store.Best.Model.daily=Best.Model
 
 if(Def.mod.Str=="YES")     #takes 40 minutes
 {
+  fitFun= function(formula, data,always="", ...) 
+  {
+    glm(as.formula(paste(deparse(formula), always)), data=data, ...)
+  }
   efrt="km.gillnet.hours.c"
   system.time({
-  for(s in 1:N.species)
+  for(s in Tar.sp)
   {
-    fitFun=function(formula, data,...) glm(formula,data=data,...) 
-    
-    #monthly
-    d=subset(Store_nom_cpues_monthly[[s]]$QL_dat,vessel%in%VES.used[[s]])
-    d=subset(d,blockx%in%BLKS.used[[s]])
+      #monthly
     PREDS=Predictors_monthly
-    id.fctr=which(PREDS%in%Categorical)
-    d=makecategorical(PREDS[id.fctr],d) 
+    d=Store_nom_cpues_monthly[[s]]$QL_dat%>%filter(vessel%in%VES.used[[s]] & blockx%in%BLKS.used[[s]])
+    d=makecategorical(PREDS[which(PREDS%in%Categorical)],d)
     d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
     id.cov=which(PREDS%in%Covariates)
     d=mutate_at(d, setNames(c(PREDS[id.cov],efrt), paste0("LN", c(PREDS[id.cov],efrt),sep="")), log)
+    always=cNSTNT
     Store.Best.Model[[s]]=fn.modl.sel(Inter="MainTerm",RESPNS="LNcpue")
-    Best.Model[[s]]=Store.Best.Model[[s]]$BEST
-    rm(d)
     
-    #daily
-    d=subset(Store_nom_cpues_daily[[s]]$QL_dat,vessel%in%VES.used.daily[[s]])
-    d=subset(d,blockx%in%BLKS.used.daily[[s]])
+    best.fm=Store.Best.Model[[s]]$BEST    
+    best.fm=all.vars(best.fm)
+    best.fm=as.formula(paste(best.fm[1],'~',paste(c(always,best.fm[-1]),collapse='+')))
+    Best.Model[[s]]=best.fm
+    rm(d,id.cov,PREDS)
+    
+      #daily
+    d=Store_nom_cpues_daily[[s]]$QL_dat%>%filter(vessel%in%VES.used.daily[[s]] & blockx%in%BLKS.used.daily[[s]])
     PREDS=Predictors_daily
-    id.fctr=which(PREDS%in%Categorical)
-    d=makecategorical(PREDS[id.fctr],d) 
+    d=d %>% mutate(mean.depth=10*round(mean.depth/10),
+                   nlines.c=ifelse(nlines.c>2,'>2',nlines.c),
+                   mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
+     d=makecategorical(PREDS[which(PREDS%in%Categorical)],d)
     d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
     id.cov=which(PREDS%in%Covariates)
     d=mutate_at(d, setNames(c(PREDS[id.cov],efrt), paste0("LN", c(PREDS[id.cov],efrt),sep="")), log)
+    always=cNSTNT.daily
     Store.Best.Model.daily[[s]]=fn.modl.sel(Inter="MainTerm",RESPNS="LNcpue")
-    Best.Model.daily[[s]]=Store.Best.Model.daily[[s]]$BEST 
-    rm(d,fitFun)
+    best.fm=Store.Best.Model.daily[[s]]$BEST    
+    best.fm=all.vars(best.fm)
+    best.fm=as.formula(paste(best.fm[1],'~',paste(c(always,best.fm[-1]),collapse='+')))
+    Best.Model.daily[[s]]=best.fm
+    rm(d,id.cov,PREDS)
 }
   
   #4.22.3.3. show selection outcomes
   hndl.modl.sel="C:/Matias/Analyses/Catch and effort/Outputs/Model Selection/"
-  for(s in 1:N.species)
+  for(s in 1:Tar.sp)
   {
-    pdf(paste(hndl.modl.sel,SPECIES.vec[s],"_monthly.pdf",sep=""))
-    fn.show.mod.sel(MODS=Store.Best.Model[[s]]$res,outs=20)
+    pdf(paste(hndl.modl.sel,names(SP.list)[s],"_monthly.pdf",sep=""))
+    fn.show.mod.sel(MODS=Store.Best.Model[[s]]$res,outs=length(Store.Best.Model[[s]]$res@objects))
     dev.off()
     
-    pdf(paste(hndl.modl.sel,SPECIES.vec[s],"_daily.pdf",sep=""))
-    fn.show.mod.sel(MODS=Store.Best.Model.daily[[s]]$res,outs=20)
+    pdf(paste(hndl.modl.sel,names(SP.list)[s],"_daily.pdf",sep=""))
+    fn.show.mod.sel(MODS=Store.Best.Model.daily[[s]]$res,outs=length(Store.Best.Model.daily[[s]]$res@objects))
     dev.off()
   }
   
   })
 }   
 
+#ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for names(SP.list)  
+#also. copy best model underneath and what to do with other species? need delta method...
 if(Def.mod.Str=="NO")
 {
-  for(s in 1:N.species)
+  for(s in nnn[-sort(Tar.sp)])
   {
     Best.Model[[s]]=formula("LNcpue ~ finyear + vessel + month + blockx")
-    Best.Model.daily[[s]]=formula("LNcpue ~ finyear + vessel + month + blockx")
+    Best.Model.daily[[s]]=Best.Model[[s]]
   }
+  
+  #Monthly
+  # Best.Model$`Gummy Shark`=
+  # Best.Model$`Whiskery Shark`=
+  # Best.Model$`Dusky Whaler Bronze Whaler`=
+  # Best.Model$`Sandbar Shark`=
+    
+  #Daily
+  # Best.Model.daily$`Gummy Shark`=
+  # Best.Model.daily$`Whiskery Shark`=
+  # Best.Model.daily$`Dusky Whaler Bronze Whaler`=
+  # Best.Model.daily$`Sandbar Shark`=
+    
+  
 }
 
 
