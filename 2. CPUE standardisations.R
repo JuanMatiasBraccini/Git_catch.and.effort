@@ -3470,7 +3470,7 @@ Best.Model=vector('list',length(SP.list))
 names(Best.Model)=names(SP.list)
 Best.Model.daily=Store.Best.Model=Store.Best.Model.daily=Best.Model
 
-if(Def.mod.Str=="YES")     #takes 40 minutes
+if(Def.mod.Str=="YES")     #takes 16 minutes
 {
   fitFun= function(formula, data,always="", ...) 
   {
@@ -3532,7 +3532,7 @@ if(Def.mod.Str=="YES")     #takes 40 minutes
 }   
 
 #ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for names(SP.list)  
-#also. copy best model underneath and what to do with other species? need delta method...
+#also. what to do with other species? need delta method...
 if(Def.mod.Str=="NO")
 {
   for(s in nnn[-sort(Tar.sp)])
@@ -3542,18 +3542,20 @@ if(Def.mod.Str=="NO")
   }
   
   #Monthly
-  # Best.Model$`Gummy Shark`=
-  # Best.Model$`Whiskery Shark`=
-  # Best.Model$`Dusky Whaler Bronze Whaler`=
-  # Best.Model$`Sandbar Shark`=
+  Best.Model$`Gummy Shark`=formula('LNcpue ~ finyear + vessel + month + blockx + LNtemp.res')
+  Best.Model$`Whiskery Shark`=formula('LNcpue ~ finyear + vessel + month + blockx')
+  Best.Model$`Dusky Whaler Bronze Whaler`=formula('LNcpue ~ finyear + vessel + month + blockx')
+  Best.Model$`Sandbar Shark`=formula('LNcpue ~ finyear + vessel + month + blockx + LNtemp.res')
     
   #Daily
-  # Best.Model.daily$`Gummy Shark`=
-  # Best.Model.daily$`Whiskery Shark`=
-  # Best.Model.daily$`Dusky Whaler Bronze Whaler`=
-  # Best.Model.daily$`Sandbar Shark`=
-    
-  
+  Best.Model.daily$`Gummy Shark`=formula('LNcpue ~ finyear + vessel + month + block10 + shots.c + cluster_clara + 
+                                                    mean.depth + mesh + LNtemp.res')
+  Best.Model.daily$`Whiskery Shark`=formula('LNcpue ~ finyear + vessel + month + block10 + shots.c + lunar + 
+                                                    cluster_clara + mesh')
+  Best.Model.daily$`Dusky Whaler Bronze Whaler`=formula('LNcpue ~ finyear + vessel + month + block10 + shots.c + lunar + 
+                                                    cluster_clara + mean.depth + LNtemp.res')
+  Best.Model.daily$`Sandbar Shark`=formula('LNcpue ~ finyear + vessel + month + block10 + shots.c + lunar + 
+                                                    cluster_clara + mean.depth')
 }
 
 
@@ -3561,7 +3563,7 @@ if(Def.mod.Str=="NO")
 if(Model.run=="First")
 {
   terms.table=vector('list',length(N.species))
-  for(s in 1:N.species)   
+  for(s in Tar.sp)   
   {
     #monthly
     DAT=subset(Store_nom_cpues_monthly[[s]]$QL_dat,vessel%in%VES.used[[s]])
