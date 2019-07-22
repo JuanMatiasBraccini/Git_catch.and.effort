@@ -3138,7 +3138,7 @@ Store_nom_cpues_monthly=vector('list',length(SP.list))
 names(Store_nom_cpues_monthly)=names(SP.list)
 Store_nom_cpues_daily=Store_nom_cpues_monthly
 Hnd.ains="C:/Matias/Analyses/Catch and effort/Outputs/Paper/Ainsline_different_cpues/"
-for(s in Tar.sp)
+for(s in nnn)
 {
   #Monthly
   Store_nom_cpues_monthly[[s]]=fn.ainslie(dat=DATA.list.LIVEWT.c[[s]],Ktch.targt='catch.target',
@@ -3469,7 +3469,6 @@ cNSTNT.daily=c('finyear','vessel','month','block10')
 Best.Model=vector('list',length(SP.list)) 
 names(Best.Model)=names(SP.list)
 Best.Model.daily=Store.Best.Model=Store.Best.Model.daily=Best.Model
-
 if(Def.mod.Str=="YES")     #takes 16 minutes
 {
   fitFun= function(formula, data,always="", ...) 
@@ -3530,9 +3529,6 @@ if(Def.mod.Str=="YES")     #takes 16 minutes
   
   })
 }   
-
-#ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for names(SP.list)  
-#also. what to do with other species? need delta method...
 if(Def.mod.Str=="NO")
 {
   for(s in nnn[-sort(Tar.sp)])
@@ -3558,11 +3554,10 @@ if(Def.mod.Str=="NO")
                                                     cluster_clara + mean.depth')
 }
 
-
 #Export table of term levels
 if(Model.run=="First")
 {
-  terms.table=vector('list',length(N.species))
+  terms.table=vector('list',length(Tar.sp))
   for(s in Tar.sp)   
   {
     #monthly
@@ -3574,12 +3569,13 @@ if(Model.run=="First")
     #daily
     DAT=subset(Store_nom_cpues_daily[[s]]$QL_dat,vessel%in%VES.used.daily[[s]])
     DAT=subset(DAT,blockx%in%BLKS.used.daily[[s]])
+    DAT=DAT %>% mutate(mean.depth=10*round(mean.depth/10),
+                   nlines.c=ifelse(nlines.c>2,'>2',nlines.c),
+                   mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
     Day=fn.table.terms(d=DAT,PREDS=Predictors_daily)
     Day=cbind(Data="Daily",Day)
-    
     DAT=rbind(Mon,Day)
-    
-    terms.table[[s]]=cbind(Species=SPECIES.vec[s],DAT)
+    terms.table[[s]]=cbind(Species=names(SP.list)[s],DAT)
   }
   Tab.Terms=do.call(rbind,terms.table)
   row.names(Tab.Terms)=NULL
@@ -3587,18 +3583,18 @@ if(Model.run=="First")
                 HdR.col='black',HdR.bg='white',Hdr.fnt.sze=10,Hdr.bld='normal',body.fnt.sze=10,
                 Zebra='NO',Zebra.col='grey60',Grid.col='black',
                 Fnt.hdr= "Times New Roman",Fnt.body= "Times New Roman")
-  
 }
 
 
+#ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for names(SP.list)  
+#also. what to do with other species? need delta method...
 
 
 #   4.22.4 Run standardisation
-Stand.out=vector('list',length=N.species)
-names(Stand.out)=SPECIES.vec 
+Stand.out=vector('list',length(SP.list)) 
+names(Stand.out)=names(SP.list)
 Stand.out.daily=Stand.out
-
-system.time({for(s in 1:N.species)   #takes 20 secs
+system.time({for(s in nnn)   
 {
   #monthly
   DAT=subset(Store_nom_cpues_monthly[[s]]$QL_dat,vessel%in%VES.used[[s]])  #selet blocks and vessels
@@ -3612,6 +3608,9 @@ system.time({for(s in 1:N.species)   #takes 20 secs
   DAT=subset(Store_nom_cpues_daily[[s]]$QL_dat,vessel%in%VES.used.daily[[s]])
   DAT=subset(DAT,blockx%in%BLKS.used.daily[[s]])
   DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) #select min vessels per year
+  DAT=DAT%>% mutate(mean.depth=10*round(mean.depth/10),
+                    nlines.c=ifelse(nlines.c>2,'>2',nlines.c),
+                    mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
   Stand.out.daily[[s]]=fn.stand(d=DAT,Response="catch.target",RESPNS="LNcpue",
             PREDS=Predictors_daily,efrt="km.gillnet.hours.c",Formula=Best.Model.daily[[s]])
   rm(DAT)
@@ -3640,7 +3639,6 @@ if(Model.run=="First")
                 Fnt.hdr= "Times New Roman",Fnt.body= "Times New Roman")
   
 }
-
 
 
 #   4.22.6 Run sensitivity tests     
