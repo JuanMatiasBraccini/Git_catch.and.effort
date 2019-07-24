@@ -284,6 +284,8 @@ Do.K_n.fold.test="NO"
 Fit.to.what="catch"
 #Fit.to.what="cpue"
 
+#Control if comparing glm and gam spatial predictions
+compare.glm.gam="NO"
 
 #Control if extracting glm deviance table
 if(Model.run=="Standard") Extract.Deviance.table="NO" 
@@ -3854,6 +3856,7 @@ if(Model.run=="First")      #takes 7 mins
 # 4.22.6 Run standardisation for Other species using delta method due to excess zeros
 cl <- makeCluster(detectCores()-1)
 registerDoParallel(cl)
+
   #monthly
 system.time({Stand.out.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr','cede')) %dopar%
   {
@@ -3958,14 +3961,296 @@ for(s in Tar.sp)
   }
 }
 
+#Compare glm and gam spatial predictions
+if(compare.glm.gam=="YES")
+{
+  AOV.tab=function(Anova.tab,GLM)
+  {
+    n=2:length(Anova.tab$Deviance)
+    Term.dev.exp=100*(Anova.tab$Deviance[n]/GLM$null.deviance)
+    names(Term.dev.exp)=rownames(Anova.tab)[n]
+    Dev.exp=sum(Term.dev.exp)
+    
+    ANOVA=as.data.frame.matrix(Anova.tab)
+    Term=data.frame(Percent.dev.exp=Term.dev.exp)
+    Table=ANOVA[-1,match(c("Deviance","Pr(>Chi)"),names(ANOVA))]
+    Term=Term[match(rownames(Term), rownames(Table)),]
+    Table=cbind(Table,Term)
+    names(Table)[match("Term",names(Table))]="Percent.dev.exp"
+    Table= Table %>% mutate_at(c("Deviance","Percent.dev.exp"), round, 3) 
+    All=Table[1,]
+    rownames(Table)=rownames(ANOVA)[2:nrow(ANOVA)]
+    rownames(All)="Model"
+    All[,1:ncol(All)]=NA
+    All$Percent.dev.exp=round(Dev.exp,3)
+    return(rbind(Table,All))
+  }
+  fn.compare.glm.gam=function(d)
+  {
+    Formula=formula(LNcpue ~ finyear + vessel + blockx )
+    Formula_10=formula(LNcpue ~ finyear + vessel + block10 )
+    Formula.gam=formula(LNcpue ~ finyear + vessel + s(long10.corner, lat10.corner) )
+    
+    id.fctr=which(PREDS%in%Categorical)
+    d=makecategorical(PREDS[id.fctr],d) 
+    d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
+    id.cov=which(PREDS%in%Covariates)
+    d=mutate_at(d, setNames(c(PREDS[id.cov],efrt), paste0("LN", c(PREDS[id.cov],efrt),sep="")), log)
+    
+    res <- glm(Formula,data=d)
+    res_10 <- glm(Formula_10,data=d)
+    res.gam <-gam(Formula.gam,data=d,method="REML")
+    
+    Tab.aov=AOV.tab(anova(res, test = "Chisq"),res)
+    row.names(Tab.aov)=paste("glm",row.names(Tab.aov),sep='...')
+    Tab.aov_10=AOV.tab(anova(res_10, test = "Chisq"),res_10)
+    row.names(Tab.aov_10)=paste("glm_10",row.names(Tab.aov_10),sep='...')
+    
+    aa=summary(res.gam)
+    Tab.aov.gam=data.frame(Deviance=NA,'Pr(>Chi)'=NA,Percent.dev.exp=round(100*aa$dev.expl,2))
+    row.names(Tab.aov.gam)=paste("gam","Model",sep='...')
+    colnames( Tab.aov.gam)=colnames(Tab.aov)
+    
+    grid.table(rbind(Tab.aov,Tab.aov_10,Tab.aov.gam))
+    
+    
+    #finyear
+    BLKr=sort(table(d$blockx))
+    BLKr=names(BLKr[length(BLKr)])
+    BLKr10=sort(table(d$block10))
+    BLKr10=names(BLKr10[length(BLKr10)])
+    long10.corner=as.numeric(d[d$block10==BLKr10,match('long10.corner',names(d))][1])
+    lat10.corner=as.numeric(d[d$block10==BLKr10,match('lat10.corner',names(d))][1])
+    
+    VSl= sort(table(d$vessel))
+    VSl=names(VSl[length(VSl)])
+    
+    new.block=data.frame(finyear=factor(levels(d$finyear)),
+                         vessel=factor(VSl,levels(d$vessel)),
+                         blockx=factor(BLKr,levels(d$blockx)))
+    new.block$cpue=predict(res,newdata=new.block,type='response')
+    
+    new.block10=data.frame(finyear=factor(levels(d$finyear)),
+                           vessel=factor(VSl,levels(d$vessel)),
+                           block10=factor(BLKr10,levels(d$block10)))
+    new.block10$cpue=predict(res_10,newdata=new.block10,type='response')
+    
+    new.gam=data.frame(finyear=factor(levels(d$finyear)),
+                       vessel=factor(VSl,levels(d$vessel)),
+                       long10.corner=long10.corner,
+                       lat10.corner=lat10.corner)
+    new.gam$cpue=predict(res.gam,newdata=new.gam,type='response')
+    
+    new.block$cpue=new.block$cpue/mean(new.block$cpue)
+    new.block10$cpue=new.block10$cpue/mean(new.block10$cpue)
+    new.gam$cpue=new.gam$cpue/mean(new.gam$cpue)
+    
+    yrs=new.gam$finyear
+    plot(1:length(yrs),new.block$cpue,xaxt='n',xlab="financial year",ylab="normalised cpue",
+         cex.lab=1.5,pch=19,cex=1.5,type='o',
+         ylim=c(min(c(new.block$cpue,new.block10$cpue,new.gam$cpue)),max(c(new.block$cpue,new.block10$cpue,new.gam$cpue))))
+    axis(1,1:length(yrs),yrs)
+    points((1:length(yrs))+.15,new.block10$cpue,pch=19,col='cyan3',cex=1.5)
+    lines((1:length(yrs))+.15,new.block10$cpue,pch=19,col='cyan3')
+    points((1:length(yrs))-.15,new.gam$cpue,pch=19,col='grey60',cex=1.5)
+    lines((1:length(yrs))-.15,new.gam$cpue,pch=19,col='grey60')
+    legend("topright",c("block","block10","gam"),bty='n',pch=19,col=c("black","cyan3","grey60"),cex=1.5)
+    #space
+    par(mfcol=c(3,1),mar=c(2,2,2,2),oma=c(1,1,.1,.1),mgp=c(1.5,.6,0))
+    
+    FINYr=sort(table(d$finyear))
+    FINYr=names(FINYr[length(FINYr)])
+    VSl= sort(table(d$vessel))
+    VSl=names(VSl[length(VSl)])
+    
+    new.block=data.frame(finyear=factor(FINYr,levels(d$finyear)),
+                         vessel=factor(VSl,levels(d$vessel)),
+                         blockx=factor(levels(d$blockx)))
+    new.block$cpue=predict(res,newdata=new.block,type='response')
+    new.block=new.block%>%mutate( Lat=-as.numeric(substr(blockx,1,2)),
+                                  Long=100+as.numeric(substr(blockx,3,4)))%>%
+      select(-c(blockx,finyear,vessel))
+    YLIM=c(min(new.block$Lat),max(new.block$Lat))
+    XLIM=c(min(new.block$Long),max(new.block$Long))
+    seq.lat=seq(YLIM[1],YLIM[2])
+    misn.lat=seq.lat[which(!seq.lat%in%unique(new.block$Lat))]
+    seq.lon=seq(XLIM[1],XLIM[2])
+    misn.lon=seq.lon[which(!seq.lon%in%unique(new.block$Long))]
+    if(length(misn.lat)>0 | length(misn.lon)>0)
+    {
+      combo=expand.grid(Lat=seq.lat, Long=seq.lon)
+      new.block=combo%>%left_join(new.block,by=c("Lat","Long"))
+    }
+    new.block=new.block%>%spread(Lat,cpue)
+    Lon=as.numeric(new.block$Long)
+    new.block=as.matrix(new.block[,-1]) 
+    LaT=as.numeric(colnames(new.block))
+    brk<- quantile( c(new.block),probs=seq(0,1,.1),na.rm=T)
+    YLIM[1]=YLIM[1]-0.5
+    YLIM[2]=YLIM[2]+0.5
+    XLIM[1]=XLIM[1]-0.5
+    XLIM[2]=XLIM[2]+0.5
+    image.plot(Lon,LaT,new.block, breaks=brk, col=rev(heat.colors(length(brk)-1)), 
+               lab.breaks=names(brk),ylim=YLIM,xlim=XLIM,ylab="",xlab="")
+    legend('topright',"Blockx",bty='n',cex=1.5)
+    
+    
+    
+    new.block10=data.frame(finyear=factor(FINYr,levels(d$finyear)),
+                           vessel=factor(VSl,levels(d$vessel)),
+                           block10=factor(levels(d$block10)))
+    new.block10$cpue=predict(res_10,newdata=new.block10,type='response')
+    dummy=subset(d,select=c(block10,lat10.corner,long10.corner)) %>%
+      mutate(block10=as.character(block10)) %>%
+      distinct(block10,.keep_all =T)
+    new.block10=new.block10%>%mutate(block10=as.character(block10))%>%
+      left_join(dummy,by="block10") %>%
+      select(-c(block10,finyear,vessel)) %>%
+      mutate(lat10.corner=round(lat10.corner,2),
+             long10.corner=round(long10.corner,2))
+    YLIM=c(min(new.block10$lat10.corner),max(new.block10$lat10.corner))
+    XLIM=c(min(new.block10$long10.corner),max(new.block10$long10.corner))
+    seq.lat=c(-26.83, -26.67, -26.50, -26.33, -26.17, -26.00,
+              -27.83, -27.67, -27.50, -27.33, -27.17, -27.00,
+              -28.83, -28.67, -28.50, -28.33, -28.17, -28.00,
+              -29.83, -29.67, -29.50, -29.33, -29.17, -29.00,
+              -30.83, -30.67, -30.50, -30.33, -30.17, -30.00,
+              -31.83, -31.67, -31.50, -31.33, -31.17, -31.00,
+              -32.83, -32.67, -32.50, -32.33, -32.17, -32.00,
+              -33.83, -33.67, -33.50, -33.33, -33.17, -33.00,
+              -34.83, -34.67, -34.50, -34.33, -34.17, -34.00,
+              -35.83, -35.67, -35.50, -35.33, -35.17, -35.00)
+    misn.lat=seq.lat[which(!seq.lat%in%unique(new.block10$lat10.corner))]
+    seq.lon=c(113.83, 113.67, 113.50, 113.33, 113.17, 113.00,
+              114.83, 114.67, 114.50, 114.33, 114.17, 114.00,
+              115.83, 115.67, 115.50, 115.33, 115.17, 115.00,
+              116.83, 116.67, 116.50, 116.33, 116.17, 116.00,
+              117.83, 117.67, 117.50, 117.33, 117.17, 117.00,
+              118.83, 118.67, 118.50, 118.33, 118.17, 118.00,
+              119.83, 119.67, 119.50, 119.33, 119.17, 119.00,
+              120.83, 120.67, 120.50, 120.33, 120.17, 120.00,
+              121.83, 121.67, 121.50, 121.33, 121.17, 121.00,
+              122.83, 122.67, 122.50, 122.33, 122.17, 122.00,
+              123.83, 123.67, 123.50, 123.33, 123.17, 123.00,
+              124.83, 124.67, 124.50, 124.33, 124.17, 124.00,
+              125.83, 125.67, 125.50, 125.33, 125.17, 125.00,
+              126.83, 126.67, 126.50, 126.33, 126.17, 126.00,
+              127.83, 127.67, 127.50, 127.33, 127.17, 127.00,
+              128.83, 128.67, 128.50, 128.33, 128.17, 128.00,
+              129.83, 129.67, 129.50, 129.33, 129.17, 129.00)
+    misn.lon=seq.lon[which(!seq.lon%in%unique(new.block10$long10.corner))]
+    if(length(misn.lat)>0 | length(misn.lon)>0)
+    {
+      combo=expand.grid(lat10.corner=seq.lat, long10.corner=seq.lon)
+      new.block10=combo%>%left_join(new.block10,by=c("lat10.corner","long10.corner"))
+    }
+    new.block10=new.block10%>%spread(lat10.corner,cpue)
+    Lon=as.numeric(new.block10$long10.corner)
+    new.block10=as.matrix(new.block10[,-1]) 
+    LaT=as.numeric(colnames(new.block10))
+    brk<- quantile( c(new.block10),probs=seq(0,1,.1),na.rm=T)
+    YLIM[1]=YLIM[1]-0.5
+    YLIM[2]=YLIM[2]+0.5
+    XLIM[1]=XLIM[1]-0.5
+    XLIM[2]=XLIM[2]+0.5
+    image.plot(Lon,LaT,new.block10, breaks=brk, col=rev(heat.colors(length(brk)-1)), 
+               lab.breaks=names(brk),ylim=YLIM,xlim=XLIM,ylab="",xlab="")
+    legend('topright',"Block10",bty='n',cex=1.5)
+    
+    
+    
+    
+    new.gam=d%>%select(block10,lat10.corner,long10.corner)%>%
+      distinct(block10,.keep_all=T)%>%
+      mutate(finyear=factor(FINYr,levels(d$finyear)),
+             vessel=factor(VSl,levels(d$vessel)))
+    new.gam$cpue=predict(res.gam,newdata=new.gam,type='response')
+    new.gam=new.gam%>%select(-c(block10,finyear,vessel))%>%
+      mutate(lat10.corner=round(lat10.corner,2),
+             long10.corner=round(long10.corner,2))
+    
+    misn.lat=seq.lat[which(!seq.lat%in%unique(new.gam$lat10.corner))]
+    misn.lon=seq.lon[which(!seq.lon%in%unique(new.gam$long10.corner))]
+    if(length(misn.lat)>0 | length(misn.lon)>0)
+    {
+      combo=expand.grid(lat10.corner=seq.lat, long10.corner=seq.lon)
+      new.gam=combo%>%left_join(new.gam,by=c("lat10.corner","long10.corner"))
+    }
+    new.gam=new.gam%>%spread(lat10.corner,cpue)
+    Lon=as.numeric(new.gam$long10.corner)
+    new.gam=as.matrix(new.gam[,-1]) 
+    LaT=as.numeric(colnames(new.gam))
+    brk<- quantile( c(new.gam),probs=seq(0,1,.1),na.rm=T)
+    YLIM[1]=YLIM[1]-0.5
+    YLIM[2]=YLIM[2]+0.5
+    XLIM[1]=XLIM[1]-0.5
+    XLIM[2]=XLIM[2]+0.5
+    image.plot(Lon,LaT,new.gam, breaks=brk, col=rev(heat.colors(length(brk)-1)), 
+               lab.breaks=names(brk),ylim=YLIM,xlim=XLIM,ylab="",xlab="")
+    legend('topright',"Gam",bty='n',cex=1.5)
+    
+    mtext("Longitude",1,outer=T)
+    mtext("Latitude",2,outer=T)
+    
+    
+    #explore gam
+    xlpr.gam="NO"
+    if(xlpr.gam=="YES")
+    {
+      par(mfrow = c(2,2))
+      gam.check(res.gam)
+      #small p-values indicate that residuals are not randomly distributed. 
+      # This often means there are not enough basis functions
+      
+      
+      par(mfrow = c(1,2))
+      plot(res.gam, residuals = TRUE, pch = 1)
+      plot(res.gam, residuals = TRUE, pch = 1, scheme = 2)
+      #In this plot the axes represent values of our predictor variables, x1 and x2. 
+      #The interior is a topographic map of predicted values. 
+      #The contour lines represent points of equal predicted values, and they are labeled. 
+      #The dotted lines show uncertainty in prediction; they represent how contour
+      # lines would move if predictions were one standard error higher or lower.
+      
+      vis.gam(x = res.gam,                # GAM object
+              view = c("long10.corner", "lat10.corner"),   # variables
+              plot.type = "contour", too.far = 0.05)    # kind of plot 
+      
+    }
+    
+    
+  }
+  system.time({for(s in Tar.sp)
+  {
+    DAT=subset(Store_nom_cpues_daily[[s]]$QL_dat,vessel%in%VES.used.daily[[s]])
+    DAT=subset(DAT,blockx%in%BLKS.used.daily[[s]])
+    DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) #select min vessels per year
+    DAT=DAT%>% mutate(mean.depth=10*round(mean.depth/10),
+                      nlines.c=ifelse(nlines.c>2,'>2',nlines.c),
+                      mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
+    
+    Response="catch.target"
+    RESPNS="LNcpue"
+    PREDS=c("finyear","vessel","block10","blockx")
+    efrt="km.gillnet.hours.c"
+    
+    pdf(paste(getwd(),"/Compare glm and gam/Compare.glm.vs.gam_",Nms.sp[s],".pdf",sep=""))
+    fn.compare.glm.gam(d=DAT)
+    dev.off()
+    rm(DAT)
+  }
+  })
+}
+
+
 #ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for names(SP.list) 
 
 #Predict years based on emmeans (formerly lsmeans) considering log bias corr if required
-Pred=vector('list',length=N.species)
-names(Pred)=SPECIES.vec 
+Pred=vector('list',length(SP.list)) 
+names(Pred)=names(SP.list)
 Pred.daily=Pred
 system.time({
-  for(s in 1:N.species)   
+  for(s in Tar.sp)   
   {
     d=Stand.out[[s]]$DATA   #note: need data as global for ref_grid
     Pred[[s]]=pred.fun(MOD=Stand.out[[s]]$res,biascor="YES",PRED="finyear",Pred.type="link")
@@ -3982,7 +4267,7 @@ Pred.creep=Pred
 Pred.daily.creep=Pred.daily
 Nominl.creep=Nominl
 Nominl.daily.creep=Nominl.daily
-for(s in 1:N.species)
+for(s in Tar.sp)
 {
   #monthly
   add.crp=Eff.creep$effort.creep[match(Pred.creep[[s]]$finyear,Eff.creep$finyear)]
@@ -4008,21 +4293,21 @@ for(s in 1:N.species)
 
 fn.fig("Figure 4.Annual_Index",2000, 2400)    
 par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
-for(s in 1:N.species)
+for(s in Tar.sp)
 {
   #Monthly
   Mon.dat=list(Standardised=Pred.creep[[s]],Nominal=Nominl.creep[[s]])
   LgND="NO"
-  if(s==1)LgND="YES"
+  if(s==Tar.sp[1])LgND="YES"
   Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear")
-  if(s==1) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
+  if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
   
   #Daily
   Daily.dat=list(Standardised=Pred.daily.creep[[s]],Nominal=Nominl.daily.creep[[s]])
   LgND="NO"
   Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear")
-  if(s==1) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
-  mtext(SPECIES.vec[s],4,line=1,las=3,cex=1.5)
+  if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
+  mtext(Nms.sp[s],4,line=1,las=3,cex=1.5)
 }
 mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
 mtext("CPUE (kg/ km gillnet hour)",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
@@ -4034,7 +4319,7 @@ Pred.normlzd=Pred.creep
 Pred.daily.normlzd=Pred.daily.creep
 Nominl.normlzd=Nominl.creep
 Nominl.daily.normlzd=Nominl.daily.creep
-for(s in 1:N.species)
+for(s in Tar.sp)
 {
   #monthly
   Mn=mean(Pred.normlzd[[s]]$response)
@@ -4065,21 +4350,21 @@ for(s in 1:N.species)
 fn.fig("Figure 4.Annual_Index_normalised",2000, 2400)    
 #no point in showing nominal as it is not comparable in relative terms
 par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
-for(s in 1:N.species)
+for(s in Tar.sp)
 {
   #Monthly
   Mon.dat=list(Standardised=Pred.normlzd[[s]])
   LgND="NO"
-  if(s==1)LgND="YES"
+  if(s==Tar.sp[1])LgND="YES"
   Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear")
-  if(s==1) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
+  if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
   
   #Daily
   Daily.dat=list(Standardised=Pred.daily.normlzd[[s]])
   LgND="NO"
   Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear")
-  if(s==1) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
-  mtext(SPECIES.vec[s],4,line=1,las=3,cex=1.5)
+  if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
+  mtext(Nms.sp[s],4,line=1,las=3,cex=1.5)
 }
 mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
 mtext("Relative CPUE",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
