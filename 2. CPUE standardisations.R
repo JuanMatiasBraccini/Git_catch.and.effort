@@ -101,15 +101,12 @@ library(tibble)
 library(cluster)
 library(factoextra) #for plotting
 library(mgcv)
-
+library(mvtnorm)      #for multivariate normal pdf
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)   
 
 
 
 setwd("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other")
-source("Delta_lognormal.R")
-source("Delta_gamma.R")
-#source("Bootstrap_Delta_Methods.R")
 source("Compare.error.structure.R")
 source("Deviance.explained.R")
 source("Sorting.objects.R")
@@ -1798,13 +1795,30 @@ fn.delta=function(d,Response,PREDS,efrt,Formula,Formula.gam)   #function for sta
   ALLvars=all.vars(Formula)[-1]
   Formula.bi=as.formula(paste('catch.pos',"~",paste(paste(ALLvars,collapse="+"),"offset(LNeffort)",sep="+")))
   id.fctr=which(PREDS%in%Categorical)
-  d=makecategorical(PREDS[id.fctr],d)
+  
   Bi <- d %>%mutate(catch.pos=as.numeric(catch.target>0))
+  TAB=table(Bi$catch.pos,Bi$finyear)
+  TAB[TAB>0]=1
+  drop.yrs=names(which(TAB[2,]==0))
+  if(length(drop.yrs)>0)
+  {
+    Bi=Bi%>%filter(!finyear%in%drop.yrs)
+    d=d%>%filter(!finyear%in%drop.yrs)
+  }
+  Bi=makecategorical(PREDS[id.fctr],Bi)
   Bi$LNeffort=log(Bi[,match(efrt,names(Bi))])
+  
   d=d%>%filter(catch.target>0)
+  d=makecategorical(PREDS[id.fctr],d)
   d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
-  res_bi <- glm(Formula.bi, data=Bi, family="binomial", maxit=100)
-  res <- glm(Formula,data=d)
+  
+  res=res_bi=NULL
+  if(!is.null(Formula))
+  {
+    res_bi <- glm(Formula.bi, data=Bi, family="binomial", maxit=100)
+    res <- glm(Formula,data=d)
+  }
+
   res.gam=res.gam_bi=NULL
   if(!is.null(Formula.gam))
   {
@@ -1815,7 +1829,97 @@ fn.delta=function(d,Response,PREDS,efrt,Formula,Formula.gam)   #function for sta
     res.gam_bi <-gam(Formula.bi.gam,data=Bi, family="binomial",method="REML")
     res.gam <-gam(Formula.gam,data=d,method="REML")
   }
+  
   return(list(res=res,res_bi=res_bi,res.gam=res.gam,res.gam_bi=res.gam_bi,DATA=d,DATA_bi=Bi))
+}
+fn.MC.cpue=function(BiMOD,MOD,BiData,PosData,niter,pred.term,ALL.terms)
+{
+  Covar.bi=as.matrix(vcov(BiMOD))
+  Covar.pos=as.matrix(vcov(MOD))
+  dummy.BiMOD=BiMOD
+  dummy.MOD=MOD
+  
+  knstnt.terms=ALL.terms[-match(pred.term,ALL.terms)]
+  
+  id.fctr=knstnt.terms[which(knstnt.terms%in%Categorical)]
+  id.cont=knstnt.terms[which(!knstnt.terms%in%Categorical)]
+  newdata.pos=matrix(nrow=1,ncol=length(knstnt.terms))
+  colnames(newdata.pos)=c(id.fctr,id.cont) 
+  newdata.pos=as.data.frame(newdata.pos)
+  newdata.bi=newdata.pos
+  for(ii in 1:ncol(newdata.pos))
+  {
+    if(colnames(newdata.pos)[ii]%in%id.fctr)
+    {
+      id=match(colnames(newdata.bi)[ii],names(BiData))
+      if(!is.na(id))
+      {
+        dummy=sort(table(BiData[,id]))
+        newdata.bi[,ii]= factor(names(dummy[length(dummy)]),levels(BiData[,id]))
+      }
+      id=match(colnames(newdata.pos)[ii],names(PosData))
+      if(!is.na(id))
+      {
+        dummy=sort(table(PosData[,id]))
+        newdata.pos[,ii]= factor(names(dummy[length(dummy)]),levels(PosData[,id]))
+      }
+    }
+    if(colnames(newdata.pos)[ii]%in%id.cont)
+    {
+      id=match(colnames(newdata.bi)[ii],names(BiData))
+      newdata.bi[,ii]= mean(BiData[,id])
+      
+      id=match(colnames(newdata.pos)[ii],names(PosData))
+      newdata.pos[,ii]= mean(PosData[,id])
+    }
+  }
+  
+  pred.dat.pos=data.frame(factor(levels(PosData[,match(pred.term,names(PosData))])))
+  colnames(pred.dat.pos)=pred.term
+  newdata.pos=cbind(pred.dat.pos,newdata.pos)
+  
+  pred.dat.bi=data.frame(factor(levels(BiData[,match(pred.term,names(BiData))])))
+  colnames(pred.dat.bi)=pred.term
+  newdata.bi=cbind(pred.dat.bi,newdata.bi)
+  newdata.bi=cbind(newdata.bi,LNeffort=mean(BiData$LNeffort))
+  
+  set.seed(999)
+  
+  Bi.pars.rand=rmvnorm(niter,mean=coef(BiMOD),sigma=Covar.bi)
+  Pos.pars.rand=rmvnorm(niter,mean=coef(MOD),sigma=Covar.pos)
+  
+  MC.preds=matrix(nrow=niter,ncol=nrow(newdata.bi))
+  for(n in 1:niter)
+  {
+    #Binomial part
+    dummy.BiMOD$coefficients=Bi.pars.rand[n,]
+    newdata.bi$Pred.bi=predict(dummy.BiMOD,newdata=newdata.bi, type="response")
+    
+    
+    #Positive part
+    dummy.MOD$coefficients=Pos.pars.rand[n,]
+    a=predict(dummy.MOD,newdata=newdata.pos, type="response",se.fit=T)
+    newdata.pos$Pred=exp(a$fit+(a$se.fit^2)/2)  #apply bias correction for log transf
+    
+    dummy=left_join(newdata.bi,newdata.pos,by=pred.term)%>%
+      mutate(Index=Pred.bi*Pred)%>%
+      select(Index)%>%
+      unlist
+    
+    MC.preds[n,]=dummy
+  }
+  
+  #Get summary stats
+  MEAN=colMeans(MC.preds,na.rm=T)
+  SD=apply(MC.preds,2,sd,na.rm=T)
+  CV=SD/MEAN
+  LOW=apply(MC.preds, 2, function(x) quantile(x, 0.025,na.rm=T))
+  UP=apply(MC.preds, 2, function(x) quantile(x, 0.975,na.rm=T))
+  
+  Stats=cbind(pred.dat.bi,data.frame(MEAN=MEAN,SD=SD,CV=CV,LOW=LOW,UP=UP))
+  Stats=Stats[order(Stats[,1]),]
+  rownames(Stats)=NULL
+  return(Stats)
 }
 
 Anova.and.Dev.exp=function(GLM,SP,type)   #function for extracting term significance and deviance explained
@@ -2799,6 +2903,9 @@ FINYEAR.ALL=sort(FINYEAR.ALL)
 N.yrs.ALL=length(FINYEAR.ALL)
 
 
+#Export data for spatial distribution paper
+write.csv(Data.daily.GN,'C:/Matias/Analyses/Catch and effort/Data_outs/Data.daily.GN_for_spatial_analysis.csv',row.names=F)
+
 #4.6 Proportion of dusky and copper shark
 fn.fig("proportion of dusky and copper shark_TDGLDF",2000,2400)
 par(mfcol=c(2,1),las=1,mai=c(.8,.85,.1,.1),mgp=c(2.5,.8,0))
@@ -3687,11 +3794,9 @@ system.time({Stand.out.daily=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv')
     DAT=DAT%>% mutate(mean.depth=10*round(mean.depth/10),
                       nlines.c=ifelse(nlines.c>2,'>2',nlines.c),
                       mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
-    if(do.gam=="YES")dummy.gam.form=Best.Model.daily.gam[[s]] else
-                     dummy.gam.form=NULL
     return(fn.stand(d=DAT,Response="catch.target",RESPNS="LNcpue",
                     PREDS=Predictors_daily,efrt="km.gillnet.hours.c",
-                    Formula=Best.Model.daily[[s]],Formula.gam=dummy.gam.form))
+                    Formula=NULL,Formula.gam=Best.Model.daily.gam[[s]]))
     rm(DAT)
   }
 })
@@ -3856,8 +3961,7 @@ if(Model.run=="First")      #takes 7 mins
 # 4.22.6 Run standardisation for Other species using delta method due to excess zeros
 cl <- makeCluster(detectCores()-1)
 registerDoParallel(cl)
-
-  #monthly
+  #monthly          takes 2.47 sec
 system.time({Stand.out.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr','cede')) %dopar%
   {
     if(!is.null(DATA.list.LIVEWT.c[[s]]) & !is.null(BLKS.used[[s]]))
@@ -3871,8 +3975,7 @@ system.time({Stand.out.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr','c
     }
   }
 })
-
-  #daily
+  #daily            takes 3.5 sec
 system.time({Stand.out.daily.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr','cede','mgcv')) %dopar%
   {
     if(!is.null(DATA.list.LIVEWT.c.daily[[s]])& !is.null(BLKS.used.daily[[s]]))
@@ -3880,16 +3983,13 @@ system.time({Stand.out.daily.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dpl
       DAT=DATA.list.LIVEWT.c.daily[[s]]
       colnames(DAT)=tolower(colnames(DAT)) 
       DAT=DAT%>%filter(vessel%in%VES.used.daily[[s]] & blockx%in%as.numeric(BLKS.used.daily[[s]]))  #selet blocks and vessels
-      if(do.gam=="YES")dummy.gam.form=Best.Model.daily.gam[[s]] else
-                       dummy.gam.form=NULL
       return(fn.delta(d=DAT,Response="catch.target",PREDS=Predictors_monthly,
                       efrt="km.gillnet.hours.c",
-                      Formula=Best.Model.daily[[s]],Formula.gam=dummy.gam.form))
+                      Formula=NULL,Formula.gam=Best.Model.daily.gam[[s]]))
       rm(DAT)
     }
   }
 })
-
 names(Stand.out.other)=names(Stand.out.daily.other)=names(SP.list)[nnn[-sort(Tar.sp)]]
 stopCluster(cl)
 
@@ -3900,6 +4000,7 @@ Stand.out=Stand.out[names(SP.list)]
 Stand.out.daily=c(Stand.out.daily,Stand.out.daily.other)
 Stand.out.daily=Stand.out.daily[names(SP.list)]
 
+rm(Stand.out.other,Stand.out.daily.other)
 
 #   4.22.7 Export deviance explained
 if(Model.run=="First")  #takes 96 seconds
@@ -4110,6 +4211,7 @@ if(compare.glm.gam=="YES")
              long10.corner=round(long10.corner,2))
     YLIM=c(min(new.block10$lat10.corner),max(new.block10$lat10.corner))
     XLIM=c(min(new.block10$long10.corner),max(new.block10$long10.corner))
+    #seq(112,129,length.out = 7+6*16)
     seq.lat=c(-26.83, -26.67, -26.50, -26.33, -26.17, -26.00,
               -27.83, -27.67, -27.50, -27.33, -27.17, -27.00,
               -28.83, -28.67, -28.50, -28.33, -28.17, -28.00,
@@ -4159,6 +4261,14 @@ if(compare.glm.gam=="YES")
     
     
     
+    ##option using lsmeans
+    # dummy=subset(d,select=c(block10,lat10.corner,long10.corner)) %>%
+    #   mutate(block10=as.character(block10)) %>%
+    #   distinct(block10,.keep_all =T)%>%
+    #   arrange(block10)
+    # Long.seq=dummy$long10.corner
+    # Lat.seq=dummy$lat10.corner
+    # a=summary(ref_grid(res.gam, at = list(finyear=new.finyr,lat10.corner =Lat.seq ,long10.corner = Long.seq)))
     
     new.gam=d%>%select(block10,lat10.corner,long10.corner)%>%
       distinct(block10,.keep_all=T)%>%

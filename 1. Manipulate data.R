@@ -7470,8 +7470,12 @@ if(First.run=="YES")
     polygon(x=c(116.5,116.5,112,112),y=c(-26.5,-33,-33,-26.5),lwd=1.5,col=rgb(.1,.1,.1,alpha=.2))
     polygon(x=c(116.5,116.5,112,112),y=c(-33,-37,-37,-33),lwd=1.5,col=rgb(.3,.3,.3,alpha=.5))
     polygon(x=c(129,129,116.5,116.5),y=c(-30,-37,-37,-30),lwd=1.5,col=rgb(.7,.7,.7,alpha=.2))
-    axis(side = 1, at =LONGG, labels = F, tcl = 34,lty=3,col="grey30")
-    axis(side = 4, at = LATT, labels = F,tcl =34,lty=3,col="grey30")
+    
+    axis(side = 1, at =seq(LONGG[1],LONGG[length(LONGG)],length.out = 7+6*(length(LONGG)-2)), labels = F, tcl = 34,lty=3,col="grey60")
+    axis(side = 4, at = seq(LATT[1],LATT[length(LATT)],length.out = 7+6*(length(LATT)-2)), labels = F,tcl =34,lty=3,col="grey30")
+    axis(side = 1, at =LONGG, labels = F, tcl = 34,lty=1,col="grey30")
+    axis(side = 4, at = LATT, labels = F,tcl =34,lty=1,col="grey30")
+    
     if(add.depth=="YES") contour(xbat, ybat, reshaped[,2:ncol(reshaped)],ylim=c(-37,-25),xlim=South.WA.long, zlim=c(-1,-300),
                                  nlevels = 1,labcex=0.1,lty = c(1,2,3),col=c("gray20","gray20","gray20","transparent"),add=T)
     
@@ -7487,8 +7491,8 @@ if(First.run=="YES")
     points(117.8,-35,pch=19,cex=1.5)
     text(122,-33.62,("Esperance"),col="black", cex=1.1)
     points(121.9,-33.86,pch=19,cex=1.5)
-    mtext("Latitude (?S)",side=2,line=1.7,las=3,cex=1.75)
-    mtext("Longitude (?E)",side=1,line=1.75,cex=1.75)
+    mtext(expression(paste("Latitude (",degree,"S)",sep="")),side=2,line=1.2,las=3,cex=1.75)
+    mtext(expression(paste("Longitude (",degree,"E)",sep="")),side=1,line=1.75,cex=1.75)
     
     text(113.5,-30.5,("WCDGDLF"),col="black", cex=1.4)
     text(114,-34.75,("JASDGDLF"),col="black", cex=1.4) 
