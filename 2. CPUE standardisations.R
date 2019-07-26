@@ -101,7 +101,7 @@ library(tibble)
 library(cluster)
 library(factoextra) #for plotting
 library(mgcv)
-library(mvtnorm)      #for multivariate normal pdf
+
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)   
 
 
@@ -229,9 +229,6 @@ Do.tiff="NO"
 #Model.run="First"    # for first time of doing standardisation. This allows selection of 
 #     best model and sensitivity tests
 Model.run="Standard"  # for running standardisations in subsequent years
-
-#Define if doing gams
-do.gam="NO"
 
 #Define is testing model structure (i.e. selection of model terms)
 Def.mod.Str="NO"
@@ -1817,6 +1814,51 @@ fn.delta=function(d,Response,PREDS,efrt,Formula,Formula.gam)   #function for sta
   {
     res_bi <- glm(Formula.bi, data=Bi, family="binomial", maxit=100)
     res <- glm(Formula,data=d)
+    while(any(is.na(coef(res)))|any(is.na(coef(res_bi))))
+    {
+      na.coef=names(which(is.na(coef(res_bi))))
+      if(isTRUE(any(grepl('blockx', na.coef))))
+      {
+        drp=substr(na.coef[grepl('blockx', na.coef)],nchar('blockx')+1,15)
+        Bi=subset(Bi,!blockx%in%drp)%>%
+          mutate(blockx=droplevels(blockx))
+      }
+      if(isTRUE(any(grepl('vessel', na.coef))))
+      {
+        drp=substr(na.coef[grepl('vessel', na.coef)],nchar('vessel')+1,15)
+        Bi=subset(Bi,!vessel%in%drp)%>%
+          mutate(vessel=droplevels(vessel))
+      }
+      if(isTRUE(any(grepl('month', na.coef))))
+      {
+        drp=substr(na.coef[grepl('vessel', na.coef)],nchar('month')+1,15)
+        Bi=subset(Bi,!month%in%drp)%>%
+          mutate(month=droplevels(month))
+      }
+      res_bi <- glm(Formula.bi, data=Bi, family="binomial", maxit=100)
+      
+      
+      na.coef=names(which(is.na(coef(res))))
+      if(isTRUE(any(grepl('blockx', na.coef))))
+      {
+        drp=substr(na.coef[grepl('blockx', na.coef)],nchar('blockx')+1,15)
+        d=subset(d,!blockx%in%drp)%>%
+          mutate(blockx=droplevels(blockx))
+      }
+      if(isTRUE(any(grepl('vessel', na.coef))))
+      {
+        drp=substr(na.coef[grepl('vessel', na.coef)],nchar('vessel')+1,15)
+        d=subset(d,!vessel%in%drp)%>%
+          mutate(vessel=droplevels(vessel))
+      }
+      if(isTRUE(any(grepl('month', na.coef))))
+      {
+        drp=substr(na.coef[grepl('vessel', na.coef)],nchar('month')+1,15)
+        d=subset(d,!month%in%drp)%>%
+          mutate(month=droplevels(month))
+      }
+      res <- glm(Formula,data=d)
+    }
   }
 
   res.gam=res.gam_bi=NULL
@@ -1832,7 +1874,7 @@ fn.delta=function(d,Response,PREDS,efrt,Formula,Formula.gam)   #function for sta
   
   return(list(res=res,res_bi=res_bi,res.gam=res.gam,res.gam_bi=res.gam_bi,DATA=d,DATA_bi=Bi))
 }
-fn.MC.cpue=function(BiMOD,MOD,BiData,PosData,niter,pred.term,ALL.terms)
+fn.MC.delta.cpue=function(BiMOD,MOD,BiData,PosData,niter,pred.term,ALL.terms)
 {
   Covar.bi=as.matrix(vcov(BiMOD))
   Covar.pos=as.matrix(vcov(MOD))
@@ -1873,14 +1915,14 @@ fn.MC.cpue=function(BiMOD,MOD,BiData,PosData,niter,pred.term,ALL.terms)
       newdata.pos[,ii]= mean(PosData[,id])
     }
   }
+  nms.coef=names(unlist(dummy.coef(MOD)))
+  pred.var=sapply(strsplit(nms.coef[grepl(pred.term, nms.coef)], paste(pred.term,".",sep="")), "[", 2)
   
-  pred.dat.pos=data.frame(factor(levels(PosData[,match(pred.term,names(PosData))])))
+  pred.dat.pos=data.frame(factor(pred.var,levels=pred.var))
   colnames(pred.dat.pos)=pred.term
   newdata.pos=cbind(pred.dat.pos,newdata.pos)
   
-  pred.dat.bi=data.frame(factor(levels(BiData[,match(pred.term,names(BiData))])))
-  colnames(pred.dat.bi)=pred.term
-  newdata.bi=cbind(pred.dat.bi,newdata.bi)
+  newdata.bi=cbind(pred.dat.pos,newdata.bi)
   newdata.bi=cbind(newdata.bi,LNeffort=mean(BiData$LNeffort))
   
   set.seed(999)
@@ -1916,49 +1958,72 @@ fn.MC.cpue=function(BiMOD,MOD,BiData,PosData,niter,pred.term,ALL.terms)
   LOW=apply(MC.preds, 2, function(x) quantile(x, 0.025,na.rm=T))
   UP=apply(MC.preds, 2, function(x) quantile(x, 0.975,na.rm=T))
   
-  Stats=cbind(pred.dat.bi,data.frame(MEAN=MEAN,SD=SD,CV=CV,LOW=LOW,UP=UP))
+  Stats=cbind(pred.dat.pos,data.frame(MEAN=MEAN,SD=SD,CV=CV,LOW=LOW,UP=UP))
   Stats=Stats[order(Stats[,1]),]
+  Stats=Stats%>%rename(response=MEAN, lower.CL=LOW, upper.CL=UP)
   rownames(Stats)=NULL
   return(Stats)
 }
 
-Anova.and.Dev.exp=function(GLM,SP,type)   #function for extracting term significance and deviance explained
+Anova.and.Dev.exp=function(MOD,SP,type,gam.extra)   #function for extracting term significance and deviance explained
 {
   #Anovas
-  Anova.tab=anova(GLM, test = "Chisq")
+  if(class(MOD)[1]=='glm')
+  {
+    Anova.tab=anova(MOD, test = "Chisq")
+    n=2:length(Anova.tab$Deviance)
+    Term.dev.exp=100*(Anova.tab$Deviance[n]/MOD$null.deviance)
+    names(Term.dev.exp)=rownames(Anova.tab)[n]
+    Dev.exp=sum(Term.dev.exp)
+    ANOVA=as.data.frame.matrix(Anova.tab)
+    Term=data.frame(Percent.dev.exp=Term.dev.exp)
+    Table=ANOVA[-1,match(c("Df","Pr(>Chi)"),names(ANOVA))]
+    Term=Term[match(rownames(Term), rownames(Table)),]
+    Table=cbind(Table,Term)
+    names(Table)[match("Term",names(Table))]="Percent.dev.exp"
+    Table$term=rownames(ANOVA)[2:nrow(ANOVA)]
+    Table=Table%>%select('term','Df','Pr(>Chi)','Percent.dev.exp')
+    All=Table[1,]
+    All[,1:ncol(All)]=NA
+    All$term="model"
+    All$Percent.dev.exp=round(Dev.exp,3)
+    Table=rbind(Table,All)
+    vars <- c(df = "Df", 'p-value' ="Pr(>Chi)")
+    Table= Table %>% mutate_at(c("Pr(>Chi)","Percent.dev.exp"), round, 3) %>%
+      rename(!!vars)
+  }
   
-  #Deviance explained
-  #By each term
-  n=2:length(Anova.tab$Deviance)
-  Term.dev.exp=100*(Anova.tab$Deviance[n]/GLM$null.deviance)
-  names(Term.dev.exp)=rownames(Anova.tab)[n]
-  
-  #By full model
-  Dev.exp=sum(Term.dev.exp)
-  
-  #Combine as table
-  ANOVA=as.data.frame.matrix(Anova.tab)
-  Term=data.frame(Percent.dev.exp=Term.dev.exp)
-  Table=ANOVA[-1,match(c("Deviance","Pr(>Chi)"),names(ANOVA))]
-  Term=Term[match(rownames(Term), rownames(Table)),]
-  
-  Table=cbind(Table,Term)
-  names(Table)[match("Term",names(Table))]="Percent.dev.exp"
-  Table= Table %>% mutate_at(c("Deviance","Percent.dev.exp"), round, 3) 
-  All=Table[1,]
-  rownames(Table)=rownames(ANOVA)[2:nrow(ANOVA)]
-  rownames(All)="Model"
-  All[,1:ncol(All)]=NA
-  All$Percent.dev.exp=round(Dev.exp,3)
-  Table=rbind(Table,All)
-  
-  Table$"Pr(>Chi)"=ifelse(Table$"Pr(>Chi)"<0.001,"<0.001",Table$"Pr(>Chi)")
+  if(class(MOD)[1]=="gam")
+  {
+    Anova.tab=anova(MOD)
+    ANOVA=as.data.frame(Anova.tab$pTerms.table[,-2])
+    s.mat=as.data.frame(Anova.tab$s.table)
+    s.mat=s.mat[,-(2:3)]
+    names(s.mat)=names(ANOVA)
+    ANOVA=rbind(ANOVA,s.mat)
+    ANOVA$term=rownames(ANOVA)
+    gamo=gam.extra
+    for(l in 2:length(gam.extra)) gamo[l]=gam.extra[l]-gam.extra[l-1]
+    gamo=100*gamo
+    gam.dev.exp=data.frame(Percent.dev.exp=gamo,term=names(gam.extra))
+    ANOVA=ANOVA%>%left_join(gam.dev.exp,by="term")
+    
+    ANOVA = ANOVA %>% select(term, df, 'p-value', Percent.dev.exp)
+    model=ANOVA[1,]
+    model[,]=NA
+    model$Percent.dev.exp=sum(gamo)
+    model$term='model'
+    ANOVA=rbind(ANOVA,model)
+    Table= ANOVA %>% mutate_at(c("p-value","Percent.dev.exp"), round, 3)  %>%
+      mutate_at(c("df"), round, 0)
+    
+  }
+  Table$"p-value"=ifelse(Table$"p-value"<0.001,"<0.001",Table$"p-value")
   dummy=Table[1:2,]
   dummy[,]=NA
-  rownames(dummy)=c(type,SP)
+  dummy$term=c(type,SP)
   Table=rbind(dummy,Table)
   Table[is.na(Table)] <- ""
-  Table=cbind(data.frame(Term=rownames(Table)),Table)
   rownames(Table)=NULL
   return(Table)
 }
@@ -2406,7 +2471,7 @@ Pos.Diag.fn=function(MODEL,SPECIES,M)   #function for positive catch diagnostics
   if(s==1) mtext("Frequency",2,outer=F,line=2.5,las=3,cex=M)
   if(s==2) mtext("                      Standardised residuals",1,outer=F,line=1.5,cex=M)
   
-  plot(PRED,Std.RES,ylab="",xlab="")
+  plot(PRED,Std.RES,ylab="",xlab="",ylim=c(-5,5))
   abline(0,0,lwd=1.5,lty=2,col='grey40')
   if(s==1) mtext("Standardised residuals",2,outer=F,line=2,las=3,cex=M)
   if(s==2) mtext("                         Fitted values",1,outer=F,line=1.5,cex=M)
@@ -2611,6 +2676,9 @@ SpiSis=SpiSis$SPECIES
 names(SpiSis)=nms
 SpiSis=SpiSis[-match(c(22999),SpiSis)]
 SP.list=as.list(SpiSis)
+
+#remove thresher and dogfish because there is not enough positive record data to estimate glm coefficients
+SP.list=SP.list[-match(c("Thresher Shark","Gulper sharks, Sleeper Sharks & Dogfishes"),names(SP.list))]
 
 #combine dusky and bronzy (Rory request due to species id) and sawsharks general with common saw
 SP.list=SP.list[-match(c("Common Sawshark","SawShark",'Dusky Whaler','Bronze Whaler'),names(SP.list))]  
@@ -3166,8 +3234,6 @@ for(i in nnn)
 These.efforts.daily=c("FINYEAR","date","TSNo","Km.Gillnet.Hours.c","Km.Gillnet.Days.c",
                       "zone","MONTH","BLOCKX","block10","VESSEL","mesh",
                       "Same.return.SNo","nlines.c","shots.c")
-
-Species.list.daily$`Thresher Shark`=Species.list.daily$`Greynurse Shark` #set to null because no contrast in binomial data used for standardisation
 for(i in nnn)
 {
   if(!is.null(Species.list.daily[[i]]))
@@ -3306,12 +3372,12 @@ Store_nom_cpues_monthly=vector('list',length(SP.list))
 names(Store_nom_cpues_monthly)=names(SP.list)
 Store_nom_cpues_daily=Store_nom_cpues_monthly
 Hnd.ains="C:/Matias/Analyses/Catch and effort/Outputs/Paper/Ainsline_different_cpues/"
-for(s in Tar.sp)
+suppressWarnings(for(s in nnn)
 {
   #Monthly
   if(!is.null(DATA.list.LIVEWT.c[[s]]) & !is.null(BLKS.used[[s]]))
   {
-    Store_nom_cpues_monthly[[s]]=fn.ainslie(dat=DATA.list.LIVEWT.c[[s]],Ktch.targt='catch.target',
+     Store_nom_cpues_monthly[[s]]=fn.ainslie(dat=DATA.list.LIVEWT.c[[s]],Ktch.targt='catch.target',
                                             Effrt=c('km.gillnet.days.c','km.gillnet.hours.c'),
                                             explr="NO",QL_prop_ktch=QL_expl_ktch_prop,Prop.Malcolm=PRP.MLCLM,
                                             cpue.units = c("kg/km gillnet day","kg/km gillnet hour"),spname=names(SP.list)[s],
@@ -3327,7 +3393,7 @@ for(s in Tar.sp)
                                           cpue.units = c("kg/km gillnet day","kg/km gillnet hour"),spname=names(SP.list)[s],
                                           BLks=as.numeric(BLKS.used.daily[[s]]),VesL=VES.used.daily[[s]],Type="_daily_")
   }
-}
+})
 
 #4.17 Evaluate balance of data subset based on QL  
 #note: remove vessels with less than Min.Vess.yr (monthly) and Min.Vess.yr.d (daily)
@@ -3958,7 +4024,7 @@ if(Model.run=="First")      #takes 7 mins
   dev.off()
 }
  
-# 4.22.6 Run standardisation for Other species using delta method due to excess zeros
+# 4.22.6 Run standardisation for Other species (based on delta method due to excess zeros)
 cl <- makeCluster(detectCores()-1)
 registerDoParallel(cl)
   #monthly          takes 2.47 sec
@@ -4003,19 +4069,107 @@ Stand.out.daily=Stand.out.daily[names(SP.list)]
 rm(Stand.out.other,Stand.out.daily.other)
 
 #   4.22.7 Export deviance explained
-if(Model.run=="First")  #takes 96 seconds
+if(Model.run=="First")  #takes 6 mins
 {
+  #calculate gam deviance explained by each term
+  gam.list=Stand.out.daily
+  cl <- makeCluster(detectCores()-1)
+  registerDoParallel(cl)
+  system.time({dummy1=foreach(s=nnn,.packages=c('mgcv')) %dopar%
+    {
+      if(!is.null(gam.list[[s]]))
+      {
+        if(s %in% Tar.sp)
+        {
+          ALLvars.gam=all.vars(Best.Model.daily.gam[[s]])[-1]
+          ALLvars.gam=c(1,"s(long10.corner,lat10.corner)",ALLvars.gam[-match(c('long10.corner','lat10.corner'),ALLvars.gam)])
+          dev.exp=rep(NA,length(ALLvars.gam))
+          names(dev.exp)=ALLvars.gam
+          for(g in 1:length(ALLvars.gam))
+          {
+            if(g==1) added.bit=paste(ALLvars.gam[g],collapse="+") else
+              added.bit=paste(ALLvars.gam[1:g],collapse="+")
+            Formula.gam=as.formula(paste('LNcpue',"~",added.bit))
+            res.gam <-gam(Formula.gam,data=gam.list[[s]]$DATA,method="REML")
+            dev.exp[g]=summary(res.gam)$dev.expl
+          }
+          dev.exp=dev.exp[-1]  
+          return(list(dev.exp=dev.exp))
+        }
+        if(!s %in% Tar.sp)
+        {
+          ALLvars.gam=all.vars(Best.Model.daily.gam[[s]])[-1]
+          ALLvars.gam=c(1,"s(long10.corner,lat10.corner)",ALLvars.gam[-match(c('long10.corner','lat10.corner'),ALLvars.gam)])
+          dev.exp=rep(NA,length(ALLvars.gam))
+          names(dev.exp)=ALLvars.gam
+          dev.exp.BI=dev.exp
+          for(g in 1:length(ALLvars.gam))
+          {
+            if(g==1) added.bit=paste(ALLvars.gam[g],collapse="+") else
+              added.bit=paste(ALLvars.gam[1:g],collapse="+")
+            
+            Formula.bi.gam=as.formula(paste('catch.pos',"~",paste(added.bit,"offset(LNeffort)",sep="+")))
+            res.gam_bi <-gam(Formula.bi.gam,data=gam.list[[s]]$DATA_bi, family="binomial",method="REML")
+            
+            Formula.gam=as.formula(paste('LNcpue',"~",added.bit))
+            res.gam <-gam(Formula.gam,data=gam.list[[s]]$DATA,method="REML")
+            
+            dev.exp.BI[g]=summary(res.gam_bi)$dev.expl
+            dev.exp[g]=summary(res.gam)$dev.expl
+          }
+          dev.exp.BI=dev.exp.BI[-1]
+          dev.exp=dev.exp[-1] 
+          return(list(Bi=dev.exp.BI,Pos=dev.exp))
+        }
+      }
+    }
+  })
+  stopCluster(cl)
+  names(dummy1)=names(gam.list)
+  gam.list=dummy1
+  
   Dev.exp=vector('list',length(SP.list)) 
   names(Dev.exp)=names(SP.list)
   Dev.exp.daily=Dev.exp
-  system.time({for(s in nnn)
+  system.time({for(s in Tar.sp)
   {
-    if(!is.null(Stand.out[[s]]$res))Dev.exp[[s]]=Anova.and.Dev.exp(GLM=Stand.out[[s]]$res,SP=names(SP.list)[s],type="Monthly")
-    if(!is.null(Stand.out.daily[[s]]$res))Dev.exp.daily[[s]]=Anova.and.Dev.exp(GLM=Stand.out.daily[[s]]$res,SP=names(SP.list)[s],type="Daily")
+    if(!is.null(Stand.out[[s]]$res))Dev.exp[[s]]=Anova.and.Dev.exp(MOD=Stand.out[[s]]$res,
+                                                SP=Nms.sp[s],type="Monthly",gam.extra=NULL)
+    if(!is.null(Stand.out.daily[[s]]$res.gam))Dev.exp.daily[[s]]=Anova.and.Dev.exp(MOD=Stand.out.daily[[s]]$res.gam,
+                                                SP=Nms.sp[s],type="Daily",gam.extra=gam.list[[s]]$dev.exp)
   }})   
   Tab.Dev.Exp=rbind(do.call(rbind,Dev.exp),do.call(rbind,Dev.exp.daily))
   rownames(Tab.Dev.Exp)=NULL
   fn.word.table(WD=getwd(),TBL=Tab.Dev.Exp,Doc.nm="ANOVA_table",caption=NA,paragph=NA,
+                HdR.col='black',HdR.bg='white',Hdr.fnt.sze=10,Hdr.bld='normal',body.fnt.sze=10,
+                Zebra='NO',Zebra.col='grey60',Grid.col='black',
+                Fnt.hdr= "Times New Roman",Fnt.body= "Times New Roman")
+  
+  Dev.exp.bi=Dev.exp
+  Dev.exp.daily.bi=Dev.exp.daily
+  system.time({for(s in nnn[-sort(Tar.sp)])
+  {
+    if(!is.null(Stand.out[[s]]$res))
+    {
+      Dev.exp[[s]]=Anova.and.Dev.exp(MOD=Stand.out[[s]]$res,
+                        SP=Nms.sp[s],type="Monthly.pos",gam.extra=NULL)
+      Dev.exp.bi[[s]]=Anova.and.Dev.exp(MOD=Stand.out[[s]]$res_bi,
+                                     SP=Nms.sp[s],type="Monthly.bi",gam.extra=NULL)
+    }
+
+    if(!is.null(Stand.out.daily[[s]]$res.gam))
+    {
+      Dev.exp.daily[[s]]=Anova.and.Dev.exp(MOD=Stand.out.daily[[s]]$res.gam,
+                                    SP=Nms.sp[s],type="Daily.pos",gam.extra=gam.list[[s]]$Pos)
+      Dev.exp.daily.bi[[s]]=Anova.and.Dev.exp(MOD=Stand.out.daily[[s]]$res.gam,
+                                           SP=Nms.sp[s],type="Daily.bi",gam.extra=gam.list[[s]]$Bi)
+    }
+
+  }})   
+  Tab.Dev.Exp=rbind(do.call(rbind,Dev.exp),do.call(rbind,Dev.exp.bi),
+                    do.call(rbind,Dev.exp.daily),do.call(rbind,Dev.exp.daily.bi))
+  rownames(Tab.Dev.Exp)=NULL
+  fn.word.table(WD=getwd(),TBL=Tab.Dev.Exp,Doc.nm="ANOVA_table_other.species",caption=NA,paragph=NA,
                 HdR.col='black',HdR.bg='white',Hdr.fnt.sze=10,Hdr.bld='normal',body.fnt.sze=10,
                 Zebra='NO',Zebra.col='grey60',Grid.col='black',
                 Fnt.hdr= "Times New Roman",Fnt.body= "Times New Roman")
@@ -4032,7 +4186,7 @@ if(Model.run=="First")
     Pos.Diag.fn(MODEL=Stand.out[[s]]$res,SPECIES=Nms.sp[s],M=.9)
     
     #Daily
-    Pos.Diag.fn(MODEL=Stand.out.daily[[s]]$res,SPECIES="",M=.9)
+    Pos.Diag.fn(MODEL=Stand.out.daily[[s]]$res.gam,SPECIES="",M=.9)
   }
   mtext(c("Daily logbooks                                          Monthly returns     "),4,
         outer=T,las=3,line=0,cex=1.3)
@@ -4051,10 +4205,10 @@ id.eff=match(Selected.effort,names(Store_nom_cpues_monthly$`Whiskery Shark`[[1]]
 Nominl=vector('list',length(SP.list)) 
 names(Nominl)=names(SP.list)
 Nominl.daily=Nominl
-for(s in Tar.sp) 
+for(s in nnn) 
 {
-  Nominl[[s]]=subset(Store_nom_cpues_monthly[[s]][[id.dat]][[id.eff]],method=="LnMean")
-  Nominl.daily[[s]]=subset(Store_nom_cpues_daily[[s]][[id.dat]][[id.eff]],method=="LnMean")
+  if(!is.null(Store_nom_cpues_monthly[[s]])) Nominl[[s]]=subset(Store_nom_cpues_monthly[[s]][[id.dat]][[id.eff]],method=="LnMean")
+  if(!is.null(Store_nom_cpues_daily[[s]])) Nominl.daily[[s]]=subset(Store_nom_cpues_daily[[s]][[id.dat]][[id.eff]],method=="LnMean")
   if(is.na(match("finyear",names(Nominl[[s]]))))
   {
     Nominl[[s]]$finyear=Nominl[[s]]$season
@@ -4353,54 +4507,113 @@ if(compare.glm.gam=="YES")
 }
 
 
-#ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for names(SP.list) 
+#Predict years (considering log bias corr if required)
 
-#Predict years based on emmeans (formerly lsmeans) considering log bias corr if required
-Pred=vector('list',length(SP.list)) 
-names(Pred)=names(SP.list)
-Pred.daily=Pred
-system.time({
-  for(s in Tar.sp)   
+  #Other species
+Niter=1000   #MC interations
+cl <- makeCluster(detectCores()-1)
+registerDoParallel(cl)
+      #monthly          takes 0.3 sec per iteration
+system.time({Pred.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr','mvtnorm')) %dopar%
+  {
+    if(!is.null(Stand.out[[s]]))
+    {
+      return(fn.MC.delta.cpue(BiMOD=Stand.out[[s]]$res_bi,
+                              MOD=Stand.out[[s]]$res,
+                              BiData=Stand.out[[s]]$DATA_bi,
+                              PosData=Stand.out[[s]]$DATA,
+                              niter=Niter,
+                              pred.term='finyear',
+                              ALL.terms=Predictors_monthly))
+    } 
+  }
+})
+      #Daily              takes 0.2 sec per iteration
+system.time({Pred.daily.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr','mvtnorm')) %do%
+  {
+    if(!is.null(Stand.out.daily[[s]]))
+    {
+      return(fn.MC.delta.cpue(BiMOD=Stand.out.daily[[s]]$res.gam_bi,
+                              MOD=Stand.out.daily[[s]]$res.gam,
+                              BiData=Stand.out.daily[[s]]$DATA_bi,
+                              PosData=Stand.out.daily[[s]]$DATA,
+                              niter=Niter,
+                              pred.term='finyear',
+                              ALL.terms=c(Predictors_daily,'long10.corner','lat10.corner')))
+    } 
+  }
+})
+names(Pred.other)=names(Pred.daily.other)=names(SP.list)[nnn[-sort(Tar.sp)]]
+
+  #Target species
+      #monthly          takes 80 sec
+system.time({Pred.tar=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
   {
     d=Stand.out[[s]]$DATA   #note: need data as global for ref_grid
-    Pred[[s]]=pred.fun(MOD=Stand.out[[s]]$res,biascor="YES",PRED="finyear",Pred.type="link")
-      
-    d=Stand.out.daily[[s]]$DATA
-    Pred.daily[[s]]=pred.fun(MOD=Stand.out.daily[[s]]$res,biascor="YES",PRED="finyear",Pred.type="link")
+    return(pred.fun(MOD=Stand.out[[s]]$res,biascor="YES",PRED="finyear",Pred.type="link"))
     rm(d)
   }
-})     #takes 3 minutes
+})
+      #Daily              takes 70 sec
+system.time({Pred.daily.tar=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
+  {
+    d=Stand.out.daily[[s]]$DATA
+    return(pred.fun(MOD=Stand.out.daily[[s]]$res.gam,biascor="YES",PRED="finyear",Pred.type="link"))
+    rm(d)
+  }
+})
+names(Pred.tar)=names(Pred.daily.tar)=names(SP.list)[Tar.sp]
+stopCluster(cl) 
 
+Pred=c(Pred.tar,Pred.other)
+Pred=Pred[names(SP.list)]
+Pred.daily=c(Pred.daily.tar,Pred.daily.other)
+Pred.daily=Pred.daily[names(SP.list)]
 
 #Apply efficiency creep      
 Pred.creep=Pred
 Pred.daily.creep=Pred.daily
 Nominl.creep=Nominl
 Nominl.daily.creep=Nominl.daily
-for(s in Tar.sp)
+for(s in nnn)
 {
   #monthly
-  add.crp=Eff.creep$effort.creep[match(Pred.creep[[s]]$finyear,Eff.creep$finyear)]
-  Pred.creep[[s]]$response=Pred.creep[[s]]$response*(1-add.crp)
-  Pred.creep[[s]]$lower.CL=Pred.creep[[s]]$lower.CL*(1-add.crp)
-  Pred.creep[[s]]$upper.CL=Pred.creep[[s]]$upper.CL*(1-add.crp)
-  
-  Nominl.creep[[s]]$response=Nominl.creep[[s]]$mean*(1-add.crp)
-  Nominl.creep[[s]]$lower.CL=Nominl.creep[[s]]$lowCL*(1-add.crp)
-  Nominl.creep[[s]]$upper.CL=Nominl.creep[[s]]$uppCL*(1-add.crp)
-  
+  if(!is.null(Pred.creep[[s]]))
+  {
+    yrs=Nominl.creep[[s]]$finyear
+    yrs=paste(yrs,substr(yrs+1,3,4),sep="-")
+    Pred.creep[[s]]=subset(Pred.creep[[s]],finyear%in%yrs)
+    
+    add.crp=Eff.creep$effort.creep[match(Pred.creep[[s]]$finyear,Eff.creep$finyear)]
+    Pred.creep[[s]]$response=Pred.creep[[s]]$response*(1-add.crp)
+    Pred.creep[[s]]$lower.CL=Pred.creep[[s]]$lower.CL*(1-add.crp)
+    Pred.creep[[s]]$upper.CL=Pred.creep[[s]]$upper.CL*(1-add.crp)
+    
+    yrs=as.character(substr(Pred.creep[[s]]$finyear,1,4))
+    Nominl.creep[[s]]=subset(Nominl.creep[[s]],finyear%in%yrs)
+    Nominl.creep[[s]]$response=Nominl.creep[[s]]$mean*(1-add.crp)
+    Nominl.creep[[s]]$lower.CL=Nominl.creep[[s]]$lowCL*(1-add.crp)
+    Nominl.creep[[s]]$upper.CL=Nominl.creep[[s]]$uppCL*(1-add.crp)
+  }
   
   #daily
-  add.crp=Eff.creep$effort.creep[match(Pred.daily.creep[[s]]$finyear,Eff.creep$finyear)]
-  Pred.daily.creep[[s]]$response=Pred.daily.creep[[s]]$response*(1-add.crp)
-  Pred.daily.creep[[s]]$lower.CL=Pred.daily.creep[[s]]$lower.CL*(1-add.crp)
-  Pred.daily.creep[[s]]$upper.CL=Pred.daily.creep[[s]]$upper.CL*(1-add.crp)
-  
-  Nominl.daily.creep[[s]]$response=Nominl.daily.creep[[s]]$mean*(1-add.crp)
-  Nominl.daily.creep[[s]]$lower.CL=Nominl.daily.creep[[s]]$lowCL*(1-add.crp)
-  Nominl.daily.creep[[s]]$upper.CL=Nominl.daily.creep[[s]]$uppCL*(1-add.crp)
+  if(!is.null(Pred.daily.creep[[s]]))
+  {
+    yrs=Nominl.daily.creep[[s]]$finyear
+    yrs=paste(yrs,substr(yrs+1,3,4),sep="-")
+    Pred.daily.creep[[s]]=subset(Pred.daily.creep[[s]],finyear%in%yrs)
+    add.crp=Eff.creep$effort.creep[match(Pred.daily.creep[[s]]$finyear,Eff.creep$finyear)]
+    Pred.daily.creep[[s]]$response=Pred.daily.creep[[s]]$response*(1-add.crp)
+    Pred.daily.creep[[s]]$lower.CL=Pred.daily.creep[[s]]$lower.CL*(1-add.crp)
+    Pred.daily.creep[[s]]$upper.CL=Pred.daily.creep[[s]]$upper.CL*(1-add.crp)
+    
+    yrs=as.character(substr(Pred.daily.creep[[s]]$finyear,1,4))
+    Nominl.daily.creep[[s]]=subset(Nominl.daily.creep[[s]],finyear%in%yrs)
+    Nominl.daily.creep[[s]]$response=Nominl.daily.creep[[s]]$mean*(1-add.crp)
+    Nominl.daily.creep[[s]]$lower.CL=Nominl.daily.creep[[s]]$lowCL*(1-add.crp)
+    Nominl.daily.creep[[s]]$upper.CL=Nominl.daily.creep[[s]]$uppCL*(1-add.crp)
+  }
 }
-
 fn.fig("Figure 4.Annual_Index",2000, 2400)    
 par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
 for(s in Tar.sp)
@@ -4456,7 +4669,6 @@ for(s in Tar.sp)
   
   
 }
-
 fn.fig("Figure 4.Annual_Index_normalised",2000, 2400)    
 #no point in showing nominal as it is not comparable in relative terms
 par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
@@ -4480,6 +4692,8 @@ mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
 mtext("Relative CPUE",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
 dev.off()
 
+#ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for names(SP.list) 
+#do other sharks
 
 #   4.22.9 Influence plots     
 if(do.influence=="YES")

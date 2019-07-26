@@ -23,3 +23,5 @@ Data.daily.GN=read.csv('Data.daily.GN_for_spatial_analysis.csv')
 #Only focus on DAILY data, ditch monthly because it doesn't have the spatial resolution
 #Formulas: use same formulas used for target and other species: Best.Model.daily.gam
 
+#hotspots defined here as those areas with
+#≥75th percentile of weighted daily location density;
