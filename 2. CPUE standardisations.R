@@ -2054,6 +2054,32 @@ pred.fun=function(MOD,biascor,PRED,Pred.type)
   return(lsm)
 }
 
+pred.fun.spatial=function(DAT,MOD,PRED,FORM,Spatial.grid)
+{
+  TermS=all.vars(FORM)
+  TermS=TermS[-match(c("LNcpue",PRED),TermS)]
+  id.cat=TermS[which(TermS%in%Categorical)]
+  NewDat=as.data.frame(matrix(nrow=1,ncol=length(id.cat)))
+  names(NewDat)=id.cat
+  for(ii in 1:length(id.cat))
+  {
+    dummy=sort(table(DAT[,match(id.cat[ii],names(DAT))]))
+    NewDat[,ii]=factor(names(dummy[length(dummy)]),levels(DAT[,match(id.cat[ii],names(DAT))]))
+  }
+  id.cont=TermS[which(!TermS%in%Categorical)]
+  if(length(id.cont)>0)
+  {
+    NewDat.cont=as.data.frame(matrix(nrow=1,ncol=length(id.cont)))
+    names(NewDat.cont)=id.cont
+    for(ii in 1:length(id.cont)) NewDat.cont[,ii]=mean(DAT[,match(id.cont[ii],names(DAT))])
+    NewDat=cbind(NewDat,NewDat.cont)
+  }
+  NewDat=cbind(Spatial.grid,NewDat)
+  PRD=predict(MOD,newdata=NewDat,type='link',se.fit=T)
+  NewDat$cpue=exp(PRD$fit+(PRD$se.fit^2)/2)
+  return(NewDat)
+}
+
 #function for model predictions by zone
 #note: ref_grid selects the subset of blocks
 pred.fun.zone=function(MOD,Subset,biascor,PRED,Pred.type)             
@@ -3742,6 +3768,7 @@ if(Model.run=="First")
 }
 Eff.creep=data.frame(finyear=FINYEAR.ALL,effort.creep=Fish.pow.inc)
 
+
 #   4.22.3 Select model structure
 
     #remove predictors identified as highly correlated
@@ -3921,6 +3948,7 @@ Nms.sp[match("All.Non.indicators",Nms.sp)]=c("All non-ind.")
 Nms.sp[match("Hammerhead Sharks",Nms.sp)]=c("Hammerhead")
 Nms.sp[match("Wobbegong",Nms.sp)]=c("Wobbegongs")
 Nms.sp[match("Shortfin Mako",Nms.sp)]=c("Mako")
+
 
 #   4.22.5 Run sensitivity tests     
     #free up some memory
@@ -4891,32 +4919,45 @@ if(Model.run=="First")
   mtext("CPUE (kg/ km gillnet hour)",side=2,line=0,font=1,las=0,cex=1.5,outer=T)
   dev.off()
   
-  #ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for  Nms.sp 
   
-  #Predict block based on emmeans (formerly lsmeans) considering log bias corr if required
-  Pred.blockx=vector('list',length=N.species)
-  names(Pred.blockx)=SPECIES.vec 
-  Pred.blockx.daily=Pred.blockx
-  system.time({
-    for(s in 1:N.species)   
+  #Predict spatial cpue (monthly blocks and daily lat/long)
+  cl <- makeCluster(detectCores()-1)
+  registerDoParallel(cl)
+    #monthly          takes 4 sec
+  system.time({Pred.spatial.monthly=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %dopar%
     {
-      d=Stand.out[[s]]$DATA   #note: need data as global for ref_grid
-      Pred.blockx[[s]]=pred.fun(MOD=Stand.out[[s]]$res,biascor="YES",PRED="blockx",Pred.type="link")
       
-      d=Stand.out.daily[[s]]$DATA
-      Pred.blockx.daily[[s]]=pred.fun(MOD=Stand.out.daily[[s]]$res,biascor="YES",PRED="blockx",Pred.type="link")
-      rm(d)
+      return(pred.fun.spatial(DAT=Stand.out[[s]]$DATA,MOD=Stand.out[[s]]$res,
+                              PRED='blockx',FORM=Best.Model[[s]],
+                              Spatial.grid=data.frame(blockx=factor(levels(Stand.out[[s]]$DATA$blockx))))
+      )
+      
     }
-  })     #takes 1.5 minutes
+  })
+    #Daily              takes 0.1 sec
+  system.time({Pred.spatial.daily=foreach(s=Tar.sp,.packages=c('dplyr')) %do%
+    {
+      return(pred.fun.spatial(DAT=Stand.out.daily[[s]]$DATA,MOD=Stand.out.daily[[s]]$res.gam,
+                              PRED=c('long10.corner','lat10.corner'),FORM=Best.Model.daily.gam[[s]],
+                              Spatial.grid=Stand.out.daily[[s]]$DATA%>%select(block10,lat10.corner,long10.corner)%>%
+                                distinct(block10,.keep_all=T)))
+      
+    }
+  })
+  names(Pred.spatial.monthly)=names(Pred.spatial.daily)=names(SP.list)[Tar.sp]
+  stopCluster(cl)
+  
+
+  #ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for  Nms.sp 
   
   SCLr=2.75
   CxTxt=0.0001
   #CxTxt=0.7
   Paleta=c("grey85","grey35")
   #Paleta=c("lightskyblue1","dodgerblue4")
-  fn.fig("Figure 3.Block effect",2000, 2400)    
+  fn.fig("Figure 3.Spatial effect",2000, 2400)    
   par(mfrow=c(4,2),mar=c(1,1.5,1.5,1),oma=c(2.5,2.5,.1,1.75),las=1,mgp=c(1.9,.7,0))
-  for(s in 1:N.species)
+  for(s in 1:length(Pred.vess))
   {
     #Monthly
     Mon.dat=Pred.blockx[[s]]
@@ -4935,7 +4976,7 @@ if(Model.run=="First")
     Plot.cpue.spatial(cpuedata=Daily.dat,scaler=SCLr,colPalet=Paleta,CxTxt=CxTxt)
     if(s==1) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
     if(s%in%c(4))axis(1,seq(113,129,2),seq(113,129,2),tck=-0.025,cex.axis=1.35)
-    mtext(SPECIES.vec[s],4,line=1,las=3,cex=1.5)
+    mtext( Nms.sp[Tar.sp[s]],4,line=1,las=3,cex=1.5)
   }
   mtext("Longitude (?E)",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
   mtext("Latitude (?S)",side=2,line=0.75,font=1,las=0,cex=1.5,outer=T)
