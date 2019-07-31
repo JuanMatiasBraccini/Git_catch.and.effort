@@ -240,7 +240,7 @@ improve="NO"
 Chck.Corr="NO"
 
 #Control if doing cluster analysis of daily data
-do.cluster="YES"
+do_cluster="NO"
 
 #Control if doing PCA analysis of daily data
 do.PCA="NO"
@@ -801,54 +801,6 @@ fn.pred.effect <- function(DATA,PREDS)
   Covars=DATA%>%mutate(month=as.numeric(as.character(month)))%>%
     select(month,PREDS[which(!PREDS%in%Categorical)])
   pairs(Covars, lower.panel=panel.smooth, upper.panel=panel.cor)
-}
-
-#clustering analysis
-fn.cluster=function(data,TarSp,target,varS,scaling,check.clustrbl,n.clus)
-{
-  a=data[[TarSp]]%>% column_to_rownames(var = "Same.return.SNo")%>%
-    select(varS[-match(target,varS)])
-  if(scaling=="YES")a=scale(a)
-  
-  #step 1. Define if data are clusterable
-  if(check.clustrbl=="YES")
-  {
-    #random sample to reduce computation time
-    ran.samp=sample(1:nrow(a),15000,replace=F)
-    
-    res <- get_clust_tendency(a[ran.samp,], n = nrow(a[ran.samp,])-1, graph = FALSE)
-    if(1-res$hopkins_stat>0.75) clusterable="YES"else  clusterable="NO"
-    print(clusterable)
-  }
-  
-  #step 2. Determine optimum number of clusters
-  if(check.clustrbl=="YES")
-  {
-    fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_optimal_numbers_",target,sep=""),2400,2400)
-    b=fviz_nbclust(a, clara, method = "silhouette",print.summary=T)
-    b+theme_classic()
-    dev.off()
-    num.clus=as.numeric(as.character(b$data$clusters[match(max(b$data$y),b$data$y)]))
-  }
-  
-  #step 3. fit clara
-  if(!exists("num.clus")) num.clus=n.clus
-  clara.res <- clara(a, num.clus, samples = 50, pamLike = TRUE)
-  
-  #step 4. visualize CLARA clusters in data scattergram
-  fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_cluster_",target,sep=""),2400,2400)
-  fviz_cluster(clara.res, 
-               palette = rainbow(num.clus), # color palette
-               ellipse.type = "t", # Concentration ellipse
-               geom = "point", pointsize = 1,
-               ggtheme = theme_classic())
-  dev.off()
-  
-  #step 5. add cluster to input data
-  dd.clara <- cbind(as.data.frame(a), cluster_clara = clara.res$cluster)
-  dd.clara=dd.clara%>%rownames_to_column(var = "Same.return.SNo")%>%
-    select(cluster_clara,Same.return.SNo)%>%remove_rownames()
-  return(dd.clara)
 }
 
 #functions for reshaping data
@@ -2499,27 +2451,48 @@ Fig.CDI.paper.fn=function(MOD,DAT,Term.type,termS,SCALER,YLABs,CxAx)
   
 }
 
-Plot.cpue.spatial=function(cpuedata,scaler,colPalet,CxTxt)
+Plot.cpue.spatial=function(cpuedata,var)
 {
-  cpuedata$CV=100*cpuedata$SE
-  #cpuedata$CV=round(100*((cpuedata$upper.CL-cpuedata$response)/1.96)/cpuedata$response)
-  rbPal <- colorRampPalette(colPalet)
-  Nbreaks=10
-  cpuedata$Col <- rbPal(Nbreaks)[as.numeric(cut(cpuedata$CV,breaks = Nbreaks))]
-  
-  with(cpuedata,plot(LONG+0.5,LAT-0.5,ylim=c(-36,-26),xlim=c(113,129),
-                     cex=((response/max(response))^0.5)*scaler,pch=19,col=Col,
-                     yaxt='n',xaxt='n',ylab="",xlab=""))
-  axis(1,113:129,F)
-  axis(2,-36:-26,F)
-  LEgnd=round(quantile(cpuedata$response,probs=c(.01,.5,.99)),2)
-  LEgnd.cex=((LEgnd/max(cpuedata$response))^0.5)*scaler
-  legend('top',paste(LEgnd),bty='n',title="CPUE (kg/km gillnet h)",pch=19,pt.cex=LEgnd.cex,cex=1.25)
-  
-  LEgn.err=round(quantile(cpuedata$CV,probs=c(.01,.5,.85,.99)))
-  legend("topright",paste(LEgn.err,"%"),bty='n',title="CV",
-         col =rbPal(Nbreaks)[as.numeric(cut(LEgn.err,breaks = Nbreaks))],pch=19,pt.cex=2)
-  with(cpuedata,text(LONG+0.5,LAT-0.5,blockx,cex=CxTxt,srt=45,adj=c(-0.25,0.5)))
+  if(var[1]=='blockx')cpuedata=cpuedata%>%mutate( Lat=-round(as.numeric(substr(get(var),1,2)),2),
+                                                  Long=round(100+as.numeric(substr(get(var),3,4)),2))else
+                                                    cpuedata=cpuedata%>%mutate( Lat=round(get(var[2]),2),
+                                                                                Long=round(get(var[1]),2))
+                                                  
+                                                  YLIM=floor(range(Full.lat))    
+                                                  XLIM=floor(range(Full.long)) 
+                                                  
+                                                  misn.lat=sort(Full.lat[which(!Full.lat%in%unique(cpuedata$Lat))])
+                                                  misn.lon=sort(Full.long[which(!Full.long%in%unique(cpuedata$Long))])
+                                                  if(length(misn.lat)>0 | length(misn.lon)>0)
+                                                  {
+                                                    if(var[1]=='blockx')
+                                                    {
+                                                      combo=expand.grid(Lon=Full.long,Lat=Full.lat)%>%
+                                                        mutate(blockx=paste(abs(Lat),Lon-100,sep=''))%>%
+                                                        select(blockx)
+                                                      cpuedata=cpuedata%>%mutate(blockx=as.character(blockx))
+                                                      cpuedata=combo%>%left_join(cpuedata,by=var)%>%
+                                                        mutate( Lat=-round(as.numeric(substr(get(var),1,2)),2),
+                                                                Long=round(100+as.numeric(substr(get(var),3,4)),2))
+                                                      
+                                                    }else
+                                                    {
+                                                      combo=expand.grid(Long=Full.long,Lat=Full.lat)
+                                                      cpuedata=combo%>%left_join(cpuedata,by=c('Long','Lat'))
+                                                    }
+                                                  }
+                                                  cpuedata=cpuedata%>%select(c(cpue,Lat,Long)) 
+                                                  cpuedata.spread=cpuedata%>%spread(Lat,cpue)
+                                                  Lon=as.numeric(cpuedata.spread$Long)
+                                                  cpuedata.spread=as.matrix(cpuedata.spread[,-1]) 
+                                                  LaT=as.numeric(colnames(cpuedata.spread))
+                                                  brk<- quantile( c(cpuedata.spread),probs=seq(0,1,.1),na.rm=T)
+                                                  YLIM[1]=YLIM[1]-0.5
+                                                  YLIM[2]=YLIM[2]+0.5
+                                                  XLIM[1]=XLIM[1]-0.5
+                                                  XLIM[2]=XLIM[2]+0.5
+                                                  image.plot(Lon,LaT,cpuedata.spread, breaks=brk, col=rev(heat.colors(length(brk)-1)), 
+                                                             lab.breaks=names(brk),ylim=YLIM,xlim=XLIM,ylab="",xlab="")
 }
 
 Pos.Diag.fn=function(MODEL,SPECIES,M)   #function for positive catch diagnostics
@@ -3350,38 +3323,105 @@ DATA.list.LIVEWT.c$"Sandbar Shark"=subset(DATA.list.LIVEWT.c$"Sandbar Shark",FIN
 
 
 #4.14  Identify targeting behaviour   (more in 2.CPUE standardisations_delta.R)
-#note: CLARA analysis as per Campbell et al 2017 on nfish as this has data at Sesssion level
-#       The CLARA (Clustering Large Applications) algorithm is an extension to the 
-#       PAM (Partitioning Around Medoids) clustering method for large data sets. It intended to 
-#       reduce the computation time in the case of large data set.
-Clus.vars=c("Catch.Target","Catch.Gummy","Catch.Whiskery","Catch.Dusky","Catch.Sandbar",
-            "Catch.Groper","Catch.Snapper","Catch.Blue_mor")
-Tar.clus.vars=c("Catch.Whiskery","Catch.Gummy","Catch.Dusky","Catch.Sandbar")
-n.clus=c(2,2,2,2)  #from initial optimum number
-HndL.Species_targeting="C:/Matias/Analyses/Catch and effort/Outputs/Paper/Species_targeting/"
-scalem="YES"
-
-Store.cluster=vector('list',length(SP.list)) 
-names(Store.cluster)=names(SP.list)
-for(i in 1:length(Tar.sp))
+if(do_cluster=="YES")
 {
-  Store.cluster[[Tar.sp[i]]]=fn.cluster(data=DATA.list.LIVEWT.c.daily,TarSp=Tar.sp[i],target=Tar.clus.vars[i],
-                                        varS=Clus.vars,scaling=scalem,check.clustrbl="NO",n.clus=n.clus[i])
-}
-
+  #clustering analysis
+  fn.cluster=function(data,TarSp,target,varS,scaling,check.clustrbl,n.clus)
+  {
+    a=data[[TarSp]]%>% column_to_rownames(var = "Same.return.SNo")%>%
+      select(varS[-match(target,varS)])
+    if(scaling=="YES")a=scale(a)
+    
+    #step 1. Define if data are clusterable
+    if(check.clustrbl=="YES")
+    {
+      #random sample to reduce computation time
+      ran.samp=sample(1:nrow(a),15000,replace=F)
+      
+      res <- get_clust_tendency(a[ran.samp,], n = nrow(a[ran.samp,])-1, graph = FALSE)
+      if(1-res$hopkins_stat>0.75) clusterable="YES"else  clusterable="NO"
+      print(clusterable)
+    }
+    
+    #step 2. Determine optimum number of clusters
+    if(check.clustrbl=="YES")
+    {
+      fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_optimal_numbers_",target,sep=""),2400,2400)
+      b=fviz_nbclust(a, clara, method = "silhouette",print.summary=T)
+      b+theme_classic()
+      dev.off()
+      num.clus=as.numeric(as.character(b$data$clusters[match(max(b$data$y),b$data$y)]))
+    }
+    
+    #step 3. fit clara
+    if(!exists("num.clus")) num.clus=n.clus
+    clara.res <- clara(a, num.clus, samples = 50, pamLike = TRUE)
+    
+    #step 4. visualize CLARA clusters in data scattergram
+    fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_cluster_",target,sep=""),2400,2400)
+    fviz_cluster(clara.res, 
+                 palette = rainbow(num.clus), # color palette
+                 ellipse.type = "t", # Concentration ellipse
+                 geom = "point", pointsize = 1,
+                 ggtheme = theme_classic())
+    dev.off()
+    
+    #step 5. add cluster to input data
+    dd.clara <- cbind(as.data.frame(a), cluster_clara = clara.res$cluster)
+    dd.clara=dd.clara%>%rownames_to_column(var = "Same.return.SNo")%>%
+      select(cluster_clara,Same.return.SNo)%>%remove_rownames()
+    return(dd.clara)
+  }
+  #note: CLARA analysis as per Campbell et al 2017 on nfish as this has data at Sesssion level
+  #       The CLARA (Clustering Large Applications) algorithm is an extension to the 
+  #       PAM (Partitioning Around Medoids) clustering method for large data sets. It intended to 
+  #       reduce the computation time in the case of large data set.
+  Clus.vars=c("Catch.Target","Catch.Gummy","Catch.Whiskery","Catch.Dusky","Catch.Sandbar",
+              "Catch.Groper","Catch.Snapper","Catch.Blue_mor")
+  Tar.clus.vars=c("Catch.Whiskery","Catch.Gummy","Catch.Dusky","Catch.Sandbar")
+  n.clus=c(2,2,2,2)  #from initial optimum number
+  HndL.Species_targeting="C:/Matias/Analyses/Catch and effort/Outputs/Paper/Species_targeting/"
+  scalem="YES"
+  
+  Store.cluster=vector('list',length(SP.list)) 
+  names(Store.cluster)=names(SP.list)
+  for(i in 1:length(Tar.sp))
+  {
+    Store.cluster[[Tar.sp[i]]]=fn.cluster(data=DATA.list.LIVEWT.c.daily,TarSp=Tar.sp[i],target=Tar.clus.vars[i],
+                                          varS=Clus.vars,scaling=scalem,check.clustrbl="NO",n.clus=n.clus[i])
+  }
+  
   #add cluster to original data for use in standardisations
-for(i in Tar.sp)
-{
-  DATA.list.LIVEWT.c.daily[[i]]=left_join(DATA.list.LIVEWT.c.daily[[i]],Store.cluster[[i]],by=c("Same.return.SNo"))
+  for(i in Tar.sp)
+  {
+    DATA.list.LIVEWT.c.daily[[i]]=left_join(DATA.list.LIVEWT.c.daily[[i]],Store.cluster[[i]],by=c("Same.return.SNo"))
+  }
+  rm(Store.cluster)
+  
+  #check cpue by cluster group
+  fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_cluster.boxplot",sep=""),2400,2400)
+  par(mfcol=c(2,2),mar=c(1,3,3,1),oma=c(2,1,.1,.5),las=1,mgp=c(2,.6,0))
+  for(i in Tar.sp) boxplot((Catch.Target/Km.Gillnet.Hours.c)~cluster_clara,DATA.list.LIVEWT.c.daily[[i]],
+                           main=names(DATA.list.LIVEWT.c.daily)[i],ylab="cpue")
+  dev.off()
+  
+  
+  
+  fn.compare.targeting=function(DAT,Drop.var,Title)
+  {
+    d=DAT%>% select(c(cluster_clara,tolower(Clus.vars[-match(Drop.var,Clus.vars)])))
+    d[-1]=d[-1]/rowSums(d[-1])
+    d=d%>%gather('ID','value',-cluster_clara)           
+    ggplot(d) +labs(title = Title,x = "",y="Proportion")+
+      geom_boxplot(aes(x=ID, y=value, fill=cluster_clara))
+  }
+  for(s in 1:length(Tar.sp))
+  {
+    pdf(paste(HndL.Species_targeting,"Cluster/Targeting_",Nms.sp[Tar.sp[s]],".pdf",sep="")) 
+    fn.compare.targeting(DAT=DATA.list.LIVEWT.c.daily[[Tar.sp[s]]],Drop.var=Tar.clus.vars[s],Nms.sp[Tar.sp[s]])
+    dev.off()
+  }
 }
-rm(Store.cluster)
-
-#check cpue by cluster group
-fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_cluster.boxplot",sep=""),2400,2400)
-par(mfcol=c(2,2),mar=c(1,3,3,1),oma=c(2,1,.1,.5),las=1,mgp=c(2,.6,0))
-for(i in Tar.sp) boxplot((Catch.Target/Km.Gillnet.Hours.c)~cluster_clara,DATA.list.LIVEWT.c.daily[[i]],
-                         main=names(DATA.list.LIVEWT.c.daily)[i],ylab="cpue")
-dev.off()
 
 
 #4.15 Table of sensitivity scenarios       
@@ -4946,41 +4986,38 @@ if(Model.run=="First")
   })
   names(Pred.spatial.monthly)=names(Pred.spatial.daily)=names(SP.list)[Tar.sp]
   stopCluster(cl)
-  
-
-  #ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for  Nms.sp 
-  
-  SCLr=2.75
-  CxTxt=0.0001
-  #CxTxt=0.7
-  Paleta=c("grey85","grey35")
-  #Paleta=c("lightskyblue1","dodgerblue4")
   fn.fig("Figure 3.Spatial effect",2000, 2400)    
-  par(mfrow=c(4,2),mar=c(1,1.5,1.5,1),oma=c(2.5,2.5,.1,1.75),las=1,mgp=c(1.9,.7,0))
+  par(mfrow=c(4,2),mar=c(1,2,1.5,3),oma=c(2.5,2.5,.1,2.5),las=1,mgp=c(1.9,.5,0))
   for(s in 1:length(Pred.vess))
   {
     #Monthly
-    Mon.dat=Pred.blockx[[s]]
-    Mon.dat$LAT=-as.numeric(substr(Mon.dat$blockx,1,2))
-    Mon.dat$LONG=100+as.numeric(substr(Mon.dat$blockx,3,4))
-    Plot.cpue.spatial(cpuedata=Mon.dat,scaler=SCLr,colPalet=Paleta,CxTxt=CxTxt)
-    if(s==1) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
-    if(s%in%c(4))axis(1,seq(113,129,2),seq(113,129,2),tck=-0.025,cex.axis=1.35)
-    axis(2,seq(-36,-26,2),rev(seq(26,36,2)),tck=-0.025,cex.axis=1.35)
+    Full.long=seq(113,129)
+    Full.lat=seq(-35,-26) 
+    Plot.cpue.spatial(cpuedata=Pred.spatial.monthly[[s]],var='blockx')
+    if(s==1) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.35)
+    #if(s%in%c(4))axis(1,seq(113,129,2),seq(113,129,2),tck=-0.025,cex.axis=1.35)
+    #axis(2,seq(-36,-26,2),rev(seq(26,36,2)),tck=-0.025,cex.axis=1.35)
     
     
     #Daily
-    Daily.dat=Pred.blockx.daily[[s]]
-    Daily.dat$LAT=-as.numeric(substr(Daily.dat$blockx,1,2))
-    Daily.dat$LONG=100+as.numeric(substr(Daily.dat$blockx,3,4))
-    Plot.cpue.spatial(cpuedata=Daily.dat,scaler=SCLr,colPalet=Paleta,CxTxt=CxTxt)
-    if(s==1) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
-    if(s%in%c(4))axis(1,seq(113,129,2),seq(113,129,2),tck=-0.025,cex.axis=1.35)
-    mtext( Nms.sp[Tar.sp[s]],4,line=1,las=3,cex=1.5)
+    Full.long=apply(cbind(rep(c(.83,.67,.5,.33,.17,0),length(113:129)),rep(113:129,each=6)),1,sum)
+    Full.lat=-apply(cbind(rep(c(.83,.67,.5,.33,.17,0),length(35:26)),rep(35:26,each=6)),1,sum)
+    Plot.cpue.spatial(cpuedata=Pred.spatial.daily[[s]],var=c('long10.corner','lat10.corner'))
+    if(s==1) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.35)
+    #if(s%in%c(4))axis(1,seq(113,129,2),seq(113,129,2),tck=-0.025,cex.axis=1.35)
+    mtext( Nms.sp[Tar.sp[s]],4,line=6,las=3,cex=1.5)
   }
-  mtext("Longitude (?E)",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-  mtext("Latitude (?S)",side=2,line=0.75,font=1,las=0,cex=1.5,outer=T)
+  mtext(expression(paste("Longitude (",degree,"E)",sep="")),side=1,line=1.2,font=1,las=0,cex=1.35,outer=T)
+  mtext(expression(paste("Latitude (",degree,"S)",sep="")),side=2,line=0.65,font=1,las=0,cex=1.35,outer=T)
   dev.off()
+  
+  
+  #ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for  Nms.sp 
+  
+  #Predict targeting, n.shots, depth, mesh (daily only)
+
+  
+  
 }
 
 #   4.22.10 Influence plots     
