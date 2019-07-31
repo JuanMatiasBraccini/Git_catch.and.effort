@@ -1704,21 +1704,18 @@ fn.show.mod.sel=function(MODS,outs)
   myt <- gridExtra::tableGrob(tmp[1:outs,], theme = mytheme)
   grid.draw(myt)
 }
-fn.modl.sel=function(Inter,RESPNS)   #function for model structure selection
+fn.modl.sel=function(RESPNS)   #function for model structure selection
 {
   PREDS[id.cov]=paste("LN",PREDS[id.cov],sep="")
   PREDS=PREDS[-match(always,PREDS)]
-  Pos.mod=2^length(PREDS)
   if(RESPNS=="LNcpue")Formula=formula(paste("LNcpue",paste(PREDS,collapse="+"),sep="~"))
   if(RESPNS=="catch")Formula=formula(paste(Response,paste(paste(PREDS,collapse="+"),
                               paste("offset(","LN",efrt,")",sep=""),sep="+"),sep="~"))
   
-  Level=ifelse(Inter=="MainTerm",1,ifelse(Inter=="2way",2,"3way"))
-  MeThod="h"
-  
-  res <- glmulti(Formula,data=d,level=Level,method=MeThod,fitfunction=fitFun,
+  res <- glmulti(Formula,data=d,level=ifelse(Inter=="MainTerm",1,ifelse(Inter=="2way",2,"3way")),
+                 method="h",fitfunction=fitFun,
                  always=paste('+',paste(always,collapse="+"),sep=""),
-                 crit="aicc",confsetsize=Pos.mod,plotty=F,report=T)
+                 crit="aicc",confsetsize=2^length(PREDS),plotty=F,report=T)
   
   return(list(res=res,BEST=res@formulas[[1]]))
 }
@@ -2167,12 +2164,14 @@ bubble.plot=function(x,y,z,scaler,Xlab,Ylab)
 }
 Influence.fn=function(MOD,DAT,Term.type,termS,add.Influence,SCALER)  
 {
+  termS=subset(termS,termS%in%names(Term.type))
   #extract main term coefficients for each species
   nt=length(termS)
   Store1=Store2=MatcH=COEF.list=COEF.SE.list=vector('list',nt)
   ID=c(1,grep("[:]", names(coef(MOD))))
   Cofs=coef(MOD)[-ID]
-  Cofs.SE=summary(MOD)$coefficients[-ID, 2]
+  if(class(MOD)[1]=="glm")Cofs.SE=summary(MOD)$coefficients[-ID, 2]
+  if(class(MOD)[1]=="gam")Cofs.SE=summary(MOD)$se[-ID]
   for(p in 1:nt)
   {
     if (Term.type[p]=="CAT")
@@ -2258,50 +2257,53 @@ Influence.fn=function(MOD,DAT,Term.type,termS,add.Influence,SCALER)
       COef.nm.sorted=names(COEF)
       COEF.SE=COEF.SE[match(COef.nm.sorted,names(COEF.SE))]
       x=1:length(COEF)
-      nf <- layout(matrix(c(1,1,1,2,2,2), 2, 3, byrow = TRUE), widths=c(1.5,1),heights=c(1,1.5))
-      if(add.Influence=="YES")nf <- layout(matrix(c(1,1,0,2,2,3), 2, 3, byrow = TRUE), widths=c(1.5,1),heights=c(1,1.5))
-      par(mar=c(0,0,0,0),oma=c(4,6,1,1),las=1,mgp=c(1,.9,0))
-      #layout.show(nf)
-      
-      # Coefficients
-      minSE=COEF-COEF.SE
-      maxSE=COEF+COEF.SE
-      plot(x,COEF,xlab="",xaxt="n",ylim=c(min(minSE),max(maxSE)),cex.axis=1.25,pch=19,cex=2)
-      arrows(x, minSE, x, maxSE, code=3, angle=90, length=0.1)
-      axis(1,1:length(COEF),F,tcl=0.5)
-      axis(1,seq(1,length(COEF),2),F,cex.axis=1.15,tcl=1)      
-      mtext("Coefficient",side=2,line=4,cex=1.5,las=3)
-      
-      # Bubble plot of records
-      DAT[,match(termS[p],names(DAT))]=as.factor(DAT[,match(termS[p],names(DAT))])
-      TAb=table(DAT$finyear,DAT[,match(termS[p],names(DAT))])
-      TAb=TAb[,match(Store1[[p]],colnames(TAb))]
-      Prop.Rec=TAb/rowSums(TAb)
-      if(colnames(Prop.Rec)[1]=="1")Prop.Rec=Prop.Rec[,-1]
-      Nombres=gsub("[^[:digit:]]", "", names(COEF))
-      
-      if(termS[p]=="vessel") Nombres=1:length(Nombres)   #change vessel name for dummy
-      rownames(Prop.Rec)=names(ny[1:length(ny)])
-      colnames(Prop.Rec)=COef.nm
-      Prop.Rec=Prop.Rec[,match(COef.nm.sorted,colnames(Prop.Rec))]
-      bubble.plot(x,1:length(ny),Prop.Rec,scaler=SCALER,termS[p],"Financial year")
-      axis(1,1:length(COEF),F,tck=-0.015)
-      axis(1,seq(1,length(COEF),1),Nombres[seq(1,length(COEF),1)],cex.axis=1.15,tck=-0.025)
-      axis(2,1:length(ny),F,tck=-0.015)
-      axis(2,seq(1,length(ny),2),names(ny)[seq(1,length(ny),2)],cex.axis=1,tck=-0.025)   
-      mtext("Financial year",side=2,line=4.35,cex=1.5,las=3)
-      mtext(termS[p],side=1,line=2.5,cex=1.5)
-      
-      if(add.Influence=="YES")
+      if(length(x)>1)
       {
-        #Influence plot
-        plot(Annual.Dev[[p]],1:length(ny),type="o",pch=19,xlab="",ylab="",cex=2,cex.axis=1.25,yaxt='n')
-        abline(v=1,lty=3,col=1)
-        mtext("Influence",side=1,line=2.5,cex=1.5)      
-        axis(2,1:length(ny),F,tcl=0.5)
-        axis(2,seq(1,length(ny),2),F,tcl=1)
+        nf <- layout(matrix(c(1,1,1,2,2,2), 2, 3, byrow = TRUE), widths=c(1.5,1),heights=c(1,1.5))
+        if(add.Influence=="YES")nf <- layout(matrix(c(1,1,0,2,2,3), 2, 3, byrow = TRUE), widths=c(1.5,1),heights=c(1,1.5))
+        par(mar=c(0,0,0,0),oma=c(4,6,1,1),las=1,mgp=c(1,.9,0))
+        #layout.show(nf)
+        
+        # Coefficients
+        minSE=COEF-COEF.SE
+        maxSE=COEF+COEF.SE
+        plot(x,COEF,xlab="",xaxt="n",ylim=c(min(minSE),max(maxSE)),cex.axis=1.25,pch=19,cex=2)
+        arrows(x, minSE, x, maxSE, code=3, angle=90, length=0.1)
+        axis(1,1:length(COEF),F,tcl=0.5)
+        axis(1,seq(1,length(COEF),2),F,cex.axis=1.15,tcl=1)      
+        mtext("Coefficient",side=2,line=4,cex=1.5,las=3)
+        
+        # Bubble plot of records
+        DAT[,match(termS[p],names(DAT))]=as.factor(DAT[,match(termS[p],names(DAT))])
+        TAb=table(DAT$finyear,DAT[,match(termS[p],names(DAT))])
+        TAb=TAb[,match(Store1[[p]],colnames(TAb))]
+        Prop.Rec=TAb/rowSums(TAb)
+        if(colnames(Prop.Rec)[1]=="1")Prop.Rec=Prop.Rec[,-1]
+        Nombres=gsub("[^[:digit:]]", "", names(COEF))
+        
+        if(termS[p]=="vessel") Nombres=1:length(Nombres)   #change vessel name for dummy
+        rownames(Prop.Rec)=names(ny[1:length(ny)])
+        colnames(Prop.Rec)=COef.nm
+        Prop.Rec=Prop.Rec[,match(COef.nm.sorted,colnames(Prop.Rec))]
+        bubble.plot(x,1:length(ny),Prop.Rec,scaler=SCALER,termS[p],"Financial year")
+        axis(1,1:length(COEF),F,tck=-0.015)
+        axis(1,seq(1,length(COEF),1),Nombres[seq(1,length(COEF),1)],cex.axis=1.15,tck=-0.025)
+        axis(2,1:length(ny),F,tck=-0.015)
+        axis(2,seq(1,length(ny),2),names(ny)[seq(1,length(ny),2)],cex.axis=1,tck=-0.025)   
+        mtext("Financial year",side=2,line=4.35,cex=1.5,las=3)
+        mtext(termS[p],side=1,line=2.5,cex=1.5)
+        
+        if(add.Influence=="YES")
+        {
+          #Influence plot
+          plot(Annual.Dev[[p]],1:length(ny),type="o",pch=19,xlab="",ylab="",cex=2,cex.axis=1.25,yaxt='n')
+          abline(v=1,lty=3,col=1)
+          mtext("Influence",side=1,line=2.5,cex=1.5)      
+          axis(2,1:length(ny),F,tcl=0.5)
+          axis(2,seq(1,length(ny),2),F,tcl=1)
+        }
+        
       }
-      
     }
   }
   return(list(Annual.Dev=Annual.Dev,ny=ny,Over.all.influence=Over.all.influence))
@@ -3677,12 +3679,12 @@ ZONES=c("West","Zone1","Zone2")
 Eff.vars=c("km.gillnet.hours.c")
 Covariates=c("temp.res","freo","freo_lag6","freo_lag12")
 Predictors_monthly=c("finyear","vessel","month","blockx",Covariates) 
-Predictors_daily=c("finyear","vessel","month","block10","shots.c","lunar","cluster_clara","mean.depth",
+Predictors_daily=c("finyear","vessel","month","block10","shots.c","lunar","mean.depth",
                    "nlines.c","mesh",Covariates)
 Response="catch.target"    #note that cpue is calculated inside stand function
 
 Categorical=c("finyear","vessel","month","blockx","block10","shots.c",
-              "cluster_clara","lunar","mean.depth","nlines.c","mesh")
+              "lunar","mean.depth","nlines.c","mesh")
 
 
 #   4.22.1 Explore data used for standardisation
@@ -3809,11 +3811,11 @@ if(Model.run=="First")
 Eff.creep=data.frame(finyear=FINYEAR.ALL,effort.creep=Fish.pow.inc)
 
 
-#   4.22.3 Select model structure
+#   4.22.3 Select model structure  
 
     #remove predictors identified as highly correlated
-Predictors_monthly=Predictors_monthly[-match(c('freo','freo_lag6','freo_lag12'),Predictors_monthly)]
-Predictors_daily=Predictors_daily[-match(c('nlines.c','freo','freo_lag6','freo_lag12'),Predictors_daily)]
+Predictors_monthly=Predictors_monthly[-match(c("temp.res",'freo','freo_lag6','freo_lag12'),Predictors_monthly)]
+Predictors_daily=Predictors_daily[-match(c("temp.res",'nlines.c','freo','freo_lag6','freo_lag12'),Predictors_daily)]
 cNSTNT=c('finyear','vessel','month','blockx')
 cNSTNT.daily=c('finyear','vessel','month','block10')
 
@@ -3828,6 +3830,7 @@ if(Def.mod.Str=="YES")     #takes 16 minutes
     glm(as.formula(paste(deparse(formula), always)), data=data, ...)
   }
   efrt="km.gillnet.hours.c"
+  Inter="MainTerm"
   system.time({
   for(s in Tar.sp)
   {
@@ -3839,8 +3842,7 @@ if(Def.mod.Str=="YES")     #takes 16 minutes
     id.cov=which(PREDS%in%Covariates)
     d=mutate_at(d, setNames(c(PREDS[id.cov],efrt), paste0("LN", c(PREDS[id.cov],efrt),sep="")), log)
     always=cNSTNT
-    Store.Best.Model[[s]]=fn.modl.sel(Inter="MainTerm",RESPNS="LNcpue")
-    
+    Store.Best.Model[[s]]=fn.modl.sel(RESPNS="LNcpue")
     best.fm=Store.Best.Model[[s]]$BEST    
     best.fm=all.vars(best.fm)
     best.fm=as.formula(paste(best.fm[1],'~',paste(c(always,best.fm[-1]),collapse='+')))
@@ -3858,7 +3860,7 @@ if(Def.mod.Str=="YES")     #takes 16 minutes
     id.cov=which(PREDS%in%Covariates)
     d=mutate_at(d, setNames(c(PREDS[id.cov],efrt), paste0("LN", c(PREDS[id.cov],efrt),sep="")), log)
     always=cNSTNT.daily
-    Store.Best.Model.daily[[s]]=fn.modl.sel(Inter="MainTerm",RESPNS="LNcpue")
+    Store.Best.Model.daily[[s]]=fn.modl.sel(RESPNS="LNcpue")
     best.fm=Store.Best.Model.daily[[s]]$BEST    
     best.fm=all.vars(best.fm)
     best.fm=as.formula(paste(best.fm[1],'~',paste(c(always,best.fm[-1]),collapse='+')))
@@ -3891,29 +3893,25 @@ if(Def.mod.Str=="NO")
   }
   
   #Monthly
-  Best.Model$`Gummy Shark`=formula(LNcpue ~ finyear + vessel + month + blockx + LNtemp.res)
-  Best.Model$`Whiskery Shark`=formula(LNcpue ~ finyear + vessel + month + blockx)
-  Best.Model$`Dusky Whaler Bronze Whaler`=formula(LNcpue ~ finyear + vessel + month + blockx)
-  Best.Model$`Sandbar Shark`=formula(LNcpue ~ finyear + vessel + month + blockx + LNtemp.res)
+  Best.Model$`Gummy Shark`=formula(LNcpue ~ finyear + vessel + month + blockx )
+  Best.Model$`Whiskery Shark`=  Best.Model$`Dusky Whaler Bronze Whaler`=
+  Best.Model$`Sandbar Shark`=Best.Model$`Gummy Shark`
     
   #Daily
-  Best.Model.daily$`Gummy Shark`=formula(LNcpue ~ finyear + vessel + month + block10 + shots.c + cluster_clara + 
-                                                    mean.depth + mesh + LNtemp.res)
-  Best.Model.daily$`Whiskery Shark`=formula(LNcpue ~ finyear + vessel + month + block10 + shots.c + lunar + 
-                                                    cluster_clara + mesh)
-  Best.Model.daily$`Dusky Whaler Bronze Whaler`=formula(LNcpue ~ finyear + vessel + month + block10 + shots.c + lunar + 
-                                                    cluster_clara + mean.depth + LNtemp.res)
-  Best.Model.daily$`Sandbar Shark`=formula(LNcpue ~ finyear + vessel + month + block10 + shots.c + lunar + 
-                                                    cluster_clara + mean.depth)
+  Best.Model.daily$`Gummy Shark`=formula(LNcpue~finyear+vessel+month+block10+shots.c+lunar+mean.depth+mesh)
+  Best.Model.daily$`Whiskery Shark`=formula(LNcpue~finyear+vessel+month+block10+shots.c+lunar+mesh)
+  Best.Model.daily$`Dusky Whaler Bronze Whaler`=formula(LNcpue~finyear+vessel+month+block10+shots.c+lunar+mean.depth)
+  Best.Model.daily$`Sandbar Shark`=formula(LNcpue ~finyear+vessel+month+block10+shots.c+lunar+mean.depth)
   
-  Best.Model.daily.gam$`Gummy Shark`=formula(LNcpue ~ finyear + vessel + month + shots.c + cluster_clara + 
-                                                    mean.depth + mesh + LNtemp.res + s(long10.corner,lat10.corner))
-  Best.Model.daily.gam$`Whiskery Shark`=formula(LNcpue ~ finyear + vessel + month + shots.c + lunar + 
-                                                    cluster_clara + mesh + s(long10.corner,lat10.corner))
-  Best.Model.daily.gam$`Dusky Whaler Bronze Whaler`=formula(LNcpue ~ finyear + vessel + month + shots.c + lunar + cluster_clara + 
-                                                     mean.depth + LNtemp.res + s(long10.corner,lat10.corner))
-  Best.Model.daily.gam$`Sandbar Shark`=formula(LNcpue ~ finyear + vessel + month + shots.c + lunar + 
-                                                    cluster_clara + mean.depth + s(long10.corner,lat10.corner))
+  
+  Best.Model.daily.gam$`Gummy Shark`=formula(LNcpue~finyear+vessel+month+s(long10.corner,lat10.corner)+
+                                                    shots.c+lunar+mean.depth+mesh)
+  Best.Model.daily.gam$`Whiskery Shark`=formula(LNcpue~finyear+vessel+month+s(long10.corner,lat10.corner)+
+                                                        shots.c+lunar+mesh)
+  Best.Model.daily.gam$`Dusky Whaler Bronze Whaler`=formula(LNcpue~finyear+vessel+month+s(long10.corner,lat10.corner)+
+                                                                   shots.c+lunar+mean.depth)
+  Best.Model.daily.gam$`Sandbar Shark`=formula(LNcpue ~finyear+vessel+month+s(long10.corner,lat10.corner)+
+                                                        shots.c+lunar+mean.depth)
 }
 
 #Export table of term levels
@@ -4144,7 +4142,7 @@ if(Model.run=="First")      #takes 7 mins
 # 4.22.6 Run standardisation for Other species (based on delta method due to excess zeros)
 cl <- makeCluster(detectCores()-1)
 registerDoParallel(cl)
-  #monthly          takes 2.47 sec
+  #monthly          takes 2 sec
 system.time({Stand.out.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr','cede')) %dopar%
   {
     if(!is.null(DATA.list.LIVEWT.c[[s]]) & !is.null(BLKS.used[[s]]))
@@ -4791,8 +4789,6 @@ for(s in nnn)
     Nominl.daily.normlzd[[s]]$upper.CL=Nominl.daily.normlzd[[s]]$upper.CL/Mn
   }
 }
-
-
 fn.fig("Figure 4.Annual_Index_normalised",2000, 2400)    
 #no point in showing nominal as it is not comparable in relative terms
 par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
@@ -4839,8 +4835,6 @@ mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.25,outer=T)
 mtext("Relative CPUE",side=2,line=1.15,font=1,las=0,cex=1.25,outer=T)
 dev.off()
 
-####
-
 #boxplots of factors
 if(Model.run=="First")
 {
@@ -4866,7 +4860,6 @@ if(Model.run=="First")
 #   4.22.9 Show effects for other terms 
 if(Model.run=="First")
 {
-  
   #Predict vessel based on emmeans (formerly lsmeans) considering log bias corr if required
   cl <- makeCluster(detectCores()-1)
   registerDoParallel(cl)
@@ -4888,8 +4881,6 @@ if(Model.run=="First")
   })
   names(Pred.vess)=names(Pred.vess.daily)=names(SP.list)[Tar.sp]
   stopCluster(cl)
-  
-  
   fn.fig("Figure 2.Vessel effect",2000, 2400)    
   par(mfrow=c(4,2),mar=c(1,2,1.5,2),oma=c(2.5,2.5,.1,.2),las=1,mgp=c(1.9,.7,0))
   for(s in 1:length(Pred.vess))
@@ -5010,47 +5001,49 @@ if(Model.run=="First")
   mtext(expression(paste("Longitude (",degree,"E)",sep="")),side=1,line=1.2,font=1,las=0,cex=1.35,outer=T)
   mtext(expression(paste("Latitude (",degree,"S)",sep="")),side=2,line=0.65,font=1,las=0,cex=1.35,outer=T)
   dev.off()
-  
-  
-  #ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for  Nms.sp 
-  
-  #Predict targeting, n.shots, depth, mesh (daily only)
-
-  
-  
 }
+
 
 #   4.22.10 Influence plots     
 if(do.influence=="YES")
 {
   HnDll="C:/Matias/Analyses/Catch and effort/Outputs/Influence.plot/"
-  Store.Influence=Store.Influence.daily=Pred.creep
-  for(s in 1:N.species)
+  Store.Influence=vector('list',length(SP.list)) 
+  names(Store.Influence)=names(SP.list)
+  Store.Influence.daily=Store.Influence
+  for(s in Tar.sp)
   {
     #Monthly
     Terms=all.vars(Best.Model[[s]])[-1]
     Terms=Terms[-match("finyear",Terms)]
-    Term.Type=ifelse(Terms%in%c("vessel" , "month" , "blockx"),"CAT",NA)
-    
-    pdf(paste(HnDll,SPECIES.vec[s],".monthly.CDI.pdf",sep=""))
+    Term.Type=Terms
+    Term.Type=ifelse(Term.Type%in%Categorical,"CAT",NA)
+    names(Term.Type)=Terms
+    pdf(paste(HnDll,Nms.sp[s],".monthly.CDI.pdf",sep=""))
     Store.Influence[[s]]=Influence.fn(MOD=Stand.out[[s]]$res,DAT=Stand.out[[s]]$DATA,
                   Term.type=Term.Type,termS=Terms,add.Influence="YES",SCALER=4)
     dev.off()
     
     
     #Daily
-    Terms=all.vars(Best.Model.daily[[s]])[-1]
+    Terms=all.vars(Best.Model.daily.gam[[s]])[-1]
     Terms=Terms[-match("finyear",Terms)]
-    Term.Type=ifelse(Terms%in%c("vessel" , "month" , "blockx"),"CAT",NA)
-    
-    pdf(paste(HnDll,SPECIES.vec[s],".daily.CDI.pdf",sep=""))
-    Store.Influence.daily[[s]]=Influence.fn(MOD=Stand.out.daily[[s]]$res,
+    Term.Type=Terms
+    Term.Type=ifelse(Term.Type%in%Categorical,"CAT",NA)
+    names(Term.Type)=Terms
+    Term.Type=Term.Type[!is.na(Term.Type)]
+
+    pdf(paste(HnDll,Nms.sp[s],".daily.CDI.pdf",sep=""))
+    Store.Influence.daily[[s]]=Influence.fn(MOD=Stand.out.daily[[s]]$res.gam,
             DAT=Stand.out.daily[[s]]$DATA,Term.type=Term.Type,termS=Terms,
             add.Influence="YES",SCALER=4)
     dev.off()
   } 
+  Store.Influence=Store.Influence[!sapply(Store.Influence, is.null)] 
+  Store.Influence.daily=Store.Influence.daily[!sapply(Store.Influence.daily, is.null)] 
   
   Over.inf.monthly=do.call(rbind,lapply(Store.Influence, '[[', match('Over.all.influence',names(Store.Influence[[1]]))))
+  #ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for  Nms.sp 
   Over.inf.daily=do.call(rbind,lapply(Store.Influence.daily, '[[', match('Over.all.influence',names(Store.Influence.daily[[1]]))))
   Over.inf.monthly=round(100*Over.inf.monthly,2)
   Over.inf.daily=round(100*Over.inf.daily,2)
