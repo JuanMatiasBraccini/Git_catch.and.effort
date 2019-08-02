@@ -332,14 +332,11 @@ if(do.colors=="YES") what.color="cols"
 if(do.colors=="NO") what.color="black"
 
 #Control if doing exploratory analyses
-do.Exploratory="NO"
+if(Model.run=="First") do.Exploratory="YES" else
+do.Exploratory="NO" 
 
-#Control of showing relative cpue
-Show.relative.index="YES"
-
-#Control what index to export
-#Export.relative="NO"
-Export.relative="YES"
+#Control if producing cpue paper figure
+plot.cpue.paper.figures="NO"
 
 
 ##############--- 2. PARAMETERS SECTION ---###################
@@ -1904,11 +1901,10 @@ fn.MC.delta.cpue=function(BiMOD,MOD,BiData,PosData,niter,pred.term,ALL.terms)
   #Get summary stats
   MEAN=colMeans(MC.preds,na.rm=T)
   SD=apply(MC.preds,2,sd,na.rm=T)
-  CV=SD/MEAN
   LOW=apply(MC.preds, 2, function(x) quantile(x, 0.025,na.rm=T))
   UP=apply(MC.preds, 2, function(x) quantile(x, 0.975,na.rm=T))
   
-  Stats=cbind(pred.dat.pos,data.frame(MEAN=MEAN,SD=SD,CV=CV,LOW=LOW,UP=UP))
+  Stats=cbind(pred.dat.pos,data.frame(MEAN=MEAN,SD=SD,LOW=LOW,UP=UP))
   Stats=Stats[order(Stats[,1]),]
   Stats=Stats%>%rename(response=MEAN, lower.CL=LOW, upper.CL=UP)
   rownames(Stats)=NULL
@@ -2266,6 +2262,8 @@ Influence.fn=function(MOD,DAT,Term.type,termS,add.Influence,SCALER)
   }
   
   #plot CDI (categorical vars only)
+  STORe=vector('list',nt)
+  names(STORe)=termS
   for(p in 1:nt)
   {
     if (Term.type[p]=="CAT")
@@ -2280,6 +2278,7 @@ Influence.fn=function(MOD,DAT,Term.type,termS,add.Influence,SCALER)
       COEF=sort(COEF)
       COEF.SE=COEF.SE[match(names(COEF),names(COEF.SE))]
       x=1:length(COEF)
+      
       if(length(x)>1)
       {
         nf <- layout(matrix(c(1,1,1,2,2,2), 2, 3, byrow = TRUE), widths=c(1.5,1),heights=c(1,1.5))
@@ -2297,17 +2296,10 @@ Influence.fn=function(MOD,DAT,Term.type,termS,add.Influence,SCALER)
         mtext("Coefficient",side=2,line=4,cex=1.5,las=3)
         
         # Bubble plot of records
-        #DAT[,match(termS[p],names(DAT))]=DAT[,match(termS[p],names(DAT))]
         TAb=table(DAT$finyear,DAT[,match(termS[p],names(DAT))])
-        #TAb=TAb[,match(Store1[[p]],colnames(TAb))]
         Prop.Rec=TAb/rowSums(TAb)
-        #if(colnames(Prop.Rec)[1]=="1")Prop.Rec=Prop.Rec[,-1]
         Nombres=gsub("[^[:digit:]]", "", names(COEF))
         if(termS[p]=="vessel") Nombres=1:length(Nombres)   #change vessel name for dummy
-        
-        #rownames(Prop.Rec)=names(ny[1:length(ny)])
-        #colnames(Prop.Rec)=COef.nm
-        
         Prop.Rec=Prop.Rec[,match(names(COEF),colnames(Prop.Rec))]
         bubble.plot(x,1:length(ny),Prop.Rec,scaler=SCALER,termS[p],"Financial year")
         axis(1,1:length(COEF),F,tck=-0.015)
@@ -2327,12 +2319,14 @@ Influence.fn=function(MOD,DAT,Term.type,termS,add.Influence,SCALER)
           axis(2,seq(1,length(ny),2),F,tcl=1)
         }
         
+        STORe[[p]]=list(x=x,COEF=COEF,COEF.SE=COEF.SE,Prop.Rec=Prop.Rec)
       }
     }
   }
-  return(list(Annual.Dev=Annual.Dev,ny=ny,Over.all.influence=Over.all.influence))
+  return(list(Annual.Dev=Annual.Dev,ny=ny,Over.all.influence=Over.all.influence,store=STORe,
+              termS=termS,ny=ny,SCALER=SCALER))
 }
-Compare.term.infl.fun=function(A,WHERE,YLIM)
+Compare.term.infl.fun=function(A,WHERE,WHERE2,YLIM,spliT)
 {
   Annual.Dev=A$Annual.Dev
   ny=A$ny
@@ -2349,132 +2343,48 @@ Compare.term.infl.fun=function(A,WHERE,YLIM)
   axis(1,seq(1,length(ny),2),names(ny)[seq(1,length(ny),2)],cex.axis=1.35,tck=-0.04)
   for(p in 2:nt)lines(1:length(ny),Annual.Dev[[p]],lwd=LWD,lty=LTY[p],col=LTY.col[p])
   LEG=paste(NamE," (",round(100*A$Over.all.influence,1),"%)",sep="")
-  legend(WHERE,LEG,bty='n',lty=LTY,col=LTY.col,lwd=LWD,cex=1.25,pt.cex=1.5)
+  if(spliT=="YES")
+  {
+    nn=1:(length(LEG)/2)
+    legend(WHERE,LEG[nn],bty='n',lty=LTY[nn],col=LTY.col[nn],lwd=LWD,cex=1.25,pt.cex=1.5)
+    nn=1+(length(LEG)/2):length(LEG)
+    legend(WHERE2,LEG[nn],bty='n',lty=LTY[nn],col=LTY.col[nn],lwd=LWD,cex=1.25,pt.cex=1.5)
+  }else
+    legend(WHERE,LEG,bty='n',lty=LTY,col=LTY.col,lwd=LWD,cex=1.25,pt.cex=1.5)
 }
-Fig.CDI.paper.fn=function(MOD,DAT,Term.type,termS,SCALER,YLABs,CxAx)  
+Fig.CDI.paper.fn=function(store,SCALER,termS)
 {
-  #extract main term coefficients for each species
   nt=length(termS)
-  Store1=Store2=MatcH=COEF.list=COEF.SE.list=vector('list',nt)
-  ID=c(1,grep("[:]", names(coef(MOD))))
-  Cofs=coef(MOD)[-ID]
-  Cofs.SE=summary(MOD)$coefficients[-ID, 2]
+  YLABs=termS
+  YLABs=ifelse(YLABs=="blockx","Block",ifelse(YLABs=="vessel","Vessel",
+                                              ifelse(YLABs=="month","Month",NA)))
   for(p in 1:nt)
   {
-    if (Term.type[p]=="CAT")
-    {
-      Store1[[p]]=as.character(levels(DAT[,match(termS[p],names(DAT))]))[-1]
-      Store2[[p]]=paste(termS[p],Store1[[p]],sep="")
-    }
-  }
-  for(p in 1:nt)MatcH[[p]]=if (Term.type[p]=="CAT") match(Store2[[p]],names(Cofs))
-  for(p in 1:nt)
-  {
-    if (Term.type[p]=="CAT") COEF.list[[p]]=Cofs[MatcH[[p]]]
-    if (Term.type[p]=="Cont") COEF.list[[p]]=Cofs[match(termS[p],names(Cofs))]
-  }
-  for(p in 1:nt) 
-  {
-    if (Term.type[p]=="CAT")
-    {
-      COEF.list[[p]]=data.frame(Dummy=Store1[[p]],coef=COEF.list[[p]])
-      COEF.list[[p]]$Dummy=as.character(COEF.list[[p]]$Dummy)
-    }
-  }
-  for(p in 1:nt)
-  {
-    if (Term.type[p]=="CAT")
-    {
-      A=as.character(levels(DAT[,match(termS[p],names(DAT))]))[1]
-      COEF.list[[p]]=rbind(COEF.list[[p]],data.frame(Dummy=A,coef=0))
-    }
-  }
-  for(p in 1:nt) if (Term.type[p]=="CAT")colnames(COEF.list[[p]])=c(termS[p],paste("Coef.",termS[p],sep=""))
-  
-  #attach coefficients to data
-  for(p in 1:nt)
-  {
-    if (Term.type[p]=="CAT") DAT=merge(DAT,COEF.list[[p]],by=termS[p],all.x=T)
-    if (Term.type[p]=="Cont")
-    {
-      DAT=cbind(DAT,COEF.list[[p]]*DAT[,match(names(COEF.list[[p]]),names(DAT))]) #coef X value
-      colnames(DAT)[ncol(DAT)]=paste("Coef.",termS[p],sep="")      
-    }
-  }
-  
-  #ny
-  ny=table(DAT$finyear)
-  
-  #calculate mean of coefficient
-  Coef.vec=match(paste("Coef.",termS,sep=""),names(DAT))
-  Mean.coef=Annual.Dev=vector('list',nt)
-  names(Annual.Dev)=termS
-  Over.all.influence=rep(NA,nt)
-  names(Over.all.influence)=termS
-  for(p in 1:nt) Mean.coef[[p]]=mean(DAT[,Coef.vec[p]],na.rm=T)
-  
-  #calculate overall and annual deviation from mean (i.e. influence)
-  #- Categorical variables
-  for(p in 1:nt)
-  {
-    dev=rep(NA,length(ny))
-    for(t in 1:length(ny))
-    {
-      a=subset(DAT,finyear==names(ny[t]))
-      dev[t]=(sum(a[,Coef.vec[p]]-Mean.coef[[p]]))/ny[t]
-    }  
+    x=store[[p]]$x
+    COEF=store[[p]]$COEF
+    COEF.SE=store[[p]]$COEF.SE
+    Prop.Rec=store[[p]]$Prop.Rec
     
-    #Store Annual deviance
-    #note: exp because it's multiplicative
-    Annual.Dev[[p]]=exp(dev)  
+    # Coefficients
+    minSE=COEF-COEF.SE
+    maxSE=COEF+COEF.SE
+    plot(x,COEF,xlab="",ylab="",xaxt="n",ylim=c(min(minSE),max(maxSE)),cex.axis=1.25,pch=19,cex=1.75)
+    arrows(x, minSE, x, maxSE, code=3, angle=90, length=0.1)
+    axis(1,1:length(COEF),F,tcl=0.5)
+    axis(1,seq(1,length(COEF),2),F,cex.axis=1.15,tcl=1)      
     
-    #Store Overall influence of variable
-    Over.all.influence[p]=exp(sum(abs(dev))/length(ny))-1    
+    #Bubbleplot
+    Nombres=gsub("[^[:digit:]]", "", names(COEF))
+    if(termS[p]=="vessel") Nombres=1:length(Nombres)   #change vessel name for dummy
+    Prop.Rec=Prop.Rec[,match(names(COEF),colnames(Prop.Rec))]
+    bubble.plot(x,1:length(ny),Prop.Rec,scaler=SCALER,"","")
+    axis(1,1:length(COEF),F,tck=-0.015)
+    axis(1,seq(1,length(COEF),1),Nombres[seq(1,length(COEF),1)],cex.axis=1.15,tck=-0.025)
+    axis(2,1:length(ny),F,tck=-0.015)
+    axis(2,seq(1,length(ny),2),F,cex.axis=1,tck=-0.025) 
+    if(p==1)axis(2,seq(1,length(ny),2),names(ny)[seq(1,length(ny),2)],cex.axis=1,tck=-0.025)   
+    mtext(YLABs[p],side=1,line=1.75,cex=1)
   }
-  
-  #plot CDI (categorical vars only)
-  for(p in 1:nt)
-  {
-    if (Term.type[p]=="CAT")
-    {
-      COEF=Cofs[MatcH[[p]]]
-      COEF.SE=Cofs.SE[MatcH[[p]]]
-      COef.nm=names(COEF)
-      COEF=sort(COEF)
-      COef.nm.sorted=names(COEF)
-      COEF.SE=COEF.SE[match(COef.nm.sorted,names(COEF.SE))]
-      x=1:length(COEF)
-      
-      # Coefficients
-      minSE=COEF-COEF.SE
-      maxSE=COEF+COEF.SE
-      plot(x,COEF,xlab="",ylab="",xaxt="n",ylim=c(min(minSE),max(maxSE)),cex.axis=CxAx,
-           pch=19,cex=1.5)
-      arrows(x, minSE, x, maxSE, code=3, angle=90, length=0.1,lwd=.75)
-      axis(1,1:length(COEF),F,tcl=0.25)
-      axis(1,seq(1,length(COEF),2),F,tcl=.5)  
-      
-      # Bubble plot of records
-      DAT[,match(termS[p],names(DAT))]=as.factor(DAT[,match(termS[p],names(DAT))])
-      TAb=table(DAT$finyear,DAT[,match(termS[p],names(DAT))])
-      TAb=TAb[,match(Store1[[p]],colnames(TAb))]
-      Prop.Rec=TAb/rowSums(TAb)
-      if(colnames(Prop.Rec)[1]=="1")Prop.Rec=Prop.Rec[,-1]
-      Nombres=gsub("[^[:digit:]]", "", names(COEF))
-      
-      if(termS[p]=="vessel") Nombres=1:length(Nombres)   #change vessel name for dummy
-      rownames(Prop.Rec)=names(ny[1:length(ny)])
-      colnames(Prop.Rec)=COef.nm
-      Prop.Rec=Prop.Rec[,match(COef.nm.sorted,colnames(Prop.Rec))]
-      bubble.plot(x,1:length(ny),Prop.Rec,scaler=SCALER,"","")
-      axis(1,1:length(COEF),F,tck=-0.015)
-      axis(1,seq(1,length(COEF),1),Nombres[seq(1,length(COEF),1)],cex.axis=CxAx,tck=-0.025)
-      axis(2,1:length(ny),F,tck=-0.015)
-      axis(2,seq(1,length(ny),2),substr(names(ny)[seq(1,length(ny),2)],1,4),cex.axis=CxAx,tck=-0.025)   
-      mtext(YLABs[p],side=1,line=1.75,cex=1)
-    }
-  }
-  
 }
 
 Plot.cpue.spatial=function(cpuedata,var)
@@ -5116,12 +5026,12 @@ if(do.influence=="YES")
                 Zebra='NO',Zebra.col='grey60',Grid.col='black',
                 Fnt.hdr= "Times New Roman",Fnt.body= "Times New Roman")
   
-  #ACA. keep updating 1:N.species with Tar.sp where appropriate, and SPECIES.vec for  Nms.sp 
   #Compare influence of all terms
   LWD=3
   LTY.col=c("black","grey45","grey20","grey85","grey55","grey70")
-  Whr=c("bottomright","bottomright","bottomright","topright")
-  Whr.d=c("bottomright","bottomright","bottomright","bottom")
+  Whr=c("bottomright","bottomright","bottomright","bottomleft")
+  Whr.d1=c("bottomleft","bottomleft","bottomleft","topright")
+  Whr.d2=c("topright","topright","topright","bottom")
   
   
   fn.fig("Figure 5.All.terms.Influence",2400, 2400)
@@ -5131,13 +5041,13 @@ if(do.influence=="YES")
     #Monthly
     dumy=unlist(lapply(Store.Influence, "[[", match("Annual.Dev",names(Store.Influence[[1]]))))
     YLIM=c(min(dumy),max(dumy))
-    Compare.term.infl.fun(A=Store.Influence[[s]],Whr[s],YLIM=YLIM)
+    Compare.term.infl.fun(A=Store.Influence[[s]],Whr[s],WHERE2=NA,YLIM=YLIM,spliT="NO")
     if(s==1)mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
     
     #Daily
     dumy=unlist(lapply(Store.Influence.daily, "[[", match("Annual.Dev",names(Store.Influence.daily[[1]]))))
     YLIM=c(min(dumy),max(dumy))
-    Compare.term.infl.fun(A=Store.Influence.daily[[s]],WHERE=Whr.d[s],YLIM=YLIM)
+    Compare.term.infl.fun(A=Store.Influence.daily[[s]],WHERE=Whr.d1[s],WHERE2=Whr.d2[s],YLIM=YLIM,spliT="YES")
     if(s==1)mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
     
     mtext(Nms.sp[Tar.sp[s]],4,line=1,las=3,cex=1.5)
@@ -5147,73 +5057,71 @@ if(do.influence=="YES")
   dev.off()
   
   #Show sandbar monthly CDI
-  SCLR=2.5
-  CDI.sp=c("Sandbar Shark")
   fn.fig("Figure 6.Sandbar_CDI",2400, 1200)
-  par(mfcol=c(2,3),mar=c(1,2,.5,.5),oma=c(2,1.5,1,.2),las=1,mgp=c(1.9,.5,0))
-  for(s in 1:length(CDI.sp))
-  {
-    #Monthly
-    if(CDI.sp[s]=="Dusky Whaler Bronze Whaler") Terms="vessel"
-    if(CDI.sp[s]=="Sandbar Shark") Terms=c("vessel","blockx","month")
-    Term.Type=ifelse(Terms%in%c("vessel" , "month" , "blockx"),"CAT",NA)
-    YLABs=Terms
-    YLABs=ifelse(YLABs=="blockx","Block",ifelse(YLABs=="vessel","Vessel",
-                                                ifelse(YLABs=="month","Month",NA)))
-    
-    ii=match(CDI.sp[s],names(Stand.out))
-    Fig.CDI.paper.fn(MOD=Stand.out[[ii]]$res,DAT=Stand.out[[ii]]$DATA,
-                     Term.type=Term.Type,termS=Terms,SCALER=SCLR,YLABs,CxAx=.95) 
-  }
-  mtext(c("Financial year                       Coefficient "),side=2,line=.25,cex=1,las=3,outer=T)
-  # mtext(c("Dusky                                                                                               Sandbar                    "),
-  #       3,line=-.25,cex=.75,outer=T) 
+  par(mfcol=c(2,3),mar=c(1,1,.5,1.25),oma=c(2,4,1,.2),las=1,mgp=c(1.9,.5,0))
+  Fig.CDI.paper.fn(store=Store.Influence$'Sandbar Shark'$store,
+                   SCALER=2.5,termS=c("vessel","blockx","month"))
+  mtext("Financial year                   Coefficient    ",
+        side=2,line=2.8,cex=1,las=3,outer=T)
   dev.off()
   
 }
 
 
+#   4.22.11 Construct spatial standardised catch rates    
+  #1. fit glms to each specific zone
+  #2. then predict, etc
+Pred.zone=vector('list',length(SP.list))
+names(Pred.zone)=names(SP.list)
+Pred.zone.creep=Pred.zone.nrmlzd=Pred.daily.zone=
+  Pred.daily.zone.creep=Pred.daily.zone.nrmlzd=Pred.zone
 
-#   4.22.11 Construct spatial standardised catch rates    #ACA: use blocks for monthly and lat long for daily
-#1. fit glms to each specific zone
-#2. then predict, etc
-Pred.zone=Pred.zone.creep=Pred.zone.nrmlzd=Pred
-Pred.daily.zone=Pred.daily.zone.creep=Pred.daily.zone.nrmlzd=Pred.daily
-system.time({for(s in 1:N.species)
+#gummy is the same as non-spatial as only zone 2 is used
+Pred.zone$`Gummy Shark`=list(Zone2=Pred$`Gummy Shark`)
+Pred.zone.creep$`Gummy Shark`=list(Zone2=Pred.creep$`Gummy Shark`)
+Pred.zone.nrmlzd$`Gummy Shark`=list(Zone2=Pred.normlzd$`Gummy Shark`)
+Pred.daily.zone$`Gummy Shark`=list(Zone2=Pred.daily$`Gummy Shark`)
+Pred.daily.zone.creep$`Gummy Shark`=list(Zone2=Pred.daily.creep$`Gummy Shark`)
+Pred.daily.zone.nrmlzd$`Gummy Shark`=list(Zone2=Pred.daily.normlzd$`Gummy Shark`)
+
+#other target species
+system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))  
 {
   #Monthly
   DAT=subset(Store_nom_cpues_monthly[[s]]$QL_dat,vessel%in%VES.used[[s]])
   DAT=subset(DAT,blockx%in%BLKS.used[[s]])
   ZonEs=unique(DAT$zone)
-  if(SPECIES.vec[s]=="Sandbar shark") ZonEs=subset(ZonEs,!ZonEs=="Zone2")   #no enough observations in zone2
+  if(names(SP.list)[s]=="Sandbar Shark") ZonEs=subset(ZonEs,!ZonEs=="Zone2")   #no enough observations in zone2
   pred.temp=vector('list',length(ZonEs))
   names(pred.temp)=ZonEs
   pred.temp.crip=pred.temp.nrm=pred.temp
-
+  
   for(z in 1:length(ZonEs))
   {
     #1. Fit model to zone data
     model=fn.stand(d=subset(DAT,zone==ZonEs[z]),Response="catch.target",RESPNS="LNcpue",PREDS=Predictors_monthly,
-                   efrt="km.gillnet.hours.c",Formula=Best.Model[[s]])
-
+                   efrt="km.gillnet.hours.c",Formula=Best.Model[[s]],Formula.gam=NULL)
+    
+    
     #2. Predict for selected blocks
     d=model$DATA
     Pred.1=pred.fun(MOD=model$res,biascor="YES",PRED="finyear",Pred.type="link")
-
+    
+    
     #3. Apply creep
     Pred.1.c=Pred.1
     add.crp=Eff.creep$effort.creep[match(Pred.1.c$finyear,Eff.creep$finyear)]
     Pred.1.c$response=Pred.1.c$response*(1-add.crp)
     Pred.1.c$lower.CL=Pred.1.c$lower.CL*(1-add.crp)
     Pred.1.c$upper.CL=Pred.1.c$upper.CL*(1-add.crp)
-
+    
     #4.Normalize
     Pred.1.c.norm=Pred.1.c
     Mn=mean(Pred.1.c.norm$response)
     Pred.1.c.norm$response=Pred.1.c.norm$response/Mn
     Pred.1.c.norm$lower.CL=Pred.1.c.norm$lower.CL/Mn
     Pred.1.c.norm$upper.CL=Pred.1.c.norm$upper.CL/Mn
-
+    
     #5.Store
     pred.temp[[z]]=Pred.1
     pred.temp.crip[[z]]=Pred.1.c
@@ -5223,41 +5131,42 @@ system.time({for(s in 1:N.species)
   Pred.zone[[s]]=pred.temp
   Pred.zone.creep[[s]]=pred.temp.crip
   Pred.zone.nrmlzd[[s]]=pred.temp.nrm
-
-
+  
+  
   #Daily
   DAT=subset(Store_nom_cpues_daily[[s]]$QL_dat,vessel%in%VES.used.daily[[s]])
   DAT=subset(DAT,blockx%in%BLKS.used.daily[[s]])
   ZonEs=unique(DAT$zone)
-  if(SPECIES.vec[s]=="Sandbar shark") ZonEs=subset(ZonEs,!ZonEs=="Zone2")   #no enough observations in zone2
+  if(names(SP.list)[s]=="Sandbar Shark") ZonEs=subset(ZonEs,!ZonEs=="Zone2")   #no enough observations in zone2
   pred.temp=vector('list',length(ZonEs))
   names(pred.temp)=ZonEs
   pred.temp.crip=pred.temp.nrm=pred.temp
-
+  
   for(z in 1:length(ZonEs))
   {
     #1. Fit model to zone data
     model=fn.stand(d=subset(DAT,zone==ZonEs[z]),Response="catch.target",RESPNS="LNcpue",
-                   PREDS=Predictors_daily,efrt="km.gillnet.hours.c",Formula=Best.Model.daily[[s]])
-
+                   PREDS=Predictors_daily,efrt="km.gillnet.hours.c",
+                   Formula=NULL,Formula.gam=Best.Model.daily.gam[[s]])
+    
     #2. Predict for selected blocks
     d=model$DATA
-    Pred.1=pred.fun(MOD=model$res,biascor="YES",PRED="finyear",Pred.type="link")
-
+    Pred.1=pred.fun(MOD=model$res.gam,biascor="YES",PRED="finyear",Pred.type="link")
+    
     #3. Apply creep
     Pred.1.c=Pred.1
     add.crp=Eff.creep$effort.creep[match(Pred.1.c$finyear,Eff.creep$finyear)]
     Pred.1.c$response=Pred.1.c$response*(1-add.crp)
     Pred.1.c$lower.CL=Pred.1.c$lower.CL*(1-add.crp)
     Pred.1.c$upper.CL=Pred.1.c$upper.CL*(1-add.crp)
-
+    
     #4.Normalize
     Pred.1.c.norm=Pred.1.c
     Mn=mean(Pred.1.c.norm$response)
     Pred.1.c.norm$response=Pred.1.c.norm$response/Mn
     Pred.1.c.norm$lower.CL=Pred.1.c.norm$lower.CL/Mn
     Pred.1.c.norm$upper.CL=Pred.1.c.norm$upper.CL/Mn
-
+    
     #5.Store
     pred.temp[[z]]=Pred.1
     pred.temp.crip[[z]]=Pred.1.c
@@ -5267,68 +5176,43 @@ system.time({for(s in 1:N.species)
   Pred.daily.zone[[s]]=pred.temp
   Pred.daily.zone.creep[[s]]=pred.temp.crip
   Pred.daily.zone.nrmlzd[[s]]=pred.temp.nrm
-
+  
 }})
 
-
-
-#   4.22.12 Export catch rates        MISSING: add other species relative..Pred.normlzd Pred.daily.normlzd
 setwd("C:/Matias/Analyses/Catch and effort/Outputs/Index")
 Sel.vars=c("finyear","response","SE","lower.CL","upper.CL")
 nams.Sel.vars=c("Finyear","Mean","CV","LOW.CI","UP.CI")
  
 #Absolute scale 
     #4.22.12.1 zones combined with NO efficiency creep
-for (s in 1:N.species)
+for (s in Tar.sp)
 {
-  #Standardised
   a=subset(Pred[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  write.csv(a,paste(SPECIES.vec[s],".annual.abundance.basecase.monthly_no.creep.csv",sep=""),row.names=F) 
+  write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly_no.creep.csv",sep=""),row.names=F) 
   
   a=subset(Pred.daily[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  write.csv(a,paste(SPECIES.vec[s],".annual.abundance.basecase.daily_no.creep.csv",sep=""),row.names=F) 
+  write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily_no.creep.csv",sep=""),row.names=F) 
 
   rm(a)
 }
 
     #4.22.12.2 zones combined with efficiency creep
-List.foly.nom.creep=List.foly.nom    #first add effort creep to foly 
-for(s in 1:N.species)
+for (s in Tar.sp)
 {
-  if(names(List.foly.nom.creep)[s]=="san") List.foly.nom.creep[[s]]$Foly=subset(List.foly.nom.creep[[s]]$Foly,FINYEAR%in%San.Yrs)
-  add.crp=Eff.creep$effort.creep[match(List.foly.nom.creep[[s]]$Foly$FINYEAR,Eff.creep$finyear)]
-  List.foly.nom.creep[[s]]$Foly$cpue=List.foly.nom.creep[[s]]$Foly$cpue*(1-add.crp)
-}
-for (s in 1:N.species)
-{
-  #Standardised
   a=subset(Pred.creep[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  write.csv(a,paste(SPECIES.vec[s],".annual.abundance.basecase.monthly.csv",sep=""),row.names=F) 
+  write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly.csv",sep=""),row.names=F) 
   
   a=subset(Pred.daily.creep[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  write.csv(a,paste(SPECIES.vec[s],".annual.abundance.basecase.daily.csv",sep=""),row.names=F) 
-  
-
-  #Unstandardised
-  write.csv(List.foly.nom.creep[[s]]$Foly,paste(SPECIES.vec[s],".annual.folly.csv",sep=""),row.names=F)  
-  
-  a=subset(Nominl.creep[[s]],select=c("finyear","response","lower.CL","upper.CL"))   
-  names(a)=c("Finyear","Mean","LOW.CI","UP.CI")
-  write.csv(a,paste(SPECIES.vec[s],".annual.nominal.monthly.csv",sep=""),row.names=F)    
-  
-  a=subset(Nominl.daily.creep[[s]],select=c("finyear","response","lower.CL","upper.CL"))   
-  names(a)=c("Finyear","Mean","LOW.CI","UP.CI")
-  write.csv(a,paste(SPECIES.vec[s],".annual.nominal.daily.csv",sep=""),row.names=F) 
-
+  write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily.csv",sep=""),row.names=F) 
   rm(a)
 }
 
-    #4.22.12.3 by zones without efficiency creep
-for (s in 1:N.species)
+    #4.22.12.3 by zones with NO efficiency creep
+for (s in Tar.sp)
 {
   Zn=names(Pred.zone[[s]])
   for(z in 1:length(Zn))
@@ -5336,18 +5220,18 @@ for (s in 1:N.species)
       #Standardised
     a=subset(Pred.zone[[s]][[z]],select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(SPECIES.vec[s],".annual.abundance.basecase.monthly.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
+    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
   
     a=subset(Pred.daily.zone[[s]][[z]],select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(SPECIES.vec[s],".annual.abundance.basecase.daily.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
+    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
   
     rm(a)
   }
 }
 
     #4.22.12.4 by zones with efficiency creep
-for (s in 1:N.species)
+for (s in Tar.sp)
 {
   Zn=names(Pred.zone[[s]])
   for(z in 1:length(Zn))
@@ -5355,11 +5239,11 @@ for (s in 1:N.species)
     #Standardised
     a=subset(Pred.zone.creep[[s]][[z]],select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(SPECIES.vec[s],".annual.abundance.basecase.monthly.",Zn[z],".csv",sep=""),row.names=F) 
+    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly.",Zn[z],".csv",sep=""),row.names=F) 
     
     a=subset(Pred.daily.zone.creep[[s]][[z]],select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(SPECIES.vec[s],".annual.abundance.basecase.daily.",Zn[z],".csv",sep=""),row.names=F) 
+    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily.",Zn[z],".csv",sep=""),row.names=F) 
     
     rm(a)
   }
@@ -5368,41 +5252,60 @@ for (s in 1:N.species)
 
 #Relative scale   
     #4.22.12.5 zones combined with efficiency creep
-for (s in 1:N.species)
+for (s in Tar.sp)
 {
-  #Standardised
   a=subset(Pred.normlzd[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  write.csv(a,paste(SPECIES.vec[s],".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
+  write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
   
   a=subset(Pred.daily.normlzd[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  write.csv(a,paste(SPECIES.vec[s],".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
+  write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
   rm(a)
 }
 
     #4.22.12.6 by zones with efficiency creep
-for (s in 1:N.species)
+for (s in Tar.sp)
 {
   Zn=names(Pred.zone[[s]])
   for(z in 1:length(Zn))
   {
-    #Standardised
     a=subset(Pred.zone.nrmlzd[[s]][[z]],select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(SPECIES.vec[s],".annual.abundance.basecase.monthly.",Zn[z],"_relative.csv",sep=""),row.names=F) 
+    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly.",Zn[z],"_relative.csv",sep=""),row.names=F) 
     
     a=subset(Pred.daily.zone.nrmlzd[[s]][[z]],select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(SPECIES.vec[s],".annual.abundance.basecase.daily.",Zn[z],"_relative.csv",sep=""),row.names=F) 
+    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily.",Zn[z],"_relative.csv",sep=""),row.names=F) 
     
     rm(a)
   }
 }
 
+    #4.22.12.7 other species zones combined with efficiency creep  
+Sel.vars.other=c("finyear","response","SD","lower.CL","upper.CL")
+for (s in nnn[-sort(Tar.sp)])
+{
+  if(!is.null(Pred.normlzd[[s]]))
+  {
+    a=subset(Pred.normlzd[[s]],select=Sel.vars.other)   
+    names(a)=nams.Sel.vars
+    a$CV=a$CV/a$Mean
+    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
+  }
+  
+  if(!is.null(Pred.daily.normlzd[[s]]))
+  {
+    a=subset(Pred.daily.normlzd[[s]],select=Sel.vars.other)   
+    names(a)=nams.Sel.vars
+    a$CV=a$CV/a$Mean
+    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
+  }
+  rm(a)
+}
+
 
 ##############--- 5. REPORT SECTION FROM 1.Manipulate data.R---###################
-plot.cpue.paper.figures="NO"
 if (plot.cpue.paper.figures=="YES")
 {
   setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper")
