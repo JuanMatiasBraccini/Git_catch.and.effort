@@ -54,7 +54,10 @@
 #               4.22.11 Construct spatial standardised catch rates
 #               4.22.12 Export catch rates
 
-#----5. REPORT SECTION-----#
+
+#----5. EXPORT INDICES-----#
+
+#----6. REPORT SECTION FROM 1.Manipulate data.R-----#
 
 
 rm(list=ls(all=TRUE))
@@ -5179,7 +5182,10 @@ system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))
   
 }})
 
-setwd("C:/Matias/Analyses/Catch and effort/Outputs/Index")
+
+##############--- 5. EXPORT INDICES---###################
+
+setwd("C:/Matias/Analyses/Catch and effort/Data_outs")
 Sel.vars=c("finyear","response","SE","lower.CL","upper.CL")
 nams.Sel.vars=c("Finyear","Mean","CV","LOW.CI","UP.CI")
  
@@ -5305,7 +5311,7 @@ for (s in nnn[-sort(Tar.sp)])
 }
 
 
-##############--- 5. REPORT SECTION FROM 1.Manipulate data.R---###################
+##############--- 6. REPORT SECTION FROM 1.Manipulate data.R---###################
 if (plot.cpue.paper.figures=="YES")
 {
   setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper")
