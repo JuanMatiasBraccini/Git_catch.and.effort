@@ -183,7 +183,6 @@ if(Get.Daily.Logbook=="YES")
   channel <- odbcConnectExcel2007(Daily.dat)
   Data.daily<- sqlFetch(channel,"CATCH", colnames = F)
   close(channel)
-  
 
   #teps
   TEPS.current<- read.csv(paste(Current.yr.dat,"/TEPS_PROTECTEDSP.csv",sep=""),stringsAsFactors=F)
@@ -7235,6 +7234,10 @@ Exprt.list=list(
 for(i in 1:length(Exprt.list)) fwrite(Exprt.list[[i]],paste(names(Exprt.list)[i],".csv",sep=""),row.names=F)
 rm(Exprt.list)
 
+
+write.csv(TEPS.pre.current,"TEPS.pre.current.csv",row.names=F)
+write.csv(Suite,"suite.csv",row.names=F)
+write.csv(Results.pre.2013,"Results.pre.2013.csv",row.names=F)
 
 
   #Total catch SAFS for EVA

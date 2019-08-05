@@ -1,5 +1,8 @@
 #------ G 3. STATE OF FISHERIES REPORT ------
 
+library(dplyr)
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R")
+
 #note:  TDGDLF is defined as METHOD= "GN" or "LL" and non-estuaries and south of 26 S. 
 #       'Other fisheries' are extracted from 'Other.fishery.catch' (this includes 'Data.monthly'  
 #         for which gear is not 'GN' or 'LL' and 'Daily logbooks' from other fisheries that report 
@@ -22,6 +25,7 @@ Current.yr="2017-18"
 Percent.fin.of.livewt=0.03
 TDGDLF.lat.range=c(-26,-40)
 
+Ray.species=25000:31000
 Elasmo.species=5001:31000
 Gummy=17001;Dusky_whaler=c(18003,18001);Whiskery=17003;Sandbar=18007;Hammerheads=19000;
 Spinner=18023;Wobbegongs=13000;Common_saw_shark=23002;School=17008
@@ -34,6 +38,11 @@ Order.Elas.Sp.SoFAR=data.frame(Species=c("Gummy","Dusky_whaler","Whiskery","Sand
 
 
 Scalefish.species=180000:599001
+Scalefish.species=Scalefish.species[which(Scalefish.species %in% unique(Data.monthly$SPECIES))]
+Redfishes=c(258000,258004,258005,258006)
+Blue_morwong=377004;Blue_groper=384002;West_Australian_dhufish=320000;Pink_snapper=353001;
+Boarfishes=367000;Samsonfish=337007;Redfishes=Redfishes;
+Mulloway=354001;Sweetlips=350000;Baldchin_groper=384999
 Order.Scale.Sp.SoFAR=data.frame(Species=c("Blue_morwong","Blue_groper","Pink_snapper","West_Australian_dhufish",
                                           "Boarfishes","Samsonfish","Redfishes","Mulloway","Sweetlips",
                                           "Baldchin_groper","Other_scalefish","Total Scalefish"),
@@ -41,6 +50,10 @@ Order.Scale.Sp.SoFAR=data.frame(Species=c("Blue_morwong","Blue_groper","Pink_sna
                                                    "Chrysophrys auratus","Glaucosoma hebraicum","F. Pentacerotidae","Seriola hippos",
                                                    "Centroberyx spp.","Argyrosomus japonicus","F. Haemulidae",
                                                    "Choerodon rubescens","",""))
+
+Mollusc.species=600000:610000
+Mollusc.species=Mollusc.species[which(Mollusc.species %in% unique(Data.monthly$SPECIES))]
+
 
 
 #Fishing effort limits (2001-02)
@@ -56,21 +69,27 @@ Whiskery.status="Adequate"
 
 
 #Catch range of indicator species (Gummy, whiskery, dusky, sandbar)
-Catch.range.key.species=c(725,1095)
+Catch.range.key.species=data.frame(SPECIES=c("Gummy","Whiskery","Bronzy.Dusky","Sandbar"),
+                                   Min.catch=c(350,175,200,0),
+                                   Max.catch=c(450,225,300,120))%>%
+                        mutate(SPECIES=as.character(SPECIES))
 
 #bring in data from 1.Manipulate data.R
 setwd("C:/Matias/Analyses/Catch and effort/Data_outs")
 
 Data.monthly=read.csv("Data.monthly.csv",stringsAsFactors = F)
 Rec.fish.catch=read.csv("Rec.fish.catch.csv",stringsAsFactors = F)
-Data.current.Sofar=read.csv(".csv",stringsAsFactors = F)
-PRICES=read.csv(".csv",stringsAsFactors = F)
+Data.current.Sofar=read.csv("Data.current.Sofar.csv",stringsAsFactors = F)
+PRICES=read.csv("PRICES.csv",stringsAsFactors = F)
 Total.effort.days.monthly=read.csv("Annual.total.eff.days.csv",stringsAsFactors = F)
 Total.effort.hours.monthly=read.csv("Annual.total.eff.hours.csv",stringsAsFactors = F)
 Total.effort.zone.hours.monthly=read.csv("Annual.zone.eff.hours.csv",stringsAsFactors = F)
 Total.effort.zone.days.monthly=read.csv("Annual.zone.eff.days.csv",stringsAsFactors = F)
 TEPS.current=read.csv("TEPS.current.csv",stringsAsFactors = F)
-  
+Suite=read.csv("suite.csv",stringsAsFactors = F)$x
+TEPS.pre.current=read.csv("TEPS.pre.current.csv",stringsAsFactors = F)
+Results.pre.2013=read.csv("Results.pre.2013.csv",stringsAsFactors = F)
+
   
 handle.Sofar=paste("C:/Matias/Analyses/Catch and effort/State of fisheries/",Current.yr,sep="")
 if(!file.exists(handle.Sofar))dir.create(handle.Sofar)
@@ -228,10 +247,14 @@ names(N.Crew)=c("zone","min","max")
 #note: this applies an average fin price to all sharks with valuable fins using
 #       Prices provided by Eva
 #dolar.per.kg.fin=35 
+PRICES=PRICES%>%mutate(dolar.per.kg=PRICES[,match(paste("uv",substr(Current.yr,3,4),
+                                        substr(Current.yr,6,7),sep=""),names(PRICES))],
+                       dolar.per.kg=as.numeric(gsub("\\$", "", dolar.per.kg)))%>%
+                select(-uv1718)
+
 Fin.Weight=subset(DAT,SPECIES%in%Elasmo.species,select=c(SPECIES,SNAME,RSCommonName,zone,LIVEWT.c))
 Fin.Weight=subset(Fin.Weight,!(SPECIES%in%c(13000,20000,31000,26999))) #remove no fin species (wobbies, spurdog,rays except shovelnose)
-Fin.Weight$dolar.per.kg.fin=PRICES[match(22998,PRICES$SPECIES),
-                                   match(paste("uv",substr(Current.yr,3,4),substr(Current.yr,6,7),sep=""),names(PRICES))]
+Fin.Weight$dolar.per.kg.fin=PRICES[match(22998,PRICES$SPECIES),match('dolar.per.kg',names(PRICES))]
 Fin.Weight$fin.weight=Percent.fin.of.livewt*Fin.Weight$LIVEWT.c 
 Fin.Weight$Total.price=Fin.Weight$dolar.per.kg.fin*Fin.Weight$fin.weight
 FINS.value=aggregate(Total.price~zone,Fin.Weight,sum,na.rm=T)
@@ -240,7 +263,7 @@ FINS.value.species.zone=aggregate(cbind(Total.price,fin.weight)~SNAME+zone,Fin.W
 
 
 #catch value 
-get.yr.price=paste("uv",substr(Current.yr,3,4),substr(Current.yr,6,7),sep="")
+get.yr.price="dolar.per.kg"
 PRICES1=PRICES[,match(c("SPECIES",get.yr.price),names(PRICES))]
 names(PRICES1)=c("SPECIES","ABARE.dolar.per.kg")
 PRICES1=merge(DAT[,match(c("SPECIES","SNAME","zone","LIVEWT.c"),names(DAT))],PRICES1,by="SPECIES",all.x=T)
@@ -473,7 +496,10 @@ if(!file.exists("scan.teps.csv"))
   cat(paste("scan.teps.csv FILE LOCATED IN",getwd()))
 }
 
-TEP.table=fun.Tab2.SoFaR(TEPS.WC.SC)
+Sighting.only=which(grepl("sighting", tolower(TEPS.WC.SC$Comments)))
+TEPS.WC.SC.without.sightings=TEPS.WC.SC
+if(length(Sighting.only)>0) TEPS.WC.SC.without.sightings=TEPS.WC.SC[-Sighting.only,]
+TEP.table=fun.Tab2.SoFaR(TEPS.WC.SC.without.sightings)
 TEP.table$Species=with(TEP.table,ifelse(Species=="WHITE POINTER","WHITE SHARK",Species))  
 
 #remove current in case overwrote historic
@@ -541,18 +567,16 @@ Retained.species$SPECIES[match(OrdeR,Retained.species$SPECIES)]=Change
 write.csv(Retained.species,"Retained.species.csv",row.names=F)
 
 
-#Export if catch levels are Acceptable or Not  
-if(Ktch.indic>=Catch.range.key.species[1] & Ktch.indic<=Catch.range.key.species[2])
-{
-  Ktch_comm_accept="Acceptable"
-  Ktch_rec_accept="Acceptable"      
-}else
-{
-  Ktch_comm_accept="Unacceptable"
-  Ktch_rec_accept="Unacceptable"          
-}
+#Export if catch levels are Acceptable or Not 
+Ktch_comm_accept=Tot.wt%>%mutate(SPECIES=ifelse(SPECIES=="sandbar","Sandbar",SPECIES))%>%
+                          filter(SPECIES%in%c("Gummy","Whiskery","Bronzy.Dusky","Sandbar"))%>%
+                          select(SPECIES,Catch.tons)%>%
+                          left_join(Catch.range.key.species,by="SPECIES")%>%
+                          mutate(Acceptable=ifelse(Catch.tons>=Min.catch & Catch.tons<=Max.catch,"Acceptable",
+                                                   "Unacceptable"))
+ 
 write.csv(Ktch_comm_accept,"Ktch_comm_accept.csv",row.names=F)
-write.csv(Ktch_rec_accept,"Ktch_rec_accept.csv",row.names=F)
+
 
 
 #Export tables as .csv
@@ -576,6 +600,20 @@ if(file.exists("scan.teps.csv"))
 
 
 #Figures 2-3. 
+Boundary.blk=c(34160,35160,36160) #Boundary blocks
+fn.split.boundary=function(DAT,What)
+{
+  id=match(What,colnames(DAT))
+  a=subset(DAT,BLOCKX%in%Boundary.blk)
+  b=subset(DAT,!BLOCKX%in%Boundary.blk)  
+  x=a
+  x$zone="Zone2"
+  x[,id]=NA
+  x[,id]=ifelse(!x$FINYEAR%in%c("2003-04","2004-05","2005-06"),0.5*a[,id],0.05*a[,id])
+  a[,id]=ifelse(!a$FINYEAR%in%c("2003-04","2004-05","2005-06"),0.5*a[,id],0.95*a[,id])
+  a=rbind(a,x)
+  return(rbind(a,b))
+}
 par(mfcol=c(1,1),mar=c(3.5,3.6,.1,1),oma=c(1,.5,.1,.1))
 LINE=c(5,1,1)
 TYPE=c("l","o","o")
@@ -626,6 +664,7 @@ dev.off()
 #Figure 3
 #note: Monthly data provided by Rory has no scalefish so use a specifc function that uses
 #       the historic excel file
+Yr.current=2000+as.numeric(substr(Current.yr,6,7))
 fn.figs2.3.SoFaR.scalies=function(GROUP,LAT1,LAT2,INT,INT2)
 {
   a=2011:(Yr.current-1);b=2012:Yr.current
@@ -713,22 +752,22 @@ dev.off()
 
 #Figures 5-8. Standardised cpue (zones combined)
   #read in data
-HNDL="C:/Matias/Analyses/Catch and effort/Outputs/Index/"
+HNDL="C:/Matias/Analyses/Catch and effort/Data_outs/"
 #Whiskery
-whis.mon=read.csv(paste(HNDL,"Whiskery shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
-whis.daily=read.csv(paste(HNDL,"Whiskery shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
+whis.mon=read.csv(paste(HNDL,"Whiskery Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
+whis.daily=read.csv(paste(HNDL,"Whiskery Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
 
 #gummy
-gum.mon=read.csv(paste(HNDL,"Gummy shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
-gum.daily=read.csv(paste(HNDL,"Gummy shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
+gum.mon=read.csv(paste(HNDL,"Gummy Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
+gum.daily=read.csv(paste(HNDL,"Gummy Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
 
 #dusky
-dus.mon=read.csv(paste(HNDL,"Dusky shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
-dus.daily=read.csv(paste(HNDL,"Dusky shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
+dus.mon=read.csv(paste(HNDL,"Dusky Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
+dus.daily=read.csv(paste(HNDL,"Dusky Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
 
 #sandbar
-san.mon=read.csv(paste(HNDL,"Sandbar shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
-san.daily=read.csv(paste(HNDL,"Sandbar shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
+san.mon=read.csv(paste(HNDL,"Sandbar Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
+san.daily=read.csv(paste(HNDL,"Sandbar Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
 
 #plot cpues
 Plot.cpue=function(cpuedata,ADD.LGND,whereLGND,COL,CxS,Yvar)    
