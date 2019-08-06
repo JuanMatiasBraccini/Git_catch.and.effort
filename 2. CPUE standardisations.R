@@ -31,7 +31,6 @@
 #           4.9 Compare nominal all records VS 'good reporters' only
 #           4.10 Construct wide database for analysis
 #           4.12 Drop first years of sandbar data because vessels don't meet selection 
-#           4.13 Corroborate effective area 
 #           4.14 Identify targeting behaviour
 #           4.15 Table of sensitivity scenarios
 #           4.16 Compute foly and nominal index for exporting
@@ -2488,16 +2487,7 @@ fn.table.terms=function(d,PREDS)
 
 ##############--- 4. PROCEDURE SECTION ---###################
 
-#Correct weird Blocks and Reset BLOCKX to 4 digits as some have 5 digits
-# Data.monthly.GN$BLOCKX=with(Data.monthly.GN,ifelse(BLOCKX>50000 & !(is.na(LAT) & is.na(LONG)),
-#                                         paste(abs(floor(LAT)),floor(LONG)-100,0,sep=""),BLOCKX))
-# Data.daily.GN$BLOCKX=with(Data.daily.GN,ifelse(BLOCKX>50000 & !(is.na(LAT) & is.na(LONG)),
-#                                         paste(abs(floor(LAT)),floor(LONG)-100,0,sep=""),BLOCKX))
-# Effort.monthly$BLOCKX=with(Effort.monthly,ifelse(BLOCKX>50000 & !(is.na(LAT) & is.na(LONG)),
-#                                         paste(abs(floor(LAT)),floor(LONG)-100,0,sep=""),BLOCKX))
-# Effort.daily$blockx=with(Effort.daily,ifelse(blockx>50000 & !(is.na(LAT) & is.na(LONG)),
-#                                         paste(abs(floor(LAT)),floor(LONG)-100,0,sep=""),blockx))
-
+#Reset BLOCKX to 4 digits as some have 5 digits
 Data.monthly.GN$BLOCKX=as.integer(substr(Data.monthly.GN$BLOCKX,1,4))
 Effort.monthly$BLOCKX=as.integer(substr(Effort.monthly$BLOCKX,1,4))
 Data.daily.GN$BLOCKX=as.integer(substr(Data.daily.GN$BLOCKX,1,4))
@@ -2953,9 +2943,6 @@ FINYEAR.ALL=unique(c(FINYEAR.monthly,FINYEAR.daily))
 FINYEAR.ALL=sort(FINYEAR.ALL)
 N.yrs.ALL=length(FINYEAR.ALL)
 
-
-#Export data for spatial distribution paper
-write.csv(Data.daily.GN,'C:/Matias/Analyses/Catch and effort/Data_outs/Data.daily.GN_for_spatial_analysis.csv',row.names=F)
 
 #4.6 Proportion of dusky and copper shark
 fn.fig("proportion of dusky and copper shark_TDGLDF",2000,2400)

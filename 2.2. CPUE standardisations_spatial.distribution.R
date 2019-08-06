@@ -6,8 +6,13 @@ setwd('C:/Matias/Analyses/Catch and effort/Data_outs')
 #vip: use WHOLE catch and effort data set (south and north) to show entire distribution across WA (though may have issues
 #of spatial resolution if north doesn't have block10....)
 
-#Data.North=   missing. get Data.daily north exported (with effort variables) in 1.Manipulate data.R
-Data.daily.GN=read.csv('Data.daily.GN_for_spatial_analysis.csv')
+#-Daily catch and effort for all methods, north of 26 S
+Data.daily.NSF=read.csv('Data.daily.NSF.csv')
+Effort.daily.NSF=read.csv('Effort.daily.NSF.csv')
+
+#-Daily catch and effort for all methods, south of 26 S 
+Data.daily=read.csv('Data.daily.csv')
+Effort.daily=read.csv('Effort.daily.csv')
 
 #Use function fn.compare.glm.gam() from 2.cpue standardisation.R
 #predict only for block10 with data

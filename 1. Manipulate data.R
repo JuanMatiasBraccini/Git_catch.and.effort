@@ -2,7 +2,7 @@
 
 #MISSING:  1. charter.mean.w is dummy. Go out with them to calculate properly!
 #             another issue with Charter data is species id (e.g. bull sharks for licence FT1L373 may not be)
-          #2. For NSF add GN equivalent effort to LL (ask Rory for rule)
+
 
 #Index for navigation
 #SECTION A. ---- MONTHLY RECORDS 
@@ -6770,7 +6770,7 @@ fn.Eff.Sofar=function(THESE.YRS)
   names(Effort.Km.gn.hours)[iid]=c("West","Zone1","Zone2")
   
   
-  #3.1.2. Calculate longline gillnet effort equivalent
+  #3.1.2. Calculate longline gillnet effort equivalent (McAuley & Simpfendorfer 2003)
   Daily.shark_rays.zone=subset(Data.daily,SPECIES%in%Elasmo.species & FINYEAR%in%THESE.YRS)
   
   #3.1.2.1 Annual catch by zone
@@ -6874,7 +6874,7 @@ names(Effort.Km.gn.hours.monthly)[iid]=c("West","Zone1","Zone2")
 THESE.YRS=FINYEAR.monthly
 
 
-    #3.2.2. Calculate longline gillnet effort equivalent                           
+    #3.2.2. Calculate longline gillnet effort equivalent  (McAuley et al 2003)                         
 Monthly.shark_rays.zone=subset(Data.monthly,SPECIES%in%Elasmo.species & FINYEAR%in%THESE.YRS)
 
       #3.2.2.1 Annual catch by zone
@@ -6973,8 +6973,8 @@ Effort.daily.NSF=subset(Effort.daily,zone%in%c("Closed","Joint","North"),
 Effort.monthly.NSF$hook.days=with(Effort.monthly.NSF,BDAYS.c*HOOKS)
 Effort.monthly.NSF$hook.hours=with(Effort.monthly.NSF,BDAYS.c*HOOKS*HOURS.c)
 
-Effort.daily.NSF$hook.days=with(Effort.daily.NSF,bdays.c*hooks)
-Effort.daily.NSF$hook.hours=with(Effort.daily.NSF,bdays.c*hooks*hours.c)
+Effort.daily.NSF$hook.days=with(Effort.daily.NSF,hooks)
+Effort.daily.NSF$hook.hours=with(Effort.daily.NSF,hooks*hours.c)
 
 
 Attach.Effort.monthly.c_NSF=aggregate(cbind(hook.days,hook.hours)~MONTH+BLOCKX+VESSEL+zone+FINYEAR,
@@ -6995,7 +6995,7 @@ Total.effort_NFS$hook.days=Total.effort_NFS$hook.days/1000
 Total.effort_NFS$hook.hours=Total.effort_NFS$hook.hours/1000
 Total.effort_NFS=aggregate(cbind(hook.days,hook.hours)~finyear,Total.effort_NFS,sum)
 
-#add dummy effort from , sort out issue of 2007-08 daily beeing too high!!
+#add dummy effort from , sort out issue of 2007-08 daily being too high!!
 Total.effort_NFS[32:34,2]=300
 names(Total.effort_NFS)=c("FINYEAR","Hook days","Hook hours")
 
@@ -7044,6 +7044,69 @@ if(Inspect.New.dat=="YES")
   legend("topleft",c("Matias","Rory"),bty='n',lty=1:2,col=1)
   dev.off()
 }
+
+
+#Add corresponding effort equivalents
+fn.quiv.eff=function(ktch,efF,SP,FORM.pred)
+{
+  efF=efF%>%select(-c(block10))
+  if(is.na(match('hook.hours',names(efF))))
+  {
+    efF$hook.days=with(efF,hooks)
+    efF$hook.hours=with(efF,hooks*hours.c)
+  }
+  
+  ktch=ktch%>%filter(SPECIES%in%SP)
+  d=left_join(ktch,efF,by='Same.return.SNo')%>%
+    select(Same.return.SNo,METHOD,day,YEAR.c,MONTH,BLOCKX,SPECIES,LIVEWT.c,
+           Km.Gillnet.Hours.c,hook.hours,Km.Gillnet.Days.c,hook.days)%>%
+    filter(METHOD%in%c('GN','LL'))%>%
+    mutate(m.Gillnet.Hours.c=1000*Km.Gillnet.Hours.c,
+           m.Gillnet.Days.c=1000*Km.Gillnet.Days.c,
+           cpue.hour=ifelse(METHOD=="GN",LIVEWT.c/m.Gillnet.Hours.c,   #have conversion m to hooks
+                     ifelse(METHOD=="LL",LIVEWT.c/hook.hours,NA)),
+           cpue.day=ifelse(METHOD=="GN",LIVEWT.c/m.Gillnet.Days.c,
+                     ifelse(METHOD=="LL",LIVEWT.c/hook.days,NA)))%>%
+           filter(!cpue.hour=="Inf")
+  Rango.LL=unique(subset(d,METHOD=='LL')$BLOCKX)
+  Rango.GN=unique(subset(d,METHOD=='GN')$BLOCKX)
+  
+  d=d%>%filter(BLOCKX%in%intersect(Rango.LL,Rango.GN))%>%
+        mutate(METHOD=as.factor(METHOD),
+               MONTH=as.factor(MONTH),
+               YEAR.c=as.factor(YEAR.c),
+               BLOCKX=as.factor(BLOCKX))
+  
+  mod.day=glm(formula(paste('log(cpue.day)',FORM.pred,sep="~")),data=d,family=gaussian)
+  mod.hour=glm(formula(paste('log(cpue.hour)',FORM.pred,sep="~")),data=d,family=gaussian)
+
+  NEWD=data.frame(METHOD=c("GN","LL"),
+                  YEAR.c=factor(names(sort(-table(d$YEAR.c))[1]),levels(d$YEAR.c)),
+                  MONTH=factor(names(sort(-table(d$MONTH))[1]),levels(d$MONTH)),
+                  BLOCKX=factor(names(sort(-table(d$BLOCKX))[1]),levels(d$BLOCKX)))
+  a=predict(mod.day,newdata=NEWD, type="response",se.fit=T)
+  NEWD$cpue.day=exp(a$fit+(a$se.fit^2)/2)  #apply bias correction for log transf
+  a=predict(mod.hour,newdata=NEWD, type="response",se.fit=T)
+  NEWD$cpue.hour=exp(a$fit+(a$se.fit^2)/2)  #apply bias correction for log transf
+  
+  #ratios
+  LL.to.GN=data.frame(t(with(NEWD,c(day=cpue.day[2]/cpue.day[1],hour=cpue.hour[2]/cpue.hour[1]))))
+    
+  return(LL.to.GN)
+
+}
+  #North
+top.sp=aggregate(LIVEWT.c~SPECIES,Data.daily.north,sum)%>%arrange(-LIVEWT.c)
+top.spID=cumsum(top.sp$LIVEWT.c)/sum(top.sp$LIVEWT.c)
+top.spID=1:which.min(abs(top.spID - .95))
+LL.to.GN.North=fn.quiv.eff(ktch=Data.daily.north,efF=Effort.daily.NSF%>%distinct(Same.return.SNo,.keep_all = T),
+                            SP=top.sp$SPECIES[top.spID],FORM.pred=paste('METHOD','YEAR.c','BLOCKX',sep="+"))
+
+  #South
+LL.to.GN.South=fn.quiv.eff(ktch=Data.daily,efF=Effort.daily%>%distinct(Same.return.SNo,.keep_all = T),
+                            SP=unlist(TARGETS),FORM.pred=paste('METHOD','YEAR.c','MONTH','BLOCKX',sep="+"))
+
+
 
 
 #4. Prepare files for cpue standardisation         
@@ -7213,20 +7276,30 @@ Exprt.list=list(
   Annual.zone.eff.hours=Total.effort.zone.hours.monthly,
   Annual.zone.eff.days=Total.effort.zone.days.monthly,
   Annual.total.eff_NSF=Total.effort_NFS,
-  Effort.monthly=Effort.monthly[,-match(crap.ef,names(Effort.monthly))],
-  Effort.daily=Effort.daily[,-match(crap.ef,names(Effort.daily))],
+  Effort.monthly=Effort.monthly%>%filter(!zone%in%c("Closed","Joint","North"))%>%
+                                  select(-crap.ef),
+  Effort.daily=Effort.daily%>%filter(!zone%in%c("Closed","Joint","North"))%>%
+                              select(-crap.ef),
+  Effort.monthly.NSF=Effort.monthly.NSF,
+  Effort.daily.NSF=Effort.daily.NSF%>%select(-crap.ef),
   Mesh.monthly=Mesh.monthly,
   Mesh.size=Mesh.size,
   TEPS.current=TEPS.current,
   Rec.fish.catch=Rec.fish.catch,
   Data.current.Sofar=Data.current.Sofar,
   PRICES=PRICES,
+  TEPS.pre.current=TEPS.pre.current,
+  Suite=data.frame(Suite=Suite),
+  Equivalent.LL_to_GN_South=LL.to.GN.South,
+  Equivalent.LL_to_GN_North=LL.to.GN.North,
+  Results.pre.2013=Results.pre.2013,
   Data.monthly=Data.monthly[,-match(crap,names(Data.monthly))],
-  Data.monthly.north=Data.monthly.north[,-match(crap,names(Data.monthly.north))],
+  Data.monthly.NSF=Data.monthly.north[,-match(crap,names(Data.monthly.north))],
   Data.monthly.GN=Data.monthly.GN[,-match(crap,names(Data.monthly.GN))],
   Data.monthly.LL=Data.monthly.LL[,-match(crap,names(Data.monthly.LL))],
   Data.monthly.other=Data.monthly.other,
   Data.daily=Data.daily[,-match(crap.daily,names(Data.daily))],
+  Data.daily.NSF=Data.daily.north[,-match(crap.daily,names(Data.daily.north))],
   Data.daily.original=Data.daily.original,
   Data.daily.GN=Data.daily.GN[,-match(crap.daily,names(Data.daily.GN))],
   Data.daily.LL=Data.daily.LL[,-match(crap.daily,names(Data.daily.LL))],
@@ -7235,9 +7308,7 @@ for(i in 1:length(Exprt.list)) fwrite(Exprt.list[[i]],paste(names(Exprt.list)[i]
 rm(Exprt.list)
 
 
-write.csv(TEPS.pre.current,"TEPS.pre.current.csv",row.names=F)
-write.csv(Suite,"suite.csv",row.names=F)
-write.csv(Results.pre.2013,"Results.pre.2013.csv",row.names=F)
+
 
 
   #Total catch SAFS for EVA
@@ -10136,7 +10207,7 @@ if(do.ASL.action.2018=="YES")
   
 } 
 
-if(do.Parks.Australia=="YES")  
+if(do.Parks.Australia=="YES")  #ACA
 {
   South.WA.lat=c(-36,-25); South.WA.long=c(112,130)
   PLATE=c(.01,.9,.075,.9)

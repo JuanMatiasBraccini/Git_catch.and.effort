@@ -86,7 +86,7 @@ Total.effort.hours.monthly=read.csv("Annual.total.eff.hours.csv",stringsAsFactor
 Total.effort.zone.hours.monthly=read.csv("Annual.zone.eff.hours.csv",stringsAsFactors = F)
 Total.effort.zone.days.monthly=read.csv("Annual.zone.eff.days.csv",stringsAsFactors = F)
 TEPS.current=read.csv("TEPS.current.csv",stringsAsFactors = F)
-Suite=read.csv("suite.csv",stringsAsFactors = F)$x
+Suite=read.csv("suite.csv",stringsAsFactors = F)$Suite
 TEPS.pre.current=read.csv("TEPS.pre.current.csv",stringsAsFactors = F)
 Results.pre.2013=read.csv("Results.pre.2013.csv",stringsAsFactors = F)
 
