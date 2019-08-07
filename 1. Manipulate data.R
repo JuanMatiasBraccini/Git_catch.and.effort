@@ -7220,7 +7220,7 @@ if(do.Hammerheads=="YES")
 #Data for Jeff Norris
 if (do.Jeffs=="YES") Jeff.Norris=subset(Data.monthly,SPECIES%in%Scalefish.species & Bioregion=="SC")  #Data requested by Jeff Norris
 
-#ACA
+
 #add nfish
 Data.monthly.GN$BLOCKX=as.numeric(Data.monthly.GN$BLOCKX)
 Data.monthly.GN=Data.monthly.GN%>%left_join(Daily.nfish.agg,by=c("Same.return",
@@ -10209,6 +10209,223 @@ if(do.ASL.action.2018=="YES")
 
 if(do.Parks.Australia=="YES")  #ACA
 {
+  library(fields)
+  fn.scale=function(x,MX,scaler) ((x/MX)^0.5)*scaler
+  fn.plt=function(dd,Main,titl,MAX)
+  {
+    with(dd,
+         {
+           plot(LONG,LAT,pch=19,ylim=Ylim,xlim=Xlim,col="steelblue",cex=fn.scale(mean.cpue,MAX,2.5),main=Main)
+           legend("topright",paste(round(MAX,2)),bty='n',cex=1.25,
+                  pt.cex=fn.scale(MAX,MAX,2),pch=19,col="steelblue",title=titl)
+         })
+  }
+  fn.img.plt=function(dd,TITL)
+  {
+    seq.lat1=subset(seq.lat,seq.lat<=Ylim[2] & seq.lat>=Ylim[1])
+    seq.lon1=subset(seq.lon,seq.lon<=Xlim[2] & seq.lon>=Xlim[1])
+    misn.lat=seq.lat1[which(!seq.lat1%in%unique(dd$lat10.corner))]
+    
+    misn.lon=seq.lon1[which(!seq.lon1%in%unique(dd$long10.corner))]
+    if(length(misn.lat)>0 | length(misn.lon)>0)
+    {
+      combo=expand.grid(lat10.corner=seq.lat1, long10.corner=seq.lon1)
+      dd=combo%>%left_join(dd,by=c("lat10.corner","long10.corner"))
+    }
+    dd=dd%>%arrange(long10.corner)%>%
+      select(-block10)%>%
+      spread(lat10.corner,mean.cpue)
+    Lon=as.numeric(dd$long10.corner)
+    dd=as.matrix(dd[,-1]) 
+    LaT=as.numeric(colnames(dd))
+    brk<- quantile( c(dd),probs=seq(0,1,.2),na.rm=T)
+    YLim=Ylim
+    XLim=Xlim
+    YLim[1]=YLim[1]-0.5
+    YLim[2]=YLim[2]+0.5
+    XLim[1]=XLim[1]-0.5
+    XLim[2]=XLim[2]+0.5
+    image.plot(Lon,LaT,dd, breaks=brk, col=rev(heat.colors(length(brk)-1)), 
+               lab.breaks=names(brk),ylim=YLim,xlim=XLim,xaxt='n',yaxt='n',ylab="",xlab="")
+    legend('topright',TITL,bty='n',cex=.9)
+    
+  }
+  seq.lat=c(-26.83, -26.67, -26.50, -26.33, -26.17, -26.00,
+            -27.83, -27.67, -27.50, -27.33, -27.17, -27.00,
+            -28.83, -28.67, -28.50, -28.33, -28.17, -28.00,
+            -29.83, -29.67, -29.50, -29.33, -29.17, -29.00,
+            -30.83, -30.67, -30.50, -30.33, -30.17, -30.00,
+            -31.83, -31.67, -31.50, -31.33, -31.17, -31.00,
+            -32.83, -32.67, -32.50, -32.33, -32.17, -32.00,
+            -33.83, -33.67, -33.50, -33.33, -33.17, -33.00,
+            -34.83, -34.67, -34.50, -34.33, -34.17, -34.00,
+            -35.83, -35.67, -35.50, -35.33, -35.17, -35.00)
+  seq.lon=c(113.83, 113.67, 113.50, 113.33, 113.17, 113.00,
+            114.83, 114.67, 114.50, 114.33, 114.17, 114.00,
+            115.83, 115.67, 115.50, 115.33, 115.17, 115.00,
+            116.83, 116.67, 116.50, 116.33, 116.17, 116.00,
+            117.83, 117.67, 117.50, 117.33, 117.17, 117.00,
+            118.83, 118.67, 118.50, 118.33, 118.17, 118.00,
+            119.83, 119.67, 119.50, 119.33, 119.17, 119.00,
+            120.83, 120.67, 120.50, 120.33, 120.17, 120.00,
+            121.83, 121.67, 121.50, 121.33, 121.17, 121.00,
+            122.83, 122.67, 122.50, 122.33, 122.17, 122.00,
+            123.83, 123.67, 123.50, 123.33, 123.17, 123.00,
+            124.83, 124.67, 124.50, 124.33, 124.17, 124.00,
+            125.83, 125.67, 125.50, 125.33, 125.17, 125.00,
+            126.83, 126.67, 126.50, 126.33, 126.17, 126.00,
+            127.83, 127.67, 127.50, 127.33, 127.17, 127.00,
+            128.83, 128.67, 128.50, 128.33, 128.17, 128.00,
+            129.83, 129.67, 129.50, 129.33, 129.17, 129.00)
+  
+  fn.parks.power=function(ktch,efF,do.what)
+  {
+    ktch=ktch%>%filter(METHOD%in%c('GN','LL') & Estuary=="NO")%>%
+      group_by(Same.return.SNo,METHOD,day,FINYEAR,MONTH,block10,LAT,LONG) %>%
+      summarise(LIVEWT.c=sum(LIVEWT.c))%>%data.frame
+    efF=efF%>%select(-c(block10,LAT,LONG))%>%
+      mutate(hook.days=hooks,
+             hook.hours=hooks*hours.c)
+    d=left_join(ktch,efF,by='Same.return.SNo')%>%
+      select(Same.return.SNo,METHOD,day,FINYEAR,MONTH,block10,LAT,LONG,LIVEWT.c,
+             hours.c,shots.c,netlen.c,hooks,Km.Gillnet.Hours.c,hook.hours)%>%
+      mutate(Hundred.m.Gillnet.Hours.c=Km.Gillnet.Hours.c*10,
+             Hundred.hook.hours=hook.hours/100,
+             cpue.hour=ifelse(METHOD=="GN",LIVEWT.c/Hundred.m.Gillnet.Hours.c,   
+                              ifelse(METHOD=="LL",LIVEWT.c/Hundred.hook.hours,NA)))%>%
+      filter(!cpue.hour=="Inf")
+    Ylim=floor(range(d$LAT))
+    Xlim=floor(range(d$LONG))
+    
+    #LL vs GN, all years combined
+    par(mfcol=c(2,1),mar=c(1,1,2,1),oma=c(2,2,.1,.1),mgp=c(1,.45,0))
+    if(do.what=="bubbles")
+    {
+      agg=d%>%group_by(METHOD,LAT,LONG)%>%summarise(mean.cpue=mean(cpue.hour))%>%data.frame
+      fn.plt(dd=subset(agg,METHOD=="GN"),Main="All daily gillnet records",
+             titl="kg per 100m gn hour",MAX=max(subset(agg,METHOD=="GN")$mean.cpue))
+      fn.plt(dd=subset(agg,METHOD=="LL"),Main="All daily longline records",
+             titl="kg per 100 hook hour",MAX=max(subset(agg,METHOD=="LL")$mean.cpue))
+    }
+    if(do.what=="image")
+    {
+      fnAx1=function() axis(1,seq(Xlim[1],Xlim[2]),F)
+      fnAx2=function() axis(2,seq(Ylim[1],Ylim[2]),F)
+      
+      agg=d%>%group_by(METHOD,block10)%>%summarise(mean.cpue=mean(cpue.hour))%>%
+        mutate(lat10.corner=round(-(abs(as.numeric(substr(block10,1,2))+10*(as.numeric(substr(block10,3,3)))/60)),2),
+               long10.corner=round(100+as.numeric(substr(block10,4,5))+10*(as.numeric(substr(block10,6,6)))/60,2))%>%
+        data.frame
+      fn.img.plt(dd=agg%>%filter(METHOD=="GN")%>%select(-METHOD),TITL="All daily gillnet records")
+      fnAx1();fnAx2()
+      fn.img.plt(dd=agg%>%filter(METHOD=="LL")%>%select(-METHOD),TITL="All daily longline records")
+      fnAx1();fnAx2()
+    }
+    
+    #LL vs GN, by month
+    mnth=1:12
+    par(mfcol=c(4,3),mar=c(1,2,2,2),oma=c(2,1,.1,1),mgp=c(1,.45,0))
+    if(do.what=="bubbles")
+    {
+      agg=d%>%group_by(METHOD,MONTH,LAT,LONG)%>%summarise(mean.cpue=mean(cpue.hour))%>%data.frame
+      for(m in mnth) 
+      {
+        if(nrow(subset(agg,METHOD=="GN" & MONTH==mnth[m]))==0) plot.new() else
+          fn.plt(dd=subset(agg,METHOD=="GN" & MONTH==mnth[m]),Main=paste("Gillnet, Month=",mnth[m]),
+                 titl="kg per 100m gn hour",MAX=quantile(subset(agg,METHOD=="GN")$mean.cpue,.99))
+      }
+      for(m in mnth) 
+      {
+        if(nrow(subset(agg,METHOD=="LL" & MONTH==mnth[m]))==0) plot.new() else
+          fn.plt(dd=subset(agg,METHOD=="LL" & MONTH==mnth[m]),Main=paste("Longline, Month=",mnth[m]),
+                 titl="kg per 100 hook hour",MAX=quantile(subset(agg,METHOD=="LL")$mean.cpue,.99))
+      }
+    }
+    if(do.what=="image")
+    {
+      agg=d%>%group_by(METHOD,MONTH,block10)%>%summarise(mean.cpue=mean(cpue.hour))%>%
+        mutate(lat10.corner=round(-(abs(as.numeric(substr(block10,1,2))+10*(as.numeric(substr(block10,3,3)))/60)),2),
+               long10.corner=round(100+as.numeric(substr(block10,4,5))+10*(as.numeric(substr(block10,6,6)))/60,2))%>%
+        data.frame
+      for(m in mnth)
+      {
+        if(nrow(subset(agg,METHOD=="GN" & MONTH==mnth[m]))<=1) plot.new() else
+        {
+          dd1=agg%>%filter(METHOD=="GN"& MONTH==mnth[m])%>%select(-c(METHOD,MONTH))
+          fn.img.plt(dd=dd1,TITL=paste("Gillnet, Month=",mnth[m]))
+          fnAx1();fnAx2()
+        }
+      }
+      for(m in mnth)
+      {
+        if(nrow(subset(agg,METHOD=="LL" & MONTH==mnth[m]))<=1) plot.new() else
+        {
+          dd1=agg%>%filter(METHOD=="LL"& MONTH==mnth[m])%>%select(-c(METHOD,MONTH))
+          fn.img.plt(dd=dd1,TITL=paste("Longline, Month=",mnth[m]))
+          fnAx1();fnAx2()
+        }
+      }
+    }
+    
+    #LL vs GN, by year
+    yr=sort(unique(d$FINYEAR))
+    par(mfcol=c(4,3),mar=c(1,2,2,2),oma=c(2,1,.1,1),mgp=c(1,.45,0))
+    if(do.what=="bubbles")
+    {
+      agg=d%>%group_by(METHOD,FINYEAR,LAT,LONG)%>%summarise(mean.cpue=mean(cpue.hour))%>%data.frame   
+      for(m in 1:length(yr)) 
+      {
+        if(nrow(subset(agg,METHOD=="GN" & FINYEAR==yr[m]))==0) plot.new() else
+          fn.plt(dd=subset(agg,METHOD=="GN" & FINYEAR==yr[m]),Main=paste("Gillnet",yr[m]),
+                 titl="kg per 100m gn hour",MAX=quantile(subset(agg,METHOD=="GN")$mean.cpue,.99))
+      }
+      for(m in 1:length(yr))
+      {
+        if(nrow(subset(agg,METHOD=="LL" & FINYEAR==yr[m]))==0) plot.new() else
+          fn.plt(dd=subset(agg,METHOD=="LL" & FINYEAR==yr[m]),Main=paste("Longline",yr[m]),
+                 titl="kg per 100 hook hour",MAX=quantile(subset(agg,METHOD=="LL")$mean.cpue,.99))
+      }
+    }
+    if(do.what=="image")
+    {
+      agg=d%>%group_by(METHOD,FINYEAR,block10)%>%summarise(mean.cpue=mean(cpue.hour))%>%
+        mutate(lat10.corner=round(-(abs(as.numeric(substr(block10,1,2))+10*(as.numeric(substr(block10,3,3)))/60)),2),
+               long10.corner=round(100+as.numeric(substr(block10,4,5))+10*(as.numeric(substr(block10,6,6)))/60,2))%>%
+        data.frame
+      for(m in 1:length(yr))
+      {
+        if(nrow(subset(agg,METHOD=="GN" & FINYEAR==yr[m]))<=1) plot.new() else
+        {
+          dd1=agg%>%filter(METHOD=="GN"& FINYEAR==yr[m])%>%select(-c(METHOD,FINYEAR))
+          fn.img.plt(dd=dd1,TITL=paste("Gillnet, Finyear=",yr[m]))
+          fnAx1();fnAx2()
+        }
+      }
+      for(m in 1:length(yr))
+      {
+        if(nrow(subset(agg,METHOD=="LL" & FINYEAR==yr[m]))<=1) plot.new() else
+        {
+          dd1=agg%>%filter(METHOD=="LL"& FINYEAR==yr[m])%>%select(-c(METHOD,FINYEAR))
+          fn.img.plt(dd=dd1,TITL=paste("Longline, Finyear=",yr[m]))
+          fnAx1();fnAx2()
+        }
+      }
+      
+    }
+  }
+  
+  for(i in 1:length(TARGETS))
+  {
+    pdf(file=paste(hndl,"/Parks Australia/Power.analysis_",names(TARGETS)[i],".pdf",sep=""))
+    fn.parks.power(ktch=subset(Data.daily,SPECIES%in%TARGETS[[i]]),
+                   efF=Effort.daily%>%distinct(Same.return.SNo,.keep_all=T),
+                   do.what="image")
+    dev.off()
+  }
+  
+  
+  
+  
   South.WA.lat=c(-36,-25); South.WA.long=c(112,130)
   PLATE=c(.01,.9,.075,.9)
   Yrs=c("2017-18","2018-19")
