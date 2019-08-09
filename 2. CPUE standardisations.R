@@ -1249,6 +1249,85 @@ fn.ainslie=function(dat,Ktch.targt,Effrt,explr,QL_prop_ktch,Prop.Malcolm,cpue.un
               QL_dat=subset(dat, target==1),Prop.selected=TAB))
 }
 
+#calculate selected nominal
+fn.out.nominal=function(d,method)
+{
+  if(is.na(match('cpue.target',names(d))))d=d%>%mutate(cpue.target=catch.target/km.gillnet.hours.c)
+  ## Nominal CPUE
+  if(method == "Nominal")
+  {
+    out = d %>%
+      group_by(finyear) %>%
+      summarise(My = mean(catch.target),
+                Mx = mean(effort),
+                Sy = sd(catch),
+                Sx = sd(effort),
+                r = cor(catch, effort),
+                n = length(catch)) %>%
+      as.data.frame
+    out$r[is.na(out$r)] = 0
+    out = out %>%
+      mutate(mean=My/Mx,
+             se =  sqrt(1/n*(My^2*Sx^2/(Mx^4) + Sy^2/(Mx^2) - 2*My*r*Sx*Sy/(Mx^3))),
+             lowCL = mean - 1.96*se,
+             uppCL = mean + 1.96*se) %>%
+      as.data.frame
+  }
+  
+  ## Arithmetic Mean CPUE
+  if(method == "Mean")
+  {
+    out = d %>%
+      group_by(finyear) %>%
+      summarise(mean = mean(cpue.target),
+                n = length(cpue.target),
+                sd = sd(cpue.target)) %>%
+      mutate(lowCL = mean - 1.96*sd/sqrt(n),
+             uppCL = mean + 1.96*sd/sqrt(n)) %>%
+      as.data.frame
+  }
+  
+  ## Lognormal CPUE
+  if(method == "LnMean")
+  {
+    out = d %>%
+      filter(cpue.target>0) %>%
+      group_by(finyear) %>%
+      summarise(ymean = mean(LNcpue),
+                n = length(LNcpue),
+                ysigma = sd(LNcpue)) %>%
+      mutate(mean=exp(ymean + ysigma^2/2) ,
+             ySE = sqrt(ysigma^2/n+ysigma^4/(2*(n-1))),
+             lowCL = exp(ymean + ysigma^2/2 - 1.96*ySE),
+             uppCL = exp(ymean + ysigma^2/2 + 1.96*ySE)) %>%
+      as.data.frame
+    
+  }
+  
+  ## Delta - Lognormal CPUE
+  if(method == "DLnMean")
+  {
+    out = d %>%
+      group_by(finyear) %>%
+      summarise(n = length(cpue.target),
+                m = length(cpue.target[cpue.target>0]),
+                mean.lognz = mean(log(cpue.target[cpue.target>0])),
+                sd.lognz = sd(log(cpue.target[cpue.target>0]))) %>%
+      mutate(p.nz = m/n,
+             theta = log(p.nz)+mean.lognz+sd.lognz^2/2,
+             c = (1-p.nz)^(n-1),
+             d = 1+(n-1)*p.nz,
+             vartheta = ((d-c)*(1-c*d)-m*(1-c)^2)/(m*(1-c*d)^2)+
+               sd.lognz^2/m+sd.lognz^4/(2*(m+1)),
+             mean = exp(theta),
+             lowCL = exp(theta - 1.96*sqrt(vartheta)),
+             uppCL = exp(theta + 1.96*sqrt(vartheta))) %>%
+      as.data.frame
+  }
+  
+  return(out)
+}
+
 fn.sel.yrs.used=function(DD,ThrShld.n.vess)
 {
   a=with(DD,table(FINYEAR,VESSEL))
@@ -4235,25 +4314,15 @@ if(Model.run=="First")
 #   4.22.8 Plot base case and nominal 
 
 #Extract comparable nominal cpue
-Selected.data='CPUE.QL_target'
-Selected.effort='km.gillnet.hours.c'
-
-id.dat=match(Selected.data,names(Store_nom_cpues_monthly$`Whiskery Shark`))
-id.eff=match(Selected.effort,names(Store_nom_cpues_monthly$`Whiskery Shark`[[1]]))
-
 Nominl=vector('list',length(SP.list)) 
 names(Nominl)=names(SP.list)
 Nominl.daily=Nominl
 for(s in nnn) 
 {
-  if(!is.null(Store_nom_cpues_monthly[[s]])) Nominl[[s]]=subset(Store_nom_cpues_monthly[[s]][[id.dat]][[id.eff]],method=="LnMean")
-  if(!is.null(Store_nom_cpues_daily[[s]])) Nominl.daily[[s]]=subset(Store_nom_cpues_daily[[s]][[id.dat]][[id.eff]],method=="LnMean")
-  if(is.na(match("finyear",names(Nominl[[s]]))))
-  {
-    Nominl[[s]]$finyear=Nominl[[s]]$season
-    Nominl.daily[[s]]$finyear=Nominl.daily[[s]]$season
-  }
+  if(!is.null(Stand.out[[s]]$DATA))Nominl[[s]]=fn.out.nominal(d=Stand.out[[s]]$DATA,method="LnMean")
+  if(!is.null(Stand.out.daily[[s]]$DATA))Nominl.daily[[s]]=fn.out.nominal(d=Stand.out.daily[[s]]$DATA,method="LnMean")
 }
+
 
 #Compare glm and gam spatial predictions
 if(compare.glm.gam=="YES")
@@ -4620,7 +4689,7 @@ for(s in nnn)
   if(!is.null(Pred.creep[[s]]))
   {
     yrs=Nominl.creep[[s]]$finyear
-    yrs=paste(yrs,substr(yrs+1,3,4),sep="-")
+    #yrs=paste(yrs,substr(yrs+1,3,4),sep="-")
     Pred.creep[[s]]=subset(Pred.creep[[s]],finyear%in%yrs)
     
     add.crp=Eff.creep$effort.creep[match(Pred.creep[[s]]$finyear,Eff.creep$finyear)]
@@ -4628,7 +4697,8 @@ for(s in nnn)
     Pred.creep[[s]]$lower.CL=Pred.creep[[s]]$lower.CL*(1-add.crp)
     Pred.creep[[s]]$upper.CL=Pred.creep[[s]]$upper.CL*(1-add.crp)
     
-    yrs=as.character(substr(Pred.creep[[s]]$finyear,1,4))
+    yrs=as.character(Pred.creep[[s]]$finyear)
+    #yrs=as.character(substr(Pred.creep[[s]]$finyear,1,4))
     Nominl.creep[[s]]=subset(Nominl.creep[[s]],finyear%in%yrs)
     Nominl.creep[[s]]$response=Nominl.creep[[s]]$mean*(1-add.crp)
     Nominl.creep[[s]]$lower.CL=Nominl.creep[[s]]$lowCL*(1-add.crp)
@@ -4644,14 +4714,15 @@ for(s in nnn)
   if(!is.null(Pred.daily.creep[[s]]))
   {
     yrs=Nominl.daily.creep[[s]]$finyear
-    yrs=paste(yrs,substr(yrs+1,3,4),sep="-")
+    #yrs=paste(yrs,substr(yrs+1,3,4),sep="-")
     Pred.daily.creep[[s]]=subset(Pred.daily.creep[[s]],finyear%in%yrs)
     add.crp=Eff.creep$effort.creep[match(Pred.daily.creep[[s]]$finyear,Eff.creep$finyear)]
     Pred.daily.creep[[s]]$response=Pred.daily.creep[[s]]$response*(1-add.crp)
     Pred.daily.creep[[s]]$lower.CL=Pred.daily.creep[[s]]$lower.CL*(1-add.crp)
     Pred.daily.creep[[s]]$upper.CL=Pred.daily.creep[[s]]$upper.CL*(1-add.crp)
     
-    yrs=as.character(substr(Pred.daily.creep[[s]]$finyear,1,4))
+    yrs=as.character(Pred.daily.creep[[s]]$finyear)
+    #yrs=as.character(substr(Pred.daily.creep[[s]]$finyear,1,4))
     Nominl.daily.creep[[s]]=subset(Nominl.daily.creep[[s]],finyear%in%yrs)
     Nominl.daily.creep[[s]]$response=Nominl.daily.creep[[s]]$mean*(1-add.crp)
     Nominl.daily.creep[[s]]$lower.CL=Nominl.daily.creep[[s]]$lowCL*(1-add.crp)
