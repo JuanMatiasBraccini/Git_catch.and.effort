@@ -6959,7 +6959,6 @@ Total.effort.hours.monthly=data.frame(FINYEAR=FinYR,
                           Total.effort.joint.hours.monthly$JASGL)
 
   #NSF  
-#missing:add GN equivalent LL (ask Rory for rule)
 Effort.monthly.NSF=subset(Effort.monthly,zone%in%c("Closed","Joint","North"),
                      select=c(FINYEAR,MONTH,BLOCKX,zone,VESSEL,METHOD,Same.return,
                                    FDAYS,BDAYS.c,HOURS.c,HOOKS,SHOTS.c,NETLEN.c,nlines,
@@ -10207,9 +10206,38 @@ if(do.ASL.action.2018=="YES")
   
 } 
 
-if(do.Parks.Australia=="YES")  #ACA
+if(do.Parks.Australia=="YES")  
 {
+  #Power analysis
   library(fields)
+  seq.lat=c(-26.83, -26.67, -26.50, -26.33, -26.17, -26.00,
+            -27.83, -27.67, -27.50, -27.33, -27.17, -27.00,
+            -28.83, -28.67, -28.50, -28.33, -28.17, -28.00,
+            -29.83, -29.67, -29.50, -29.33, -29.17, -29.00,
+            -30.83, -30.67, -30.50, -30.33, -30.17, -30.00,
+            -31.83, -31.67, -31.50, -31.33, -31.17, -31.00,
+            -32.83, -32.67, -32.50, -32.33, -32.17, -32.00,
+            -33.83, -33.67, -33.50, -33.33, -33.17, -33.00,
+            -34.83, -34.67, -34.50, -34.33, -34.17, -34.00,
+            -35.83, -35.67, -35.50, -35.33, -35.17, -35.00)
+  seq.lon=c(113.83, 113.67, 113.50, 113.33, 113.17, 113.00,
+            114.83, 114.67, 114.50, 114.33, 114.17, 114.00,
+            115.83, 115.67, 115.50, 115.33, 115.17, 115.00,
+            116.83, 116.67, 116.50, 116.33, 116.17, 116.00,
+            117.83, 117.67, 117.50, 117.33, 117.17, 117.00,
+            118.83, 118.67, 118.50, 118.33, 118.17, 118.00,
+            119.83, 119.67, 119.50, 119.33, 119.17, 119.00,
+            120.83, 120.67, 120.50, 120.33, 120.17, 120.00,
+            121.83, 121.67, 121.50, 121.33, 121.17, 121.00,
+            122.83, 122.67, 122.50, 122.33, 122.17, 122.00,
+            123.83, 123.67, 123.50, 123.33, 123.17, 123.00,
+            124.83, 124.67, 124.50, 124.33, 124.17, 124.00,
+            125.83, 125.67, 125.50, 125.33, 125.17, 125.00,
+            126.83, 126.67, 126.50, 126.33, 126.17, 126.00,
+            127.83, 127.67, 127.50, 127.33, 127.17, 127.00,
+            128.83, 128.67, 128.50, 128.33, 128.17, 128.00,
+            129.83, 129.67, 129.50, 129.33, 129.17, 129.00)
+  
   fn.scale=function(x,MX,scaler) ((x/MX)^0.5)*scaler
   fn.plt=function(dd,Main,titl,MAX)
   {
@@ -10250,44 +10278,16 @@ if(do.Parks.Australia=="YES")  #ACA
     legend('topright',TITL,bty='n',cex=.9)
     
   }
-  seq.lat=c(-26.83, -26.67, -26.50, -26.33, -26.17, -26.00,
-            -27.83, -27.67, -27.50, -27.33, -27.17, -27.00,
-            -28.83, -28.67, -28.50, -28.33, -28.17, -28.00,
-            -29.83, -29.67, -29.50, -29.33, -29.17, -29.00,
-            -30.83, -30.67, -30.50, -30.33, -30.17, -30.00,
-            -31.83, -31.67, -31.50, -31.33, -31.17, -31.00,
-            -32.83, -32.67, -32.50, -32.33, -32.17, -32.00,
-            -33.83, -33.67, -33.50, -33.33, -33.17, -33.00,
-            -34.83, -34.67, -34.50, -34.33, -34.17, -34.00,
-            -35.83, -35.67, -35.50, -35.33, -35.17, -35.00)
-  seq.lon=c(113.83, 113.67, 113.50, 113.33, 113.17, 113.00,
-            114.83, 114.67, 114.50, 114.33, 114.17, 114.00,
-            115.83, 115.67, 115.50, 115.33, 115.17, 115.00,
-            116.83, 116.67, 116.50, 116.33, 116.17, 116.00,
-            117.83, 117.67, 117.50, 117.33, 117.17, 117.00,
-            118.83, 118.67, 118.50, 118.33, 118.17, 118.00,
-            119.83, 119.67, 119.50, 119.33, 119.17, 119.00,
-            120.83, 120.67, 120.50, 120.33, 120.17, 120.00,
-            121.83, 121.67, 121.50, 121.33, 121.17, 121.00,
-            122.83, 122.67, 122.50, 122.33, 122.17, 122.00,
-            123.83, 123.67, 123.50, 123.33, 123.17, 123.00,
-            124.83, 124.67, 124.50, 124.33, 124.17, 124.00,
-            125.83, 125.67, 125.50, 125.33, 125.17, 125.00,
-            126.83, 126.67, 126.50, 126.33, 126.17, 126.00,
-            127.83, 127.67, 127.50, 127.33, 127.17, 127.00,
-            128.83, 128.67, 128.50, 128.33, 128.17, 128.00,
-            129.83, 129.67, 129.50, 129.33, 129.17, 129.00)
-  
   fn.parks.power=function(ktch,efF,do.what)
   {
     ktch=ktch%>%filter(METHOD%in%c('GN','LL') & Estuary=="NO")%>%
-      group_by(Same.return.SNo,METHOD,day,FINYEAR,MONTH,block10,LAT,LONG) %>%
+      group_by(Same.return.SNo,METHOD,day,FINYEAR,MONTH,BLOCKX,block10,LAT,LONG) %>%
       summarise(LIVEWT.c=sum(LIVEWT.c))%>%data.frame
     efF=efF%>%select(-c(block10,LAT,LONG))%>%
       mutate(hook.days=hooks,
              hook.hours=hooks*hours.c)
     d=left_join(ktch,efF,by='Same.return.SNo')%>%
-      select(Same.return.SNo,METHOD,day,FINYEAR,MONTH,block10,LAT,LONG,LIVEWT.c,
+      select(Same.return.SNo,METHOD,day,FINYEAR,MONTH,BLOCKX,block10,LAT,LONG,LIVEWT.c,
              hours.c,shots.c,netlen.c,hooks,Km.Gillnet.Hours.c,hook.hours)%>%
       mutate(Hundred.m.Gillnet.Hours.c=Km.Gillnet.Hours.c*10,
              Hundred.hook.hours=hook.hours/100,
@@ -10297,6 +10297,41 @@ if(do.Parks.Australia=="YES")  #ACA
     Ylim=floor(range(d$LAT))
     Xlim=floor(range(d$LONG))
     
+    #Overal boxplots and histograms
+    d=d%>%group_by(METHOD)%>%mutate(n=n()/nrow(d))  #add data weight
+    p=vector('list',6)
+    p[[1]]=ggplot(d,aes(x=METHOD,y=cpue.hour))+
+      geom_boxplot(varwidth = T,fill="grey60")+ facet_wrap(~ MONTH)+
+      coord_cartesian(ylim=c(0, quantile(d$cpue.hour,.99)))+
+      ylab("cpue (100 gillnet metres / number of hooks per hour)")
+    p[[2]]=ggplot(d,aes(fill=METHOD,x=cpue.hour))+
+      geom_density(,col=NA,alpha=.35)+ facet_wrap(~ MONTH)+
+      coord_cartesian(ylim=c(0, 5),xlim=c(0,quantile(d$cpue.hour,.99)))+
+      xlab("cpue (100 gillnet metres / number of hooks per hour)")
+    p[[3]]=ggplot(d,aes(x=METHOD,y=cpue.hour))+
+      geom_violin(fill="grey60")+ facet_wrap(~ MONTH)+
+      coord_cartesian(ylim=c(0, quantile(d$cpue.hour,.99)))+
+      ylab("cpue (100 gillnet metres / number of hooks per hour)")
+    
+    d.block=d%>%group_by(BLOCKX)%>%
+      mutate(n=n()/nrow(d))%>%
+      filter(n>0.01)%>%
+      data.frame
+    p[[4]]=ggplot(d.block,aes(x=METHOD,y=cpue.hour))+
+      geom_boxplot(varwidth = T,fill="grey60")+ facet_wrap(~ BLOCKX)+
+      coord_cartesian(ylim=c(0, quantile(d$cpue.hour,.999)))+
+      ylab("cpue (100 gillnet metres / number of hooks per hour)")
+    p[[5]]=ggplot(d.block,aes(fill=METHOD,x=cpue.hour))+
+      geom_density(,col=NA,alpha=.35)+ facet_wrap(~ BLOCKX)+
+      coord_cartesian(ylim=c(0, 5),xlim=c(0,quantile(d$cpue.hour,.99)))+
+      xlab("cpue (100 gillnet metres / number of hooks per hour)")
+    p[[6]]=ggplot(d.block,aes(x=METHOD,y=cpue.hour))+
+      geom_violin(fill="grey60")+ facet_wrap(~ BLOCKX)+
+      coord_cartesian(ylim=c(0, quantile(d$cpue.hour,.999)))+
+      ylab("cpue (100 gillnet metres / number of hooks per hour)")
+    print(p)
+    
+    #Spatial
     #LL vs GN, all years combined
     par(mfcol=c(2,1),mar=c(1,1,2,1),oma=c(2,2,.1,.1),mgp=c(1,.45,0))
     if(do.what=="bubbles")
@@ -10412,6 +10447,45 @@ if(do.Parks.Australia=="YES")  #ACA
       }
       
     }
+    
+    topmonth.GN=d%>%filter(METHOD=="GN")%>%
+      group_by(MONTH)%>%
+      summarise(mean.cpue=mean(cpue.hour))%>%
+      top_n(2,mean.cpue)%>%
+      select(MONTH)%>%data.frame
+    
+    topmonth.LL=d%>%filter(METHOD=="LL")%>%
+      group_by(MONTH)%>%
+      summarise(mean.cpue=mean(cpue.hour))%>%
+      top_n(2,mean.cpue)%>%
+      select(MONTH)%>%data.frame
+    
+    #GN
+    a=d%>%filter(MONTH%in%topmonth.GN$MONTH & METHOD=="GN")
+    a=sort(table(a$block10))
+    a=names(a[a>=quantile(a,.975)])
+    b=d%>%filter(MONTH%in%topmonth.GN$MONTH & METHOD=="GN" & block10%in%a)
+    par(mfcol=c(1,1),mar=c(2,2,2,2),oma=c(2,1,.1,1),mgp=c(1,.45,0))
+    boxplot(b$cpue.hour~as.factor(b$block10),col=2,main=paste("Gillnet, month=",paste(topmonth.GN$MONTH,collapse="&"),sep=""),
+            las=2,ylab="cpue",xlab='')
+    unik.bl=unique(b$block10)
+    smart.par(length(unik.bl),c(1,2,2,2),c(2,1,.1,1),c(1,.45,0))
+    for(u in 1:length(unik.bl))with(subset(b,block10==unik.bl[u]),hist(cpue.hour,col=2,xlim=c(0,max(b$cpue.hour)),
+                                                                       ylab="",cex.main=0.9,main=paste("month=",paste(topmonth.GN$MONTH,collapse="&"),", block=",unik.bl[u],sep="")))
+    
+    #LL
+    par(mfcol=c(1,1),mar=c(2,2,2,2),oma=c(2,1,.1,1),mgp=c(1,.45,0))
+    a=d%>%filter(MONTH%in%topmonth.LL$MONTH & METHOD=="LL")
+    a=sort(table(a$block10))
+    a=names(a[a>=quantile(a,probs=c(.90))])
+    b=d%>%filter(MONTH%in%topmonth.LL$MONTH & METHOD=="LL" & block10%in%a)
+    boxplot(b$cpue.hour~as.factor(b$block10),col=2,main=paste("Longline, month=",paste(topmonth.LL$MONTH,collapse="&"),sep=""),
+            las=2,ylab="cpue",xlab='')
+    unik.bl=unique(b$block10)
+    smart.par(length(unik.bl),c(1,2,2,2),c(2,1,.1,1),c(1,.45,0))
+    for(u in 1:length(unik.bl))with(subset(b,block10==unik.bl[u]),hist(cpue.hour,col=2,xlim=c(0,max(b$cpue.hour)),
+                                                                       ylab="",cex.main=0.9,main=paste("month=",paste(topmonth.LL$MONTH,collapse="&"),", block=",unik.bl[u],sep="")))
+    
   }
   
   for(i in 1:length(TARGETS))
@@ -10423,12 +10497,139 @@ if(do.Parks.Australia=="YES")  #ACA
     dev.off()
   }
   
+  #Catch composition GN and LL
+  fn.br.plt=function(dd,TOP,yMx,CX.nm)
+  {
+    dd=dd%>%
+      mutate(Prop=Total/sum(dd$Total))%>%
+      arrange(-Prop)%>%mutate(new.sp=SNAME)
+    if(nrow(dd)>TOP) dd$new.sp[(TOP+1):nrow(dd)]="Other"  
+    n.other=length(unique(dd$SNAME))-(length(unique(dd$new.sp))-1)
+    dd=dd%>%mutate(colr=ifelse(SPECIES<50000,"steelblue","firebrick"),
+                   colr=ifelse(new.sp=="Other","forestgreen",colr),
+                   new.sp=ifelse(new.sp=="Other",paste("Other (n=",n.other," species)",sep=""),new.sp))%>%
+      group_by(new.sp,colr)%>%
+      summarise(Prop=sum(Prop))%>%
+      data.frame%>%
+      arrange(new.sp)
+    with(dd,barplot(Prop,horiz = T,xlim=c(0,yMx),col=colr,names.arg=new.sp,cex.names=CX.nm,las=2))
+    box()
+  }
+  fn.ktch.comp=function(ktch,what,Min.overlap)
+  {
+    ktch=ktch%>%mutate(SNAME=tolower(SNAME),
+                       SNAME=ifelse(SNAME%in%c("shark, spinner (long-nose grey)",
+                                               "shark, spinner (long-nose grey"),"shark, spinner",
+                                    ifelse(SNAME=="shark, thickskin (sandbar)","shark, sandbar",
+                                           ifelse(SNAME%in%c("shark, bronze whaler","dusky whaler oversize",
+                                                             "shark, bronze whaler (dusky)"),"shark, dusky",         
+                                                  ifelse(SNAME=="shark, golden, copper whaler","shark, copper",
+                                                         ifelse(SNAME=="jewfish, westralian (dhufish)","wa dhufish",
+                                                                ifelse(SNAME=="foxfish, hogfish, pigfish","foxfish",
+                                                                       ifelse(SNAME=="trevally, other (skippy)","trevally",
+                                                                              ifelse(SNAME=="snapper, nor_west (sp emperor)","spangled emperor",
+                                                                                     ifelse(SNAME=="footballer, ftbllr sweep, bndd","footballer sweep",
+                                                                                            ifelse(SNAME=="samson fish, sea kingfish","samson fish",SNAME)))))))))))
+    
+    
+    
+    #Overall comparison GN vs LL
+    dat=ktch%>%group_by(METHOD,SPECIES,SNAME)%>%
+      summarise(Total = sum(LIVEWT.c))
+    fn.fig(paste(hndl,"/Parks Australia/Catch_composition_GN_LL_overall",what,sep=""),2400,1600)
+    par(mfcol=c(1,2),mar=c(2,9,1,.1),oma=c(1,.1,.5,.3),mgp=c(1.5,.5,0))
+    fn.br.plt(dd=dat%>%filter(METHOD=='GN'),TOP=20,yMx=1,CX.nm=1)
+    mtext(paste("Gillnet (",round(sum(subset(dat,METHOD=='GN')$Total)/1000,1)," tonnes)",sep=""),3,cex=1)
+    fn.br.plt(dd=dat%>%filter(METHOD=='LL'),TOP=20,yMx=1,CX.nm=1)
+    mtext(paste("Longline (",round(sum(subset(dat,METHOD=='LL')$Total)/1000,1)," tonnes)",sep=""),3,cex=1)
+    mtext("Proportion of total catch",1,outer=T,line=0,cex=1.25) 
+    dev.off()
+    
+    #By zone comparison GN vs LL
+    dat=ktch%>%group_by(METHOD,zone,SPECIES,SNAME)%>%
+      summarise(Total = sum(LIVEWT.c))
+    CX.NM=.7
+    Top=15
+    fn.fig(paste(hndl,"/Parks Australia/Catch_composition_GN_LL_by zone",what,sep=""),2400,1600)
+    par(mfcol=c(3,2),mar=c(2,7,.1,.1),oma=c(1,.1,1.1,.3),mgp=c(1.5,.5,0))
+    #GN
+    fn.br.plt(dd=dat%>%filter(METHOD=='GN' & zone=="West"),TOP=Top,yMx=1,CX.nm=CX.NM)
+    mtext("Gillnet",3,cex=1)
+    legend('topright',paste("West (",round(sum(subset(dat,METHOD=='GN'& zone=="West")$Total)/1000,1),
+                            " tonnes)",sep=""),bty='n')
+    fn.br.plt(dd=dat%>%filter(METHOD=='GN' & zone=="Zone1"),TOP=Top,yMx=1,CX.nm=CX.NM)
+    legend('topright',paste("Zone1 (",round(sum(subset(dat,METHOD=='GN'& zone=="Zone1")$Total)/1000,1),
+                            " tonnes)",sep=""),bty='n')
+    fn.br.plt(dd=dat%>%filter(METHOD=='GN' & zone=="Zone2"),TOP=Top,yMx=1,CX.nm=CX.NM)
+    legend('topright',paste("Zone2 (",round(sum(subset(dat,METHOD=='GN'& zone=="Zone2")$Total)/1000,1),
+                            " tonnes)",sep=""),bty='n')
+    
+    #LL
+    fn.br.plt(dd=dat%>%filter(METHOD=='LL' & zone=="West"),TOP=Top,yMx=1,CX.nm=CX.NM)
+    mtext("Longline",3,cex=1)
+    legend('topright',paste("West (",round(sum(subset(dat,METHOD=='LL'& zone=="West")$Total)/1000,1),
+                            " tonnes)",sep=""),bty='n')
+    fn.br.plt(dd=dat%>%filter(METHOD=='LL' & zone=="Zone1"),TOP=Top,yMx=1,CX.nm=CX.NM)
+    legend('topright',paste("Zone1 (",round(sum(subset(dat,METHOD=='LL'& zone=="Zone1")$Total)/1000,1),
+                            " tonnes)",sep=""),bty='n')
+    fn.br.plt(dd=dat%>%filter(METHOD=='LL' & zone=="Zone2"),TOP=Top,yMx=1,CX.nm=CX.NM)
+    legend('topright',paste("Zone2 (",round(sum(subset(dat,METHOD=='LL'& zone=="Zone2")$Total)/1000,1),
+                            " tonnes)",sep=""),bty='n')
+    mtext("Proportion of total catch",1,outer=T,line=0,cex=1.25) 
+    dev.off()
+    
+    #By similar block-month comparison GN vs LL
+    ktch=ktch%>%mutate(BLK={if("block10" %in% names(.)) block10 else BLOCKX})
+    
+    dat=ktch%>%group_by(METHOD,BLK,MONTH,FINYEAR,SPECIES,SNAME)%>%
+      summarise(Total = sum(LIVEWT.c))%>%mutate(dummy=paste(BLK,MONTH,FINYEAR))
+    LL.recrds=dat%>%filter(METHOD=="LL")
+    GN.recrds=dat%>%filter(METHOD=="GN")
+    same.recs=intersect(LL.recrds$dummy, GN.recrds$dummy)
+    dat=dat%>%filter(dummy%in%same.recs)
+    TAB=as.data.frame.matrix(with(dat,table(dummy,METHOD)))
+    same.recs=TAB%>%mutate(dummy=rownames(TAB))%>%filter(GN>=Min.overlap & LL>=Min.overlap)%>%.$dummy
+    dat=dat%>%filter(dummy%in%same.recs)
+    
+    unIk=sort(unique(dat$dummy))
+    
+    Top=10
+    CX.NM=.7*4/length(unIk)
+    fn.fig(paste(hndl,"/Parks Australia/Catch_composition_GN_LL_by blk_yr_mn",what,sep=""),2400,1600)
+    par(mfcol=c(length(unIk),2),mar=c(2,7,.1,.1),oma=c(1,.1,1.1,.3),mgp=c(1.5,.5,0))
+    #GN    
+    for(u in 1:length(unIk))
+    {
+      fn.br.plt(dd=dat%>%filter(METHOD=='GN' & dummy==unIk[u]),TOP=Top,yMx=1,CX.nm=CX.NM)
+      if(u==1)mtext("Gillnet",3,cex=1)
+      legend('topright',paste(unIk[u]," (",round(sum(subset(dat,METHOD=='GN'& dummy==unIk[u])$Total)/1000,1),
+                              " tonnes)",sep=""),bty='n',cex=.8)
+    }
+    #LL
+    for(u in 1:length(unIk))
+    {
+      fn.br.plt(dd=dat%>%filter(METHOD=='LL' & dummy==unIk[u]),TOP=Top,yMx=1,CX.nm=CX.NM)
+      if(u==1)mtext("Longline",3,cex=1)
+      legend('topright',paste(unIk[u]," (",round(sum(subset(dat,METHOD=='LL'& dummy==unIk[u])$Total)/1000,1),
+                              " tonnes)",sep=""),bty='n',cex=.8)
+    }
+    mtext("Proportion of total catch",1,outer=T,line=0,cex=1.25) 
+    dev.off()
+    
+  }
+  
+  fn.ktch.comp(ktch=Data.daily%>%filter(METHOD%in%c('GN',"LL"))%>%select(Same.return.SNo,
+                                                                         FINYEAR,METHOD,zone,block10,BLOCKX,SPECIES,SNAME,LIVEWT.c,MONTH),
+               what="_Daily",Min.overlap=10)
+  fn.ktch.comp(ktch=Data.monthly%>%filter(METHOD%in%c('GN',"LL"))%>%select(Same.return,
+                                                                           FINYEAR,METHOD,zone,BLOCKX,SPECIES,SNAME,LIVEWT.c,MONTH),
+               what="_Monthly",Min.overlap=18)
   
   
-  
+  #Tim Nicholas request
   South.WA.lat=c(-36,-25); South.WA.long=c(112,130)
   PLATE=c(.01,.9,.075,.9)
-  Yrs=c("2017-18","2018-19")
+  Yrs=c("2017-18","2018-19")  
   aa= Data.daily.original%>%filter(FINYEAR%in%Yrs) %>%
     mutate(LatDeg=as.numeric(substr(block10,1,2)),
            LatMin=ifelse(is.na(LatMin),10*as.numeric(substr(block10,3,3)),LatMin),
@@ -10464,20 +10665,20 @@ if(do.Parks.Australia=="YES")  #ACA
     spread(METHOD, Trips)%>%
     replace(is.na(.), "")%>%
     data.frame
-
+  
   
   bb=aa%>%filter(METHOD=="LL")%>%
-          distinct(Same.return.SNo,.keep_all =T) %>%
-          select(VESSEL,BoatName,MastersName,port,block10,FINYEAR,MONTH,bioregion,Lat,Long,depthMax,
-                 NilCatch,species,nfish,livewt,
-                 HookSize,HookType,HOOKS,HOURS,nlines,SHOTS)
+    distinct(Same.return.SNo,.keep_all =T) %>%
+    select(VESSEL,BoatName,MastersName,port,block10,FINYEAR,MONTH,bioregion,Lat,Long,depthMax,
+           NilCatch,species,nfish,livewt,
+           HookSize,HookType,HOOKS,HOURS,nlines,SHOTS)
   
   TAB4=bb%>%group_by(VESSEL,BoatName,MastersName,port)%>%
-            summarise(mean.hook.n=mean(HOOKS,na.rm=T),
-                      mean.hook.size=mean(HookSize,na.rm=T),
-                      mean.hook.hours=mean(HOURS,na.rm=T))%>%
-              replace(is.na(.), "")%>%
-            data.frame
+    summarise(mean.hook.n=mean(HOOKS,na.rm=T),
+              mean.hook.size=mean(HookSize,na.rm=T),
+              mean.hook.hours=mean(HOURS,na.rm=T))%>%
+    replace(is.na(.), "")%>%
+    data.frame
   library(gridExtra)
   library(grid)
   mytheme <- gridExtra::ttheme_default(
