@@ -6,6 +6,10 @@ setwd('C:/Matias/Analyses/Catch and effort/Data_outs')
 #vip: use WHOLE catch and effort data set (south and north) to show entire distribution across WA (though may have issues
 #of spatial resolution if north doesn't have block10....)
 
+#SPIN: "Varying degrees of spatial overlap between shark abundance hotspots 
+#      and fishing closures in south-western Australia (use package VAST)"
+# need to consider overlap (same approach as recent Nature movement paper and longline fishing)
+
 #-Daily catch and effort for all methods, north of 26 S
 Data.daily.NSF=read.csv('Data.daily.NSF.csv')
 Effort.daily.NSF=read.csv('Effort.daily.NSF.csv')
