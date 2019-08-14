@@ -340,6 +340,9 @@ do.Exploratory="NO"
 #Control if producing cpue paper figure
 plot.cpue.paper.figures="NO"
 
+#Use area weight in annual index
+use.blok.area='NO'
+
 
 ##############--- 2. PARAMETERS SECTION ---###################
 
@@ -2745,13 +2748,14 @@ SP.list$All.Non.indicators=Shark.species[-match(Indicator.sp,Shark.species)]
 nnn=1:length(SP.list)
 
 
-#get core area (90% of catch)
+#get Effective area (90% of catch)
 core.per=90
 Core=SP.list
 pdf('C:/Matias/Analyses/Catch and effort/species core areas/cores.pdf')
 for(s in nnn)
 {
-  d=subset(Data.monthly.GN,SPECIES%in%SP.list[[s]])
+  d=Data.monthly.GN%>%filter(SPECIES%in%SP.list[[s]])%>%
+                      mutate(LAT=round(LAT),LONG=round(LONG))
   Nm=unique(d$SPECIES)
   Nm=ifelse(length(Nm)>3,'others',Nm)
   d=aggregate(LIVEWT.c~LAT+LONG,d,sum)
@@ -2759,7 +2763,7 @@ for(s in nnn)
   d$CumSum=cumsum(d$LIVEWT.c)
   d$CumSum=100*d$CumSum/max(d$CumSum)
   plot(d$LONG,d$LAT,cex=fn.scale(d$LIVEWT.c,4),pch=19,col="steelblue",
-       ylab="Lat",xlab="Long",main=paste(Nm,names(SP.list)[s]))
+       ylab="Lat",xlab="Long",xlim=c(112,129),ylim=c(-36,-26),main=paste(Nm,names(SP.list)[s]))
   d=subset(d,CumSum<=core.per)
   Rnglat=range(d$LAT)
   Rnglon=range(d$LONG)
@@ -2969,48 +2973,52 @@ Blks.by.species=do.call(c,Tol.blks)
 write.csv(Blks.by.species,paste(hndl,"All.Blks.by.species.csv",sep=""),row.names=T)
 
 
-#4.2.2 Block weights     
-AREA.W=vector('list',length=N.species)
-names(AREA.W)=SPECIES.vec
-AREA.W_b10=AREA.W
-
-
+#4.2.2 Block weights   
+if(use.blok.area=="YES")
+{
+  AREA.W=vector('list',length=N.species)
+  names(AREA.W)=SPECIES.vec
+  AREA.W_b10=AREA.W
+  
+  
   #GIS approach (complied by Dale Smith)
-    #BLOCKX
-names(Whis.fishArea)=names(Gum.fishArea)=names(Dusky.fishArea)=
-  names(Sand.fishArea)=c("BLOCKX","Fish.Area","MaxDepth")
-Whis.fishArea$Fish.Area=with(Whis.fishArea,ifelse(Fish.Area<0.01,0.01,Fish.Area))
-Gum.fishArea$Fish.Area=with(Gum.fishArea,ifelse(Fish.Area<0.01,0.01,Fish.Area))
-Dusky.fishArea$Fish.Area=with(Dusky.fishArea,ifelse(Fish.Area<0.01,0.01,Fish.Area))
-Sand.fishArea$Fish.Area=with(Sand.fishArea,ifelse(Fish.Area<0.01,0.01,Fish.Area))
-
-AREA.W$"Whiskery shark"=Whis.fishArea
-AREA.W$"Gummy shark"=Gum.fishArea  
-AREA.W$"Dusky shark"=Dusky.fishArea
-AREA.W$"Sandbar shark"=Sand.fishArea
-
-if(is.na(match(3521,Whis.fishArea$BLOCKX)))AREA.W$"Whiskery shark"=rbind(AREA.W$"Whiskery shark",data.frame(BLOCKX=3521,Fish.Area=0.01,MaxDepth=Whis.fishArea$MaxDepth[1]))
-if(is.na(match(3319,Dusky.fishArea$BLOCKX)))AREA.W$"Dusky shark"=rbind(AREA.W$"Dusky shark",data.frame(BLOCKX=3319,Fish.Area=0.01,MaxDepth=Dusky.fishArea$MaxDepth[1]))
-
-
-    #block10
-names(Whis.fishArea_b10)=names(Gum.fishArea_b10)=names(Dusky.fishArea_b10)=
-  names(Sand.fishArea_b10)=c("BLOCKX","block10","Fish.Area","MaxDepth")
-Whis.fishArea_b10$Fish.Area=with(Whis.fishArea_b10,ifelse(Fish.Area<0.01,0.01,Fish.Area))
-Gum.fishArea_b10$Fish.Area=with(Gum.fishArea_b10,ifelse(Fish.Area<0.01,0.01,Fish.Area))
-Dusky.fishArea_b10$Fish.Area=with(Dusky.fishArea_b10,ifelse(Fish.Area<0.01,0.01,Fish.Area))
-Sand.fishArea_b10$Fish.Area=with(Sand.fishArea_b10,ifelse(Fish.Area<0.01,0.01,Fish.Area))
-
-AREA.W_b10$"Whiskery shark"=Whis.fishArea_b10
-AREA.W_b10$"Gummy shark"=Gum.fishArea_b10  
-AREA.W_b10$"Dusky shark"=Dusky.fishArea_b10
-AREA.W_b10$"Sandbar shark"=Sand.fishArea_b10
-
+  #BLOCKX
+  names(Whis.fishArea)=names(Gum.fishArea)=names(Dusky.fishArea)=
+    names(Sand.fishArea)=c("BLOCKX","Fish.Area","MaxDepth")
+  Whis.fishArea$Fish.Area=with(Whis.fishArea,ifelse(Fish.Area<0.01,0.01,Fish.Area))
+  Gum.fishArea$Fish.Area=with(Gum.fishArea,ifelse(Fish.Area<0.01,0.01,Fish.Area))
+  Dusky.fishArea$Fish.Area=with(Dusky.fishArea,ifelse(Fish.Area<0.01,0.01,Fish.Area))
+  Sand.fishArea$Fish.Area=with(Sand.fishArea,ifelse(Fish.Area<0.01,0.01,Fish.Area))
+  
+  AREA.W$"Whiskery shark"=Whis.fishArea
+  AREA.W$"Gummy shark"=Gum.fishArea  
+  AREA.W$"Dusky shark"=Dusky.fishArea
+  AREA.W$"Sandbar shark"=Sand.fishArea
+  
+  if(is.na(match(3521,Whis.fishArea$BLOCKX)))AREA.W$"Whiskery shark"=rbind(AREA.W$"Whiskery shark",data.frame(BLOCKX=3521,Fish.Area=0.01,MaxDepth=Whis.fishArea$MaxDepth[1]))
+  if(is.na(match(3319,Dusky.fishArea$BLOCKX)))AREA.W$"Dusky shark"=rbind(AREA.W$"Dusky shark",data.frame(BLOCKX=3319,Fish.Area=0.01,MaxDepth=Dusky.fishArea$MaxDepth[1]))
+  
+  
+  #block10
+  names(Whis.fishArea_b10)=names(Gum.fishArea_b10)=names(Dusky.fishArea_b10)=
+    names(Sand.fishArea_b10)=c("BLOCKX","block10","Fish.Area","MaxDepth")
+  Whis.fishArea_b10$Fish.Area=with(Whis.fishArea_b10,ifelse(Fish.Area<0.01,0.01,Fish.Area))
+  Gum.fishArea_b10$Fish.Area=with(Gum.fishArea_b10,ifelse(Fish.Area<0.01,0.01,Fish.Area))
+  Dusky.fishArea_b10$Fish.Area=with(Dusky.fishArea_b10,ifelse(Fish.Area<0.01,0.01,Fish.Area))
+  Sand.fishArea_b10$Fish.Area=with(Sand.fishArea_b10,ifelse(Fish.Area<0.01,0.01,Fish.Area))
+  
+  AREA.W_b10$"Whiskery shark"=Whis.fishArea_b10
+  AREA.W_b10$"Gummy shark"=Gum.fishArea_b10  
+  AREA.W_b10$"Dusky shark"=Dusky.fishArea_b10
+  AREA.W_b10$"Sandbar shark"=Sand.fishArea_b10
+  
   #equal weights
-AREA.W.equal=AREA.W
-AREA.W_b10.equal=AREA.W_b10
-for(q in 1:length(AREA.W.equal)) AREA.W.equal[[q]]$Fish.Area=1
-for(q in 1:length(AREA.W_b10.equal)) AREA.W_b10.equal[[q]]$Fish.Area=1
+  AREA.W.equal=AREA.W
+  AREA.W_b10.equal=AREA.W_b10
+  for(q in 1:length(AREA.W.equal)) AREA.W.equal[[q]]$Fish.Area=1
+  for(q in 1:length(AREA.W_b10.equal)) AREA.W_b10.equal[[q]]$Fish.Area=1
+  
+}
 
 
 #4.5 Create useful vars
@@ -3128,6 +3136,31 @@ if(Remove.blk.by=="blk_only")
       }
     }
   }
+  
+  fn.comp.used_not.used=function(blk.used,blk.not.used,vsl.used,vsl.not.used,NMS.arg)
+  {
+    barplot(prop.table(matrix(c(length(blk.used),length(blk.not.used),
+                                length(vsl.used),length(vsl.not.used)),ncol=2,nrow=2),2),
+            col=c("grey80","grey40"),names.arg=NMS.arg)
+  }
+  fn.fig("Outputs/Kept_blocks_vessels/Used_not.used_blocks_vessels",1400,2400)
+  par(mfrow=c(length(nnn),2),mar=c(1,1,.1,.3),oma=c(2,2,1,.1),las=1,mgp=c(1,.5,0),xpd=T)
+  for(i in nnn)
+  {
+    NMS.arG=c("","")
+    if(i==nnn[length(nnn)]) NMS.arG=c("Blocks","Vessels")
+    if(is.null(BLKS.used[[i]])) plot.new()
+    if(!is.null(BLKS.used[[i]])) fn.comp.used_not.used(blk.used=BLKS.used[[i]],blk.not.used=BLKS.not.used[[i]],
+                                                       vsl.used=VES.used[[i]],vsl.not.used=VES.not.used[[i]],
+                                                       NMS.arg=NMS.arG)
+    legend('bottomleft',names(Species.list)[i],bty='n',cex=.9)
+    if(is.null(BLKS.used.daily[[i]])) plot.new()
+    if(!is.null(BLKS.used.daily[[i]])) fn.comp.used_not.used(blk.used=BLKS.used.daily[[i]],blk.not.used=BLKS.not.used.daily[[i]],
+                                                             vsl.used=VES.used.daily[[i]],vsl.not.used=VES.not.used.daily[[i]],
+                                                             NMS.arg=NMS.arG)
+    if(i==1)legend('center',c('used','not used'),bty='n',fill=c('grey80','grey40'),horiz = T,cex=1.25)
+  }
+  dev.off()
 }
 
 # Illustrate folly effect: mean Vs sum
@@ -3396,8 +3429,10 @@ if(do_cluster=="YES")
   names(Store.cluster)=names(SP.list)
   for(i in 1:length(Tar.sp))
   {
-    Store.cluster[[Tar.sp[i]]]=fn.cluster(data=DATA.list.LIVEWT.c.daily,TarSp=Tar.sp[i],target=Tar.clus.vars[i],
-                                          varS=Clus.vars,scaling=scalem,check.clustrbl="NO",n.clus=n.clus[i])
+    Store.cluster[[Tar.sp[i]]]=fn.cluster(data=DATA.list.LIVEWT.c.daily,TarSp=Tar.sp[i],
+                                          target=Tar.clus.vars[i],
+                                          varS=Clus.vars,scaling=scalem,
+                                          check.clustrbl="NO",n.clus=n.clus[i])
   }
   
   #add cluster to original data for use in standardisations
@@ -3431,7 +3466,110 @@ if(do_cluster=="YES")
     dev.off()
   }
 }
-
+do_pca="YES"
+if(do_pca=="YES")
+{
+  #Winker et al 2014
+  PercentExpl=90
+  for(i in 1:length(Tar.sp))
+  {
+    target=paste("Proportion.nfish.",names(SP.list)[Tar.sp[i]],sep="")
+    
+    a=Species.list.daily[[Tar.sp[i]]]%>%
+      filter(Same.return.SNo%in%unique(DATA.list.LIVEWT.c.daily[[Tar.sp[i]]]$Same.return.SNo))
+    TOP.ktch=a%>%group_by(SPECIES)%>%
+      summarise(Catch=sum(LIVEWT.c))%>%
+      arrange(-Catch)%>%
+      mutate(Cum.ktch=cumsum(Catch),
+             Quantiles=Cum.ktch/sum(Catch))
+    top.sp=TOP.ktch$SPECIES[1:which.min(abs(TOP.ktch$Quantiles-95/100))]
+    a=a%>%mutate(SPECIES=ifelse(!SPECIES%in%top.sp,999999,SPECIES))%>%
+      #  a=a%>%filter(SPECIES%in%top.sp)%>%
+      group_by(Same.return.SNo,SPECIES)%>%
+      summarise(LIVEWT.c=sum(LIVEWT.c,na.rm=T),
+                Km.Gillnet.Hours.c=max(Km.Gillnet.Hours.c))%>%
+      mutate(cpue=LIVEWT.c/Km.Gillnet.Hours.c)%>%
+      select(SPECIES,cpue,Same.return.SNo)%>% 
+      spread(SPECIES,cpue)%>%
+      column_to_rownames(var = "Same.return.SNo")
+    
+    #proportion
+    a[is.na(a)]=0
+    a=a/rowSums(a,na.rm = T)
+    
+    #square root
+    a=a*a              
+    
+    #check correlation
+    if(Model.run=="First")
+    {
+      M<-cor(a)
+      fn.fig(paste(HndL.Species_targeting,"PCA/correlation_",target,sep=""),2400,2400)
+      corrplot(M, method="circle")
+      dev.off()
+    }
+    
+    #run pca
+    res.pca <- prcomp(a,center = F, scale. = F)
+    
+    #Visualize all eigenvalues, from most to least contribution
+    if(Model.run=="First")
+    {
+      fn.fig(paste(HndL.Species_targeting,"PCA/eigenvalues_",target,sep=""),2400,2400)
+      fviz_eig(res.pca)
+      dev.off()
+    }
+    
+    
+    #Graph of each species proportion.
+    # Positive correlated variables point to the same side of the plot.
+    # Negative correlated variables point to opposite sides of the grap
+    if(Model.run=="First")
+    {
+      fn.fig(paste(HndL.Species_targeting,"PCA/PCA_species_",target,sep=""),2400,2400)
+      fviz_pca_var(res.pca,
+                   col.var = "contrib", # Color by contributions to the PC
+                   gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+                   repel = TRUE )    # Avoid text overlapping
+      dev.off()
+    }
+    
+    
+    #Acces the results
+    Eig.val=get_eigenvalue(res.pca)
+    #res.var <- get_pca_var(res.pca)
+    #res.var$coord          # Coordinates
+    #res.var$contrib        # Contributions to the PCs
+    #res.var$cos2           # Quality of representation 
+    PCA.variance=Eig.val
+    keep.axis=which(PCA.variance$cumulative.variance.percent<PercentExpl)
+    if(length(keep.axis)==1)keep.axis=1:2
+    if(length(keep.axis)>3)keep.axis=keep.axis[1:3]
+    PCA.scores=get_pca_ind(res.pca)$coord          # PCA Coordinates
+    PCA.scores=data.frame(Same.return.SNo=row.names(PCA.scores),PCA.scores[,keep.axis])     #keep only relevant axes     
+    row.names(PCA.scores)=NULL                                          
+    PCA.axis=as.data.frame(res.pca$rotation)       # PCA axis loading. How species contribute to each axis
+    
+    #Plot variance explained
+    if(Model.run=="First")
+    {
+      fn.fig(paste(HndL.Species_targeting,"PCA/Variance_",target,sep=""),2400,2400)
+      plot(PCA.variance$cumulative.variance.percent,ylab="Cumulative variance explained",xlab="Axis")
+      dev.off()
+    }
+    
+    #Add pca axis to data
+    DATA.list.LIVEWT.c.daily[[Tar.sp[i]]]=left_join(DATA.list.LIVEWT.c.daily[[Tar.sp[i]]],PCA.scores,by=c("Same.return.SNo"))
+    
+  }
+  
+  #check cpue by cluster group
+  fn.fig(paste(HndL.Species_targeting,"PCA/PCA.boxplot",sep=""),2400,2400)
+  par(mfcol=c(2,2),mar=c(1,3,3,1),oma=c(2,1,.1,.5),las=1,mgp=c(2,.6,0))
+  for(i in Tar.sp) with(DATA.list.LIVEWT.c.daily[[i]],plot((Catch.Target/Km.Gillnet.Hours.c)~Dim.1, 
+                                                           main=names(DATA.list.LIVEWT.c.daily)[i],ylab="cpue"))
+  dev.off()
+}
 
 #4.15 Table of sensitivity scenarios       
 Tab.Sensi=data.frame(Scenario=c("Base case","2 years","No efficiency"),
