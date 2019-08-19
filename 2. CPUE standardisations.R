@@ -240,89 +240,19 @@ Def.mod.Str="NO"
 Stand.approach="Delta"
 #Stand.approach="Qualif.level"
 
-#Control if continue exploring fit
-improve="NO"
-
-#Control if checking correlation between catch covariates
-Chck.Corr="NO"
-
 #Control if doing cluster analysis of daily data
 do_cluster="NO"
 
 #Control if doing PCA analysis of daily data
-do.PCA="NO"
-
-#Control if comparing lognormal to gamma
-Compare.best.lognormal.gamma="NO"
-
-#control if checking interactions
-check.interactions="NO"
-
-#control if combining vessel categories
-Combine.ves="NO"
-
-#Control if comparing cpue and catch as reponse vars, effort as offset, vessel effect, etc
-COMPARE.RAW.etc="NO"
-if(Model.run=="First") COMPARE.RAW.etc="YES"
-
+do_pca="YES"
 
 #Control if doing sensitivity tests
 if(Model.run=="First") do.sensitivity="YES"
 if(Model.run=="Standard") do.sensitivity="NO"
 
-#Control if aggregating daily
-do.aggregated.daily="NO"
-
-
-#Control if comparing best model from catch vs from cpue as response vars
-Compare.best.catch.cpue="NO"
-
-#Control if doing k-fold cross validation
-Do.K_n.fold.test="NO"
-#Do.K_n.fold.test="YES"
-
-#Control if fitting to catch or cpue
-Fit.to.what="catch"
-#Fit.to.what="cpue"
-
 #Control if comparing glm and gam spatial predictions
 compare.glm.gam="NO"
 
-#Control if extracting glm deviance table
-if(Model.run=="Standard") Extract.Deviance.table="NO" 
-if(Model.run=="First") Extract.Deviance.table="YES" 
-
-#Control if showing binomial fit
-do.binomial.fit="NO" 
-
-
-
-#Control if adding interactions to model
-With.interact="YES"
-#control criteria for selecting indicative vessels
-#Criteria.indi='all'  #criteria for selecting sensitivity of indicative vessel
-Criteria.indi='subset'  #use different criteria for indicative vessels
-
-#control criteria for indicative vessels
-second.criteria="top.percent"
-
-WHICH.VESSEL="top.vess.across.yr"   #select top vessels across years
-#WHICH.VESSEL="top.vess.by.yr"      #select top vessels per year
-
-#Control if sorting factor levels 
-#note: this specifies the glm reference level of block and vessel
-#Sort.levels="NO"
-#Sort.levels="Habitat.area"
-#Sort.levels="Most.common"
-Sort.levels="Highest.catch" 
-
-#Control new data factors
-Sel.lev='most.common'
-
-
-
-#Control if doing AMM actions
-do.actions.AMM.2017="NO"
 
 #1.2.3 Reporting controls
 
@@ -333,7 +263,6 @@ if(do.sensitivity=="YES") do.influence='YES'
 #control color of plots
 #do.colors="YES"
 do.colors="NO"  #grey scale
-
 if(do.colors=="YES") what.color="cols"
 if(do.colors=="NO") what.color="black"
 
@@ -1976,6 +1905,9 @@ Anova.and.Dev.exp=function(MOD,SP,type,gam.extra)   #function for extracting ter
     for(l in 2:length(gam.extra)) gamo[l]=gam.extra[l]-gam.extra[l-1]
     gamo=100*gamo
     gam.dev.exp=data.frame(Percent.dev.exp=gamo,term=names(gam.extra))
+    gam.dev.exp$term=str_remove(gam.dev.exp$term, ", k = 6")
+    gam.dev.exp$term=str_remove(gam.dev.exp$term, " ")
+    
     ANOVA=ANOVA%>%left_join(gam.dev.exp,by="term")
     
     ANOVA = ANOVA %>% select(term, df, 'p-value', Percent.dev.exp)
@@ -2111,7 +2043,7 @@ Plot.cpue.delta=function(cpuedata,cpuedata.daily,ADD.LGND,whereLGND,COL,CxS,Yvar
   
   plot(Yrs,Yrs,ylim=c(0,ymax),xlim=c(firstyear,max(Yrs)),ylab="",xlab="",col="transparent",cex.axis=1.25)
   if(COL=='color')CL=c("black","forestgreen", "red","bisque3","blue2","dodgerblue")
-  if(COL=='grey') CL=gray.colors(length(cpuedata),start=0.2,end=0.65)
+  if(COL=='grey') CL=gray.colors(length(cpuedata),start=0.2,end=0.5)
   for(l in 1:length(cpuedata))
   {
     aaa=cpuedata[[l]]%>%mutate(finyear=as.numeric(substr(finyear,1,4)))
@@ -2137,7 +2069,7 @@ Plot.cpue.delta=function(cpuedata,cpuedata.daily,ADD.LGND,whereLGND,COL,CxS,Yvar
     with(aaa.daily,
          {
            if(l==1)polygon(x=c(finyear[1]-.5,finyear[length(finyear)]+.5,finyear[length(finyear)]+.5,finyear[1]-.5),
-                           y=c(0,0,ymax,ymax),col='grey90',border="transparent")
+                           y=c(0,0,ymax,ymax),col='grey92',border="transparent")
            arrows(x0=finyear+tc[l], y0=lower.CL, 
                   x1=finyear+tc[l], y1=upper.CL, 
                   code=3, angle=90, length=0.05, col=CL[l])
@@ -3425,7 +3357,6 @@ if(do_cluster=="YES")
     dev.off()
   }
 }
-do_pca="YES"
 if(do_pca=="YES")
 {
   #Winker et al 2014
@@ -3537,8 +3468,8 @@ if(do_pca=="YES")
 Tab.Sensi=data.frame(Scenario=c("Base case","Nominal","All vessels & blocks","No efficiency"),
                      Standardisation=c("Yes","No",rep("Yes",2)),
                      Records_used=c("Reliable only","All",rep("Reliable only",2)),
-                     Vessels_used=c("5 years","All","All","5 years"),
-                     Blocks_used=c("5 years","All","All","5 years"),
+                     Vessels_used=c("3 years","All","All","3 years"),
+                     Blocks_used=c("3 years","All","All","3 years"),
                      Efficiency_increase=c(rep("Yes",3),"No"))
 
 setwd(paste(getwd(),"/Outputs/Paper",sep=""))
@@ -4095,20 +4026,22 @@ if(Def.mod.Str=="NO")
   Best.Model.daily.gam_delta$`Whiskery Shark`=list(
       bi=formula(catch.target~finyear+vessel+s(long10.corner,lat10.corner)+
                    month+s(mean.depth,k=6)+offset(LN.effort)),
-      pos=formula(LNcpue~finyear+vessel+s(long10.corner,lat10.corner)+month+mesh+s(mean.depth,k=6)+
+      pos=formula(LNcpue~finyear+vessel+s(long10.corner,lat10.corner)+month+
                  s(dim.1,k=6)+s(dim.2,k=6)+s(dim.3,k=6)))
   Best.Model.daily.gam_delta$`Gummy Shark`=list(
       bi=formula(catch.target~finyear+vessel+s(long10.corner,lat10.corner)+
                    month+s(mean.depth,k=6)+offset(LN.effort)),
-      pos=formula(LNcpue~finyear+vessel+s(long10.corner,lat10.corner)+month+mesh+s(mean.depth,k=6)+
-                  s(dim.1,k=6)+s(dim.2,k=6)))
+      pos=formula(LNcpue~finyear+vessel+s(long10.corner,lat10.corner)+month+mesh+s(dim.1,k=6)))
   Best.Model.daily.gam_delta$`Dusky Whaler Bronze Whaler`=list(
       bi=formula(catch.target~finyear+vessel+s(long10.corner,lat10.corner)+
-                   month+s(mean.depth,k=6)+offset(LN.effort)),
-      pos=formula(LNcpue~finyear+vessel+s(long10.corner,lat10.corner)+month+s(mean.depth,k=6)+
-                  s(dim.1,k=6)+s(dim.2,k=6)+s(dim.3,k=6)))
-  
-  Best.Model.daily.gam_delta$`Sandbar Shark`=Best.Model.daily.gam_delta$`Dusky Whaler Bronze Whaler`
+                   month+offset(LN.effort)),
+      pos=formula(LNcpue~finyear+vessel+s(long10.corner,lat10.corner)+month+
+                  s(dim.1,k=6)+s(dim.2,k=6)))
+  Best.Model.daily.gam_delta$`Sandbar Shark`=list(
+    bi=formula(catch.target~finyear+vessel+s(long10.corner,lat10.corner)+
+                 month+s(mean.depth,k=6)+offset(LN.effort)),
+    pos=formula(LNcpue~finyear+vessel+s(long10.corner,lat10.corner)+month+s(mean.depth,k=6)+
+                  s(dim.1,k=6)+s(dim.2,k=6)))
   
 }
 
@@ -4474,10 +4407,12 @@ if(Model.run=="First")      #takes 7 mins
                           mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
         
         #Binomial
+        #note: had to remove spline bit from bin form because with all records, there's not enough info for gam
+        Bi.form=formula(catch.target ~ finyear + vessel + month + offset(LN.effort))
         DAT.bi=DAT%>%mutate(catch.target=ifelse(catch.target>0,1,0))
         Bi=fn.stand.delta(d=DAT.bi,Response="catch.target",PREDS=Predictors_daily,
                           efrt="km.gillnet.hours.c",Formula=NULL,
-                          Formula.gam=Best.Model.daily.gam_delta[[s]]$bi,Family="binomial")
+                          Formula.gam=Bi.form,Family="binomial")
         #Positive catch
         DAT=DAT%>%filter(catch.target>0)
         Pos=fn.stand.delta(d=DAT,Response="catch.target",PREDS=Predictors_daily,
@@ -4485,11 +4420,11 @@ if(Model.run=="First")      #takes 7 mins
                            Formula.gam=Best.Model.daily.gam_delta[[s]]$pos,Family="gaussian")
         return(list(Bi=Bi,Pos=Pos))
         rm(DAT)
-      }})
+      }}) 
     names(sens_monthly)=names(sens_daily)=names(SP.list)[Tar.sp]
     
-    Store.sen=list(Stand.out,sens_monthly)
-    Store.sen.daily=list(Stand.out.daily,sens_daily)
+    Store.sen=list(Stand.out[Tar.sp],sens_monthly)
+    Store.sen.daily=list(Stand.out.daily[Tar.sp],sens_daily)
     names(Store.sen)=names(Store.sen.daily)=sens$Scenario[-match("No efficiency",sens$Scenario)]
     
     #2. Predict years considering log bias corr if required
@@ -4623,9 +4558,9 @@ Stand.out.daily=c(Stand.out.daily,Stand.out.daily.other)
 Stand.out.daily=Stand.out.daily[names(SP.list)]
 
 rm(Stand.out.other,Stand.out.daily.other)
-#ACA
+
 #   4.22.7 Export deviance explained
-if(Model.run=="First")  #takes 6 mins
+if(Model.run=="First")  #takes 8 mins
 {
   #calculate gam deviance explained by each term
   gam.list=Stand.out.daily
@@ -4638,12 +4573,12 @@ if(Model.run=="First")  #takes 6 mins
         if(s %in% Tar.sp)
         {
           ALLvars.gam.bi=c(1,labels(terms(Best.Model.daily.gam_delta[[s]]$bi)))
-          ALLvars.gam.bi=ALLvars.gam.bi[-length(ALLvars.gam.bi)]
           ALLvars.gam.pos=c(1,labels(terms(Best.Model.daily.gam_delta[[s]]$pos)))
           
           dev.exp.bi=rep(NA,length(ALLvars.gam.bi))
           names(dev.exp.bi)=ALLvars.gam.bi
-          dev.exp.pos=dev.exp.bi
+          dev.exp.pos=rep(NA,length(ALLvars.gam.pos))
+          names(dev.exp.pos)=ALLvars.gam.pos
           
           for(g in 1:length(ALLvars.gam.bi))
           {
@@ -4663,7 +4598,7 @@ if(Model.run=="First")  #takes 6 mins
             res.gam <-gam(Formula.gam,data=gam.list[[s]]$Pos$DATA,method="REML")
             dev.exp.pos[g]=summary(res.gam)$dev.expl
           }
-          dev.exp.bi=dev.exp.bi[-1]  
+          dev.exp.pos=dev.exp.pos[-1]  
           return(list(dev.exp.bi=dev.exp.bi,dev.exp.pos=dev.exp.pos))
         }
         if(!s %in% Tar.sp)
@@ -4698,81 +4633,103 @@ if(Model.run=="First")  #takes 6 mins
   names(dummy1)=names(gam.list)
   gam.list=dummy1
   
-  Dev.exp=vector('list',length(SP.list)) 
+  Dev.exp=vector('list',length(SP.list))  
   names(Dev.exp)=names(SP.list)
-  Dev.exp.daily=Dev.exp
-  system.time({for(s in Tar.sp)
+  Dev.exp.daily=Dev.exp.bi=Dev.exp.daily.bi=Dev.exp
+  system.time({for(s in nnn)
   {
-    if(!is.null(Stand.out[[s]]$res))Dev.exp[[s]]=Anova.and.Dev.exp(MOD=Stand.out[[s]]$res,
-                                                SP=Nms.sp[s],type="Monthly",gam.extra=NULL)
-    if(!is.null(Stand.out.daily[[s]]$res.gam))Dev.exp.daily[[s]]=Anova.and.Dev.exp(MOD=Stand.out.daily[[s]]$res.gam,
-                                                SP=Nms.sp[s],type="Daily",gam.extra=gam.list[[s]]$dev.exp)
-  }})   
-  Tab.Dev.Exp=rbind(do.call(rbind,Dev.exp),do.call(rbind,Dev.exp.daily))
+    #monthly
+
+    if(s%in%Tar.sp | (!s%in%Tar.sp & !is.null(Stand.out[[s]]$res)))
+    {
+      if(s%in%Tar.sp)
+      {
+        MOD.pos=Stand.out[[s]]$Pos$res
+        MOD.bi=Stand.out[[s]]$Bi$res
+      }else
+      {
+        MOD.pos=Stand.out[[s]]$res
+        MOD.bi=Stand.out[[s]]$res_bi
+      }
+      Dev.exp[[s]]=Anova.and.Dev.exp(MOD=MOD.pos,SP=Nms.sp[s],type="Monthly.pos",gam.extra=NULL)
+      Dev.exp.bi[[s]]=Anova.and.Dev.exp(MOD=MOD.bi,SP=Nms.sp[s],type="Monthly.bi",gam.extra=NULL)
+    }
+    
+    #daily
+    if(s%in%Tar.sp | (!s%in%Tar.sp & !is.null(Stand.out.daily[[s]]$res.gam)))
+    {
+      if(s%in%Tar.sp)
+      {
+        MOD.pos=Stand.out.daily[[s]]$Pos$res.gam
+        MOD.bi=Stand.out.daily[[s]]$Bi$res.gam
+        Gm.ext=gam.list[[s]]$dev.exp.pos
+        Gm.ext.bi=gam.list[[s]]$dev.exp.bi
+      }else
+      {
+        MOD.pos=Stand.out.daily[[s]]$res.gam
+        MOD.bi=Stand.out.daily[[s]]$res.gam_bi
+        Gm.ext=gam.list[[s]]$Pos
+        Gm.ext.bi=gam.list[[s]]$Bi
+      }
+      Dev.exp.daily[[s]]=Anova.and.Dev.exp(MOD=MOD.pos,SP=Nms.sp[s],type="Daily.pos",gam.extra=Gm.ext)
+      Dev.exp.daily.bi[[s]]=Anova.and.Dev.exp(MOD=MOD.bi,SP=Nms.sp[s],type="Daily.bi",gam.extra=Gm.ext.bi)
+      
+    }
+    
+  }})  
+  
+  Tab.Dev.Exp=rbind(do.call(rbind,Dev.exp),do.call(rbind,Dev.exp.bi),
+                    do.call(rbind,Dev.exp.daily),do.call(rbind,Dev.exp.daily.bi))
   rownames(Tab.Dev.Exp)=NULL
   fn.word.table(WD=getwd(),TBL=Tab.Dev.Exp,Doc.nm="ANOVA_table",caption=NA,paragph=NA,
                 HdR.col='black',HdR.bg='white',Hdr.fnt.sze=10,Hdr.bld='normal',body.fnt.sze=10,
                 Zebra='NO',Zebra.col='grey60',Grid.col='black',
                 Fnt.hdr= "Times New Roman",Fnt.body= "Times New Roman")
-  
-  Dev.exp.bi=Dev.exp
-  Dev.exp.daily.bi=Dev.exp.daily
-  system.time({for(s in nnn[-sort(Tar.sp)])
-  {
-    if(!is.null(Stand.out[[s]]$res))
-    {
-      Dev.exp[[s]]=Anova.and.Dev.exp(MOD=Stand.out[[s]]$res,
-                        SP=Nms.sp[s],type="Monthly.pos",gam.extra=NULL)
-      Dev.exp.bi[[s]]=Anova.and.Dev.exp(MOD=Stand.out[[s]]$res_bi,
-                                     SP=Nms.sp[s],type="Monthly.bi",gam.extra=NULL)
-    }
-
-    if(!is.null(Stand.out.daily[[s]]$res.gam))
-    {
-      Dev.exp.daily[[s]]=Anova.and.Dev.exp(MOD=Stand.out.daily[[s]]$res.gam,
-                                    SP=Nms.sp[s],type="Daily.pos",gam.extra=gam.list[[s]]$Pos)
-      Dev.exp.daily.bi[[s]]=Anova.and.Dev.exp(MOD=Stand.out.daily[[s]]$res.gam,
-                                           SP=Nms.sp[s],type="Daily.bi",gam.extra=gam.list[[s]]$Bi)
-    }
-
-  }})   
-  Tab.Dev.Exp=rbind(do.call(rbind,Dev.exp),do.call(rbind,Dev.exp.bi),
-                    do.call(rbind,Dev.exp.daily),do.call(rbind,Dev.exp.daily.bi))
-  rownames(Tab.Dev.Exp)=NULL
-  fn.word.table(WD=getwd(),TBL=Tab.Dev.Exp,Doc.nm="ANOVA_table_other.species",caption=NA,paragph=NA,
-                HdR.col='black',HdR.bg='white',Hdr.fnt.sze=10,Hdr.bld='normal',body.fnt.sze=10,
-                Zebra='NO',Zebra.col='grey60',Grid.col='black',
-                Fnt.hdr= "Times New Roman",Fnt.body= "Times New Roman")
 }
 
-#   4.22.8 Fit diagnostics
+#   4.22.8 Fit diagnostics  (positive part only)
 if(Model.run=="First") 
 {
   fn.fig("Appendix 6",2000, 2400)
   par(mfcol=c(2*3,4),las=1,mar=c(2,2,1.75,1),oma=c(1,2,.1,2),las=1,mgp=c(2,.5,0),cex.axis=1.25,cex.lab=1.1)
   for(s in Tar.sp) 
   {
-    #Monthly
-    Pos.Diag.fn(MODEL=Stand.out[[s]]$res,SPECIES=Nms.sp[s],M=.9)
+    Pos.Diag.fn(MODEL=Stand.out[[s]]$Pos$res,SPECIES=Nms.sp[s],M=.9)
     
     #Daily
-    Pos.Diag.fn(MODEL=Stand.out.daily[[s]]$res.gam,SPECIES="",M=.9)
+    Pos.Diag.fn(MODEL=Stand.out.daily[[s]]$Pos$res.gam,SPECIES="",M=.9)
   }
   mtext(c("Daily logbooks                                          Monthly returns     "),4,
         outer=T,las=3,line=0,cex=1.3)
   dev.off()
 }
 
-#   4.22.8 Plot base case and nominal 
+#   4.22.8 Plot base case and nominal   
 
 #Extract comparable nominal cpue
 Nominl=vector('list',length(SP.list)) 
 names(Nominl)=names(SP.list)
 Nominl.daily=Nominl
-for(s in nnn) 
+for(s in nnn)   
 {
-  if(!is.null(Stand.out[[s]]$DATA))Nominl[[s]]=fn.out.nominal(d=Stand.out[[s]]$DATA,method="LnMean")
-  if(!is.null(Stand.out.daily[[s]]$DATA))Nominl.daily[[s]]=fn.out.nominal(d=Stand.out.daily[[s]]$DATA,method="LnMean")
+  if(s%in%Tar.sp | (!s%in%Tar.sp & !is.null(Stand.out[[s]]$DATA)))
+  {
+    DAT=DATA.list.LIVEWT.c[[s]]
+    colnames(DAT)=tolower(colnames(DAT)) 
+    DAT=DAT%>%filter(vessel%in%VES.used[[s]] & blockx%in%as.numeric(BLKS.used[[s]]))
+    if(s%in%Tar.sp) DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) #select years with a min number of vessels
+    Nominl[[s]]=fn.out.nominal(d=DAT,method="DLnMean")
+  }
+   
+  if(s%in%Tar.sp | (!s%in%Tar.sp & !is.null(Stand.out.daily[[s]]$DATA)))
+  {
+    DAT=DATA.list.LIVEWT.c.daily[[s]]
+    colnames(DAT)=tolower(colnames(DAT)) 
+    DAT=DAT%>%filter(vessel%in%VES.used.daily[[s]] & blockx%in%as.numeric(BLKS.used.daily[[s]]))
+    if(s%in%Tar.sp) DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) #select years with a min number of vessels
+    Nominl.daily[[s]]=fn.out.nominal(d=DAT,method="DLnMean")
+  }
+    
 }
 
 
@@ -5105,23 +5062,54 @@ system.time({Pred.daily.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr','
 })
 names(Pred.other)=names(Pred.daily.other)=names(SP.list)[nnn[-sort(Tar.sp)]]
 
-  #Target species
-    #monthly          takes 80 sec
-system.time({Pred.tar=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
-  {
-    d=Stand.out[[s]]$DATA   #note: need data as global for ref_grid
-    return(pred.fun(MOD=Stand.out[[s]]$res,biascor="YES",PRED="finyear",Pred.type="link"))
-    rm(d)
-  }
-})
-    #Daily              takes 70 sec
-system.time({Pred.daily.tar=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
-  {
-    d=Stand.out.daily[[s]]$DATA
-    return(pred.fun(MOD=Stand.out.daily[[s]]$res.gam,biascor="YES",PRED="finyear",Pred.type="link"))
-    rm(d)
-  }
-})
+  #Target species 
+if(Stand.approach=="Qualif.level")
+{
+  #monthly          takes 80 sec
+  system.time({Pred.tar=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
+    {
+      d=Stand.out[[s]]$DATA   #note: need data as global for ref_grid
+      return(pred.fun(MOD=Stand.out[[s]]$res,biascor="YES",PRED="finyear",Pred.type="link"))
+      rm(d)
+    }
+  })
+  #Daily              takes 70 sec
+  system.time({Pred.daily.tar=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
+    {
+      d=Stand.out.daily[[s]]$DATA
+      return(pred.fun(MOD=Stand.out.daily[[s]]$res.gam,biascor="YES",PRED="finyear",Pred.type="link"))
+      rm(d)
+    }
+  })
+  
+}
+if(Stand.approach=="Delta")  
+{
+  #monthly          takes 80 sec
+  system.time({Pred.tar=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm')) %do%
+    {
+      return(fn.MC.delta.cpue(BiMOD=Stand.out[[s]]$Bi$res,
+                              MOD=Stand.out[[s]]$Pos$res,
+                              BiData=Stand.out[[s]]$Bi$DATA%>%mutate(LNeffort=LN.effort),
+                              PosData=Stand.out[[s]]$Pos$DATA,
+                              niter=Niter,
+                              pred.term='finyear',
+                              ALL.terms=Predictors_monthly))
+    }
+  })
+  #Daily              takes 70 sec
+  system.time({Pred.daily.tar=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm')) %do%
+    {
+      return(fn.MC.delta.cpue(BiMOD=Stand.out.daily[[s]]$Bi$res.gam,
+                              MOD=Stand.out.daily[[s]]$Pos$res.gam,
+                              BiData=Stand.out.daily[[s]]$Bi$DATA%>%mutate(LNeffort=LN.effort),
+                              PosData=Stand.out.daily[[s]]$Pos$DATA,
+                              niter=Niter,
+                              pred.term='finyear',
+                              ALL.terms=c(Predictors_daily,'long10.corner','lat10.corner')))
+    }
+  })
+}
 names(Pred.tar)=names(Pred.daily.tar)=names(SP.list)[Tar.sp]
 stopCluster(cl) 
 
@@ -5208,51 +5196,98 @@ for(s in nnn)
   }
 }
 
-      #Plot Target
-fn.fig("Figure 4.Annual_Index",2000, 2400)    
-par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
-for(s in Tar.sp)
+      #Plot Target   ACA
+show.how='together'
+ 
+if(show.how=='together')
 {
-  #Monthly
-  Mon.dat=list(Standardised=Pred.creep[[s]],Nominal=Nominl.creep[[s]])
-  LgND="NO"
-  if(s==Tar.sp[1])LgND="YES"
-  Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
-  if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
-  
-  #Daily
-  Daily.dat=list(Standardised=Pred.daily.creep[[s]],Nominal=Nominl.daily.creep[[s]])
-  LgND="NO"
-  Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
-  if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
-  mtext(Nms.sp[s],4,line=1,las=3,cex=1.5)
+  fn.fig("Figure 4.Annual_Index",1800, 2400)  
+  par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
+  for(s in Tar.sp)
+  {
+    Da=list(Standardised=Pred.creep[[s]],Unstandardised=Nominl.creep[[s]])
+    Da.daily=list(Standardised=Pred.daily.creep[[s]],Nominal=Nominl.daily.creep[[s]])
+    LgND="NO"
+    if(s==5)LgND="YES"
+    Plot.cpue.delta(cpuedata=Da,cpuedata.daily=Da.daily,ADD.LGND=LgND,whereLGND='topright',
+                    COL='grey',CxS=1.15,Yvar="finyear",add.lines="YES",firstyear=1975)
+    
+    legend("top",Nms.sp[s],bty='n',cex=1.75)
+  }
+  mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+  mtext("CPUE (kg/km gillnet hour)",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
+  dev.off()
 }
-mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-mtext("CPUE (kg/ km gillnet hour)",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
-dev.off()
+if(show.how=='separate')
+{
+  fn.fig("Figure 4.Annual_Index",2000, 2400)   
+  par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
+  for(s in Tar.sp)
+  {
+    #Monthly
+    Mon.dat=list(Standardised=Pred.creep[[s]],Unstandardised=Nominl.creep[[s]])
+    LgND="NO"
+    if(s==Tar.sp[1])LgND="YES"
+    Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
+    if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
+    
+    #Daily
+    Daily.dat=list(Standardised=Pred.daily.creep[[s]],Nominal=Nominl.daily.creep[[s]])
+    LgND="NO"
+    Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
+    if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
+    mtext(Nms.sp[s],4,line=1,las=3,cex=1.5)
+  }
+  mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+  mtext("CPUE (kg/ km gillnet hour)",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
+  dev.off()  
+}
+
 
   #Plot target without creep
-fn.fig("Figure 4.Annual_Index_no.creep",2000, 2400)    
-par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
-for(s in Tar.sp)
+if(show.how=='together')
 {
-  #Monthly
-  Mon.dat=list(Standardised=Pred[[s]],Nominal=Nominl[[s]])
-  LgND="NO"
-  if(s==Tar.sp[1])LgND="YES"
-  Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
-  if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
-  
-  #Daily
-  Daily.dat=list(Standardised=Pred.daily[[s]],Nominal=Nominl.daily[[s]])
-  LgND="NO"
-  Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
-  if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
-  mtext(Nms.sp[s],4,line=1,las=3,cex=1.5)
+  fn.fig("Figure 4.Annual_Index_no.creep",1800, 2400)
+  par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
+  for(s in Tar.sp)
+  {
+    Da=list(Standardised=Pred[[s]],Unstandardised=Nominl[[s]])
+    Da.daily=list(Standardised=Pred.daily[[s]],Nominal=Nominl.daily[[s]])
+    LgND="NO"
+    if(s==5)LgND="YES"
+    Plot.cpue.delta(cpuedata=Da,cpuedata.daily=Da.daily,ADD.LGND=LgND,whereLGND='topright',
+                    COL='grey',CxS=1.15,Yvar="finyear",add.lines="YES",firstyear=1975)
+    
+    legend("top",Nms.sp[s],bty='n',cex=1.75)
+  }
+  mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+  mtext("CPUE (kg/km gillnet hour)",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
+  dev.off()
 }
-mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-mtext("CPUE (kg/ km gillnet hour)",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
-dev.off()
+if(show.how=='separate')
+{
+  fn.fig("Figure 4.Annual_Index_no.creep",2000, 2400)  
+  par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
+  for(s in Tar.sp)
+  {
+    #Monthly
+    Mon.dat=list(Standardised=Pred[[s]],Unstandardised=Nominl[[s]])
+    LgND="NO"
+    if(s==Tar.sp[1])LgND="YES"
+    Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
+    if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
+    
+    #Daily
+    Daily.dat=list(Standardised=Pred.daily[[s]],Nominal=Nominl.daily[[s]])
+    LgND="NO"
+    Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
+    if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
+    mtext(Nms.sp[s],4,line=1,las=3,cex=1.5)
+  }
+  mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+  mtext("CPUE (kg/ km gillnet hour)",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
+  dev.off()
+}
 
       #Plot Target normalised    
 Pred.normlzd=Pred.creep
@@ -5309,55 +5344,88 @@ for(s in nnn)
 
   }
 }
-fn.fig("Figure 4.Annual_Index_normalised",2000, 2400)    
-#no point in showing nominal as it is not comparable in relative terms
-par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
-for(s in Tar.sp)
+
+if(show.how=='together')
 {
-  #Monthly
-  Mon.dat=list(Standardised=Pred.normlzd[[s]])
-  LgND="NO"
-  if(s==Tar.sp[1])LgND="YES"
-  Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
-  if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
+  fn.fig("Figure 4.Annual_Index_normalised",1800, 2400)
+  par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
+  for(s in Tar.sp)
+  {
+    Da=list(Standardised=Pred.normlzd[[s]],Unstandardised=Nominl.normlzd[[s]])
+    Da.daily=list(Standardised=Pred.daily.normlzd[[s]],Nominal=Nominl.daily.normlzd[[s]])
+    LgND="NO"
+    if(s==5)LgND="YES"
+    Plot.cpue.delta(cpuedata=Da,cpuedata.daily=Da.daily,ADD.LGND=LgND,whereLGND='topright',
+                    COL='grey',CxS=1.15,Yvar="finyear",add.lines="YES",firstyear=1975)
+    
+    legend("top",Nms.sp[s],bty='n',cex=1.75)
+  }
+  mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+  mtext("Relative CPUE",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
   
-  #Daily
-  Daily.dat=list(Standardised=Pred.daily.normlzd[[s]])
-  LgND="NO"
-  Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
-  if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
-  mtext(Nms.sp[s],4,line=1,las=3,cex=1.5)
+  dev.off()
+}   
+if(show.how=='separate')
+{
+  fn.fig("Figure 4.Annual_Index_normalised",2000, 2400) 
+  par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
+  for(s in Tar.sp)
+  {
+    #Monthly
+    Mon.dat=list(Standardised=Pred.normlzd[[s]],Unstandardised=Nominl.normlzd[[s]])
+    LgND="NO"
+    if(s==Tar.sp[1])LgND="YES"
+    Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
+    if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
+    
+    #Daily
+    Daily.dat=list(Standardised=Pred.daily.normlzd[[s]],Unstandardised=Nominl.daily.normlzd[[s]])
+    LgND="NO"
+    Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
+    if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
+    mtext(Nms.sp[s],4,line=1,las=3,cex=1.5)
+  }
+  mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+  mtext("Relative CPUE",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
+  dev.off()
 }
-mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-mtext("Relative CPUE",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
-dev.off()
+
 
 #relative nominal, effective, standardised
-fn.fig("Figure 4.Annual_Index_normalised_effective.nominal.stand",2000, 2400)    
-PcH=6
-LgND="NO"
-par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
-for(s in Tar.sp)
+if(show.how=='together')
 {
-  #Monthly
-  Mon.dat=list(Standardised=Pred.normlzd[[s]],Nominal=Nominl.normlzd[[s]])
-  cl.lgnd=gray.colors(length(Mon.dat),start=0.2,end=0.65)
-  Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
-  if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
-  with(Effective.normlzd[[s]],points(as.numeric(substr(finyear,1,4))+.25,response,pch=PcH,cex=1))
-  if(s==Tar.sp[1]) legend('topright',c('Standardised','Nominal','Effective'),
-                          bty='n',pch=c(16,16,PcH),col=c(cl.lgnd,"black"),cex=1.45)
-  
-  #Daily
-  Daily.dat=list(Standardised=Pred.daily.normlzd[[s]],Nominal=Nominl.daily.normlzd[[s]])
-  Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
-  with(Effective.daily.normlzd[[s]],points(as.numeric(substr(finyear,1,4)),response,pch=PcH,cex=1))
-  if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
-  mtext(Nms.sp[s],4,line=1,las=3,cex=1.5)
+  fn.fig("Figure 4.Annual_Index_normalised_effective.nominal.stand",1800, 2400)
+  dev.off()
 }
-mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-mtext("Relative CPUE",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
-dev.off()
+if(show.how=='separate')
+{
+  fn.fig("Figure 4.Annual_Index_normalised_effective.nominal.stand",2000, 2400)
+  PcH=6
+  LgND="NO"
+  par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
+  for(s in Tar.sp)
+  {
+    #Monthly
+    Mon.dat=list(Standardised=Pred.normlzd[[s]],Unstandardised=Nominl.normlzd[[s]])
+    cl.lgnd=gray.colors(length(Mon.dat),start=0.2,end=0.65)
+    Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
+    if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
+    with(Effective.normlzd[[s]],points(as.numeric(substr(finyear,1,4))+.25,response,pch=PcH,cex=1))
+    if(s==Tar.sp[1]) legend('topright',c('Standardised','Unstandardised','Effective'),
+                            bty='n',pch=c(16,16,PcH),col=c(cl.lgnd,"black"),cex=1.45)
+    
+    #Daily
+    Daily.dat=list(Standardised=Pred.daily.normlzd[[s]],Nominal=Nominl.daily.normlzd[[s]])
+    Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
+    with(Effective.daily.normlzd[[s]],points(as.numeric(substr(finyear,1,4)),response,pch=PcH,cex=1))
+    if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
+    mtext(Nms.sp[s],4,line=1,las=3,cex=1.5)
+  }
+  mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+  mtext("Relative CPUE",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
+  dev.off()
+}
+
 
 
 #Get glm predictions for daily and compare to gam
