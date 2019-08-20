@@ -279,10 +279,8 @@ use.blok.area='NO'
 
 ##############--- 2. PARAMETERS SECTION ---###################
 
-Stand.eff=1000          #express all standardised catches as: catch per 1000 km gn d
-Lg.Efrt=log(Stand.eff)
-
-Red.th=1  #percentage reduction in deviance to accept term
+#whiskery shark first period catchability
+whis.q.period1=paste(1975:1981,substr(1976:1982,3,4),sep="-") 
 
 #Criteria for keeping species for analysis
 N.keep=5      #in years
@@ -2639,7 +2637,7 @@ SP.list$All.Non.indicators=Shark.species[-match(Indicator.sp,Shark.species)]
 nnn=1:length(SP.list)
 
 
-#get Effective area (90% of catch)
+#get Effective area (90% of catch) and raster
 core.per=90
 Core=SP.list
 pdf('C:/Matias/Analyses/Catch and effort/species core areas/cores.pdf')
@@ -2663,6 +2661,68 @@ for(s in nnn)
   Core[[s]]=list(Lat=Rnglat,Long=Rnglon)
 }
 dev.off()
+if(Model.run=="First")
+{
+  for(s in nnn)
+  {
+    pdf(paste('C:/Matias/Analyses/Catch and effort/species core areas/Raster/',
+              names(SP.list)[s],'.pdf',sep=""))
+    d=Data.monthly.GN%>%filter(SPECIES%in%SP.list[[s]])%>%
+      mutate(LAT=round(LAT),LONG=round(LONG))
+    Nm=unique(d$SPECIES)
+    Nm=ifelse(length(Nm)>3,'others',Nm)
+    d=aggregate(LIVEWT.c~LAT+LONG,d,sum)
+    ggplot(d, aes(LONG, LAT)) +
+      geom_raster(aes(fill = log(LIVEWT.c)), interpolate = F)+
+      geom_contour(aes(z = log(LIVEWT.c)),linetype=1,col='black')+
+      scale_fill_gradient2(low="cadetblue1", high="dodgerblue4", guide="colorbar")+
+      labs(title = names(SP.list)[s])
+    dev.off()
+  }
+}
+
+
+#Check whiskery shark change in catchability  
+if(Model.run=="First")
+{
+  pdf('C:/Matias/Analyses/Catch and effort/Outputs/Paper/Whiskery_targeting.pdf')
+  d=Data.monthly.GN%>%filter(!FINYEAR%in%Data.daily.GN$FINYEAR)%>%
+    mutate(LAT=round(LAT),LONG=round(LONG))
+  prop_period1=d%>%filter(FINYEAR%in%whis.q.period1)%>%
+    group_by(BLOCKX, SPECIES)%>%
+    summarise (n = sum(LIVEWT.c)) %>%
+    mutate(freq_per1 = n / sum(n)) %>%
+    data.frame
+  
+  prop_period2=d%>%filter(!FINYEAR%in%whis.q.period1)%>%
+    group_by(BLOCKX, SPECIES)%>%
+    summarise (n = sum(LIVEWT.c)) %>%
+    mutate(freq_per2 = n / sum(n)) %>%
+    data.frame
+  prop=full_join(prop_period1,prop_period2,by=c("BLOCKX","SPECIES"))%>%
+            filter(SPECIES==17003)%>%
+            select(BLOCKX,SPECIES,freq_per1,freq_per2)
+  barplot(as.matrix(prop[,3:4]),beside =T,main="Prop of whiskery per block") 
+  
+
+  prop=d%>%filter(SPECIES%in%c(17003,18003))%>%
+    group_by(SPECIES,FINYEAR)%>%
+    summarise (n = sum(LIVEWT.c))
+  
+  prop.blk.yr=prop%>%group_by(FINYEAR)%>%
+              summarise (n.blk.yr = sum(n)) 
+  prop=prop%>%left_join(prop.blk.yr,by=c('FINYEAR'))%>%
+        mutate(prop = n / n.blk.yr) %>%
+        mutate(year=as.numeric(substr(FINYEAR,1,4)))%>%
+        data.frame%>%arrange(FINYEAR)
+  with(prop%>%filter(SPECIES==17003),plot(year,prop,type='b',
+            ylim=c(0,.8),cex=1.25,
+            ylab="Proportion of whiskery out of whiskery or dusky"))
+  with(prop%>%filter(SPECIES==18003),points(year+.3,prop,type='b',pch=21
+                                            ,cex=1.25,bg=3))
+  legend("bottomright",c("whiskery","dusky"),pch=21,cex=1.5,pt.bg=c("white","green"),bty='n')
+  dev.off()
+}
 
 #adjust core areas following McAuley and Simpfendorfer
 Dusky.range=c(-28,120)
@@ -3444,7 +3504,10 @@ if(do_pca=="YES")
     if(Model.run=="First")
     {
       fn.fig(paste(HndL.Species_targeting,"PCA/Variance_",target,sep=""),2400,2400)
-      plot(PCA.variance$cumulative.variance.percent,ylab="Cumulative variance explained",xlab="Axis")
+      plot(PCA.variance$cumulative.variance.percent,ylab="Cumulative variance explained",
+           ylim=c(0,100),xlab="Axis")
+      text(3,PCA.variance$cumulative.variance.percent[3],
+           paste(round(PCA.variance$cumulative.variance.percent[3]),"%"),pos=3,col=2,srt=45)
       dev.off()
     }
     
@@ -4117,7 +4180,7 @@ if(Model.run=="First")
 }
 
 
-#   4.22.4 Run standardisation for Target species 
+#   4.22.4 Run standardisation for Target species   #ACA. repeat with whis.q.period1
 cl <- makeCluster(detectCores()-1)
 registerDoParallel(cl)
 if(Stand.approach=="Qualif.level")
@@ -5391,10 +5454,26 @@ if(show.how=='separate')
 }
 
 
-#relative nominal, effective, standardised
+#relative nominal, effective, standardised   ACA
 if(show.how=='together')
 {
   fn.fig("Figure 4.Annual_Index_normalised_effective.nominal.stand",1800, 2400)
+  par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
+  PcH=6
+  LgND="NO"
+  for(s in Tar.sp)
+  {
+    Da=list(Standardised=Pred.normlzd[[s]],Unstandardised=Nominl.normlzd[[s]])
+    Da.daily=list(Standardised=Pred.daily.normlzd[[s]],Nominal=Nominl.daily.normlzd[[s]])
+    LgND="NO"
+    if(s==5)LgND="YES"
+    Plot.cpue.delta(cpuedata=Da,cpuedata.daily=Da.daily,ADD.LGND=LgND,whereLGND='topright',
+                    COL='grey',CxS=1.15,Yvar="finyear",add.lines="YES",firstyear=1975)
+    with(rbind(Effective.normlzd[[s]],Effective.daily.normlzd[[s]]),points(as.numeric(substr(finyear,1,4))+.25,response,pch=PcH,cex=1))
+    legend("top",Nms.sp[s],bty='n',cex=1.75)
+  }
+  mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+  mtext("Relative CPUE",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
   dev.off()
 }
 if(show.how=='separate')
