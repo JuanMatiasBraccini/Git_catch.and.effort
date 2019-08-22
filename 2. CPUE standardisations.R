@@ -251,7 +251,7 @@ if(Model.run=="First") do.sensitivity="YES"
 if(Model.run=="Standard") do.sensitivity="NO"
 
 #Control if comparing glm and gam spatial predictions
-compare.glm.gam="NO"
+compare.glm.gam_spatial="NO"
 
 
 #1.2.3 Reporting controls
@@ -1767,7 +1767,7 @@ fn.delta=function(d,Response,PREDS,efrt,Formula,Formula.gam)   #used for other s
 }
 fn.MC.delta.cpue=function(BiMOD,MOD,BiData,PosData,niter,pred.term,ALL.terms)
 {
-  #don't use binomial part if no contrast
+  #don't use binomial part if no contrast (applicable to monthly records where catch is mostly positive)
   if(class(BiMOD)[1]=="gam") Bi.cont=quantile(summary(BiMOD)$se,probs=.6)
   if(class(BiMOD)[1]=="glm") Bi.cont=quantile(summary(BiMOD)$coefficients[,2],probs=.6)  
   
@@ -2029,19 +2029,20 @@ Plot.cpue=function(cpuedata,ADD.LGND,whereLGND,COL,CxS,Yvar,add.lines)    #plot 
            code=3, angle=90, length=0.05, col=CL)
   }
 }
-Plot.cpue.delta=function(cpuedata,cpuedata.daily,ADD.LGND,whereLGND,COL,CxS,Yvar,add.lines,firstyear)    #plot cpues
+Plot.cpue.delta=function(cpuedata,cpuedata.daily,CL,CxS,
+                         Yvar,add.lines,firstyear,ADD.nomnl,Whis.q1)    #plot cpues
 {
   if(length(cpuedata)>3)tc=seq(-1.5*0.15,1.5*0.15,length.out=length(cpuedata))
   if(length(cpuedata)<=3)tc=seq(-.5*0.25,.5*0.25,length.out=length(cpuedata))
-  ymax = max(c(unlist(lapply(cpuedata, `[`, "upper.CL")),
-               unlist(lapply(cpuedata.daily, `[`, "upper.CL"))),na.rm=T)
   
   Yrs=c(as.numeric(substr(cpuedata[[1]][,match(Yvar,names(cpuedata[[1]]))],1,4)),
         as.numeric(substr(cpuedata.daily[[1]][,match(Yvar,names(cpuedata.daily[[1]]))],1,4)))
-  
-  plot(Yrs,Yrs,ylim=c(0,ymax),xlim=c(firstyear,max(Yrs)),ylab="",xlab="",col="transparent",cex.axis=1.25)
-  if(COL=='color')CL=c("black","forestgreen", "red","bisque3","blue2","dodgerblue")
-  if(COL=='grey') CL=gray.colors(length(cpuedata),start=0.2,end=0.5)
+  ymax=max(c(unlist(lapply(cpuedata, `[`, "upper.CL")),
+             unlist(lapply(cpuedata.daily, `[`, "upper.CL")),
+             ADD.nomnl$response),na.rm=T)
+  if(!is.null(Whis.q1)) ymax=max(c(ymax,Whis.q1$upper.CL))
+  plot(Yrs,Yrs,ylim=c(0,ymax),xlim=c(firstyear,max(Yrs)),ylab="",xlab="",
+       col="transparent",cex.axis=1.25)
   for(l in 1:length(cpuedata))
   {
     aaa=cpuedata[[l]]%>%mutate(finyear=as.numeric(substr(finyear,1,4)))
@@ -2067,14 +2068,22 @@ Plot.cpue.delta=function(cpuedata,cpuedata.daily,ADD.LGND,whereLGND,COL,CxS,Yvar
     with(aaa.daily,
          {
            if(l==1)polygon(x=c(finyear[1]-.5,finyear[length(finyear)]+.5,finyear[length(finyear)]+.5,finyear[1]-.5),
-                           y=c(0,0,ymax,ymax),col='grey92',border="transparent")
+                           y=c(0,0,ymax*.99,ymax*.99),col='grey92',border="transparent")
            arrows(x0=finyear+tc[l], y0=lower.CL, 
                   x1=finyear+tc[l], y1=upper.CL, 
                   code=3, angle=90, length=0.05, col=CL[l])
            if(add.lines=="NO") points(finyear+tc[l], response, pch=21, lty=2, col=CL[l],cex=CxS)
            if(add.lines=="YES") points(finyear+tc[l], response, "o", pch=21,bg="white", lty=2, col=CL[l],cex=CxS)
          })
-    if(ADD.LGND=="YES") legend(whereLGND,names(cpuedata),bty='n',pch=16,col=CL,cex=1.45)
+  }
+  if(!is.null(ADD.nomnl)) with(ADD.nomnl,points(as.numeric(substr(finyear,1,4))+.1,response,pch=4,cex=1))
+  if(!is.null(Whis.q1))
+  {
+    Yrs=as.numeric(substr(Whis.q1$finyear,1,4))
+    arrows(x0=Yrs, y0=Whis.q1$lower.CL, 
+           x1=Yrs, y1=Whis.q1$upper.CL, 
+           code=3, angle=90, length=0.05, col=1)
+    points(Yrs,Whis.q1$response,pch=21, lty=2, bg="grey80",cex=CxS)
   }
 }
 
@@ -3021,7 +3030,8 @@ BLKS.used=vector('list',length(SP.list))
 names(BLKS.used)=names(SP.list)
 BLKS.not.used=VES.used=VES.not.used=
 BLKS.used.daily=BLKS.not.used.daily=BLKS_10.used.daily=BLKS_10.not.used.daily=
-  VES.used.daily=VES.not.used.daily=BLKS.used
+  VES.used.daily=VES.not.used.daily=
+  BLKS.used.whiskery.first.q=VES.used.whiskery.first.q=BLKS.used
 if(Remove.blk.by=="blk_only")  
 {
   for(i in nnn)
@@ -3041,6 +3051,7 @@ if(Remove.blk.by=="blk_only")
           BLK.sel.BC=MIN.obs.BLK
           Min.ktch=MIN.ktch 
           if(18007%in%SP.list[[i]]) finy=finy[-match(c("1985-86","1986-87","1987-88"),finy)]
+          if(17003%in%SP.list[[i]]) finy=finy[-match(whis.q.period1,finy)]
         }
       }
       dummy=fn.see.all.yrs.ves.blks(a=subset(Species.list[[i]],FINYEAR%in%finy),SP=SP.list[[i]],
@@ -3055,6 +3066,19 @@ if(Remove.blk.by=="blk_only")
         VES.not.used[[i]]=dummy$Drop.ves
       }
       
+    }
+    #monthly whiskery q1
+    if(names(Species.list)[i]=="Whiskery Shark")
+    {
+      Ves.sel.BC=Threshold.n.yrs.monthly
+      BLK.sel.BC=MIN.obs.BLK
+      Min.ktch=MIN.ktch 
+      dummy=fn.see.all.yrs.ves.blks(a=subset(Species.list[[i]],FINYEAR%in%whis.q.period1),SP=SP.list[[i]],
+                                    NM=names(SP.list)[i],what=".monthly",
+                                    Ves.sel.BC=Ves.sel.BC,Ves.sel.sens=Threshold.n.yrs.sens,
+                                    BLK.sel.BC=BLK.sel.BC,BLK.sel.sens=MIN.obs.BLK.sens,Min.ktch=Min.ktch)
+         BLKS.used.whiskery.first.q[[i]]=dummy$Blks.BC
+        VES.used.whiskery.first.q[[i]]=dummy$Ves.BC
     }
     #Daily
     if(!is.null(Species.list.daily[[i]]))
@@ -3571,19 +3595,35 @@ for ( i in Tar.sp)
 }
 
 
-#calculate Effective (as per McAuley)
+#calculate Effective (as per McAuley, ie use all records within effective area)
+#note: effective is used as the conventionally used nominal cpue
 Effective=vector('list',length(SP.list)) 
 names(Effective)=names(SP.list)
 Effective_daily=Effective
 
-for ( i in Tar.sp)
+for(s in Tar.sp)   
 {
-  Effective[[i]]=fn.effective(DATA.list.LIVEWT.c_all_reporters[[i]])
-  Effective_daily[[i]]=fn.effective(DATA.list.LIVEWT.c.daily_all_reporters[[i]])
+  #Monthly
+  DAT=DATA.list.LIVEWT.c_all_reporters[[s]]%>%
+                mutate(effort=Km.Gillnet.Hours.c,
+                       catch=Catch.Target)
+  colnames(DAT)=tolower(colnames(DAT))
+  DAT=DAT
+  #DAT=DAT%>%filter(vessel%in%VES.used[[s]] & blockx%in%as.numeric(BLKS.used[[s]]))
+  Effective[[s]]=fn.out.nominal(d=DAT,method="Nominal")
+  
+  #Daily
+  DAT=DATA.list.LIVEWT.c.daily_all_reporters[[s]]%>%
+                  mutate(effort=Km.Gillnet.Hours.c,
+                         catch=Catch.Target)
+  colnames(DAT)=tolower(colnames(DAT))
+
+  #DAT=DAT%>%filter(vessel%in%VES.used.daily[[s]] & blockx%in%as.numeric(BLKS.used.daily[[s]]))
+  Effective_daily[[s]]=fn.out.nominal(d=DAT,method="Nominal")
 }
 
 
-#-- Nominal 
+#-- Nominal   (not used)
 #note: Ratio = mean(catch)/mean(effort)
 #      Mean = mean(cpue)
 #     LnMean= exp(mean(log(cpue))+bias corr)
@@ -4180,7 +4220,7 @@ if(Model.run=="First")
 }
 
 
-#   4.22.4 Run standardisation for Target species   #ACA. repeat with whis.q.period1
+#   4.22.4 Run standardisation for Target species   
 cl <- makeCluster(detectCores()-1)
 registerDoParallel(cl)
 if(Stand.approach=="Qualif.level")
@@ -4222,6 +4262,7 @@ if(Stand.approach=="Delta")
   system.time({Stand.out=foreach(s=Tar.sp,.packages=c('dplyr','cede')) %dopar%
     {
       DAT=DATA.list.LIVEWT.c[[s]]%>%filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]])
+      if(s==match(17003,SP.list)) DAT=subset(DAT,!FINYEAR%in%whis.q.period1)
       colnames(DAT)=tolower(colnames(DAT))
       #select years with a min number of vessels
       DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) 
@@ -4235,6 +4276,31 @@ if(Stand.approach=="Delta")
       Pos=fn.stand.delta(d=DAT,Response="catch.target",PREDS=Predictors_monthly,
                         efrt="km.gillnet.hours.c",Formula=Best.Model_delta[[s]]$pos,
                         Formula.gam=NULL,Family="gaussian")
+      return(list(Bi=Bi,Pos=Pos))
+      rm(DAT)
+    }
+  })    
+  
+  #Whiskery monthly first q period
+  system.time({Stand.out.whiskery.first.q=foreach(s=match(17003,SP.list),.packages=c('dplyr','cede')) %dopar%
+    {
+      DAT=DATA.list.LIVEWT.c[[s]]%>%filter(VESSEL%in%VES.used.whiskery.first.q[[s]] & 
+                                             BLOCKX%in%BLKS.used.whiskery.first.q[[s]] &
+                                             !BLOCKX%in%c(3115,3419,3421,3422,3517,3518) &
+                                             FINYEAR%in%whis.q.period1)
+      colnames(DAT)=tolower(colnames(DAT))
+      #select years with a min number of vessels
+      DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) 
+      #Binomial
+      DAT.bi=DAT%>%mutate(catch.target=ifelse(catch.target>0,1,0))
+      Bi=fn.stand.delta(d=DAT.bi,Response="catch.target",PREDS=Predictors_monthly,
+                        efrt="km.gillnet.hours.c",Formula=Best.Model_delta[[s]]$bi,
+                        Formula.gam=NULL,Family="binomial")
+      #Positive catch
+      DAT=DAT%>%filter(catch.target>0)
+      Pos=fn.stand.delta(d=DAT,Response="catch.target",PREDS=Predictors_monthly,
+                         efrt="km.gillnet.hours.c",Formula=Best.Model_delta[[s]]$pos,
+                         Formula.gam=NULL,Family="gaussian")
       return(list(Bi=Bi,Pos=Pos))
       rm(DAT)
     }
@@ -4271,6 +4337,7 @@ if(Stand.approach=="Delta")
 }
 
 names(Stand.out)=names(Stand.out.daily)=names(SP.list)[Tar.sp]
+names(Stand.out.whiskery.first.q)="Whiskery Shark"
 stopCluster(cl)
 
 Nms.sp=names(SP.list)  
@@ -4280,12 +4347,11 @@ Nms.sp[match("Hammerhead Sharks",Nms.sp)]=c("Hammerhead")
 Nms.sp[match("Wobbegong",Nms.sp)]=c("Wobbegongs")
 Nms.sp[match("Shortfin Mako",Nms.sp)]=c("Mako")
 
+# rm(Species.list.daily,Species.list,Data.daily.GN,
+#    Data.monthly.GN,Effort.monthly,Effort.daily,DATA.list.LIVEWT.c.daily_all_reporters,
+#    DATA.list.LIVEWT.c_all_reporters)
 
 #   4.22.5 Run sensitivity tests     
-    #free up some memory
-rm(Species.list.daily,Species.list,Data.daily.GN,
-   Data.monthly.GN,Effort.monthly,Effort.daily,DATA.list.LIVEWT.c.daily_all_reporters,
-   DATA.list.LIVEWT.c_all_reporters)
 if(Model.run=="First")      #takes 7 mins
 {
   sens=Tab.Sensi%>%filter(!Scenario=='Nominal')
@@ -4439,9 +4505,32 @@ if(Model.run=="First")      #takes 7 mins
     system.time({sens_monthly=foreach(s=Tar.sp,.packages=c('dplyr','cede')) %dopar%
       {
         DAT=DATA.list.LIVEWT.c[[s]]
+        if(s==match(17003,SP.list)) DAT=subset(DAT,!FINYEAR%in%whis.q.period1)
         if(Nms.sp[s]=="Sandbar Shark") DAT=DAT%>%filter(!BLOCKX==9600 & 
                                         !FINYEAR%in%c('1986-87')) #cannot estimate this coefficient
         colnames(DAT)=tolower(colnames(DAT))
+        #select years with a min number of vessels
+        DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) 
+        #Binomial
+        DAT.bi=DAT%>%mutate(catch.target=ifelse(catch.target>0,1,0))
+        Bi=fn.stand.delta(d=DAT.bi,Response="catch.target",PREDS=Predictors_monthly,
+                          efrt="km.gillnet.hours.c",Formula=Best.Model_delta[[s]]$bi,
+                          Formula.gam=NULL,Family="binomial")
+        #Positive catch
+        DAT=DAT%>%filter(catch.target>0)
+        Pos=fn.stand.delta(d=DAT,Response="catch.target",PREDS=Predictors_monthly,
+                           efrt="km.gillnet.hours.c",Formula=Best.Model_delta[[s]]$pos,
+                           Formula.gam=NULL,Family="gaussian")
+        return(list(Bi=Bi,Pos=Pos))
+        rm(DAT)
+      }
+    })
+    
+    #Whiskery monthly first q period
+    system.time({sens_monthly.whiskery.first.q=foreach(s=match(17003,SP.list),.packages=c('dplyr','cede')) %dopar%
+      {
+         DAT=subset(DATA.list.LIVEWT.c[[s]],FINYEAR%in%whis.q.period1)
+         colnames(DAT)=tolower(colnames(DAT))
         #select years with a min number of vessels
         DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) 
         #Binomial
@@ -4483,12 +4572,16 @@ if(Model.run=="First")      #takes 7 mins
                            Formula.gam=Best.Model.daily.gam_delta[[s]]$pos,Family="gaussian")
         return(list(Bi=Bi,Pos=Pos))
         rm(DAT)
-      }}) 
-    names(sens_monthly)=names(sens_daily)=names(SP.list)[Tar.sp]
+      }})
     
-    Store.sen=list(Stand.out[Tar.sp],sens_monthly)
-    Store.sen.daily=list(Stand.out.daily[Tar.sp],sens_daily)
-    names(Store.sen)=names(Store.sen.daily)=sens$Scenario[-match("No efficiency",sens$Scenario)]
+    names(sens_monthly)=names(sens_daily)=names(SP.list)[Tar.sp]
+    names(sens_monthly.whiskery.first.q)="Whiskery Shark"
+    
+    Store.sen=list(Stand.out,sens_monthly)
+    Store.sen.whiskery.first.q=list(Stand.out.whiskery.first.q,sens_monthly.whiskery.first.q)
+    Store.sen.daily=list(Stand.out.daily,sens_daily)
+    names(Store.sen)=names(Store.sen.whiskery.first.q)=
+      names(Store.sen.daily)=sens$Scenario[-match("No efficiency",sens$Scenario)]
     
     #2. Predict years considering log bias corr if required
     All.preds=vector('list',length(Store.sen))
@@ -4526,8 +4619,32 @@ if(Model.run=="First")      #takes 7 mins
     })
     All.preds$`No efficiency`=All.preds$`Base case`
     
+    All.preds.whiskery.first.q=vector('list',length(Store.sen.whiskery.first.q))
+    names(All.preds.whiskery.first.q)=names(Store.sen.whiskery.first.q)
+    system.time({for(i in 1:length(Store.sen.whiskery.first.q))
+    {
+      #Monthly
+      Pred.sens=foreach(s=1,.packages=c('dplyr','mvtnorm')) %dopar%
+        {
+          return(fn.MC.delta.cpue(BiMOD=Store.sen.whiskery.first.q[[i]][[s]]$Bi$res,
+                                  MOD=Store.sen.whiskery.first.q[[i]][[s]]$Pos$res,
+                                  BiData=Store.sen.whiskery.first.q[[i]][[s]]$Bi$DATA%>%mutate(LNeffort=LN.effort),
+                                  PosData=Store.sen.whiskery.first.q[[i]][[s]]$Pos$DATA,
+                                  niter=100,
+                                  pred.term='finyear',
+                                  ALL.terms=Predictors_monthly))
+        }
+      names(Pred.sens)="Whiskery Shark"
+      All.preds.whiskery.first.q[[i]]=list(monthly=Pred.sens)
+    }
+    })
+    All.preds.whiskery.first.q$`No efficiency`=All.preds.whiskery.first.q$`Base case`
+    
+    
+    
     #3. Apply efficiency creep where required
     All.preds.creep=All.preds
+    All.preds.whiskery.first.q.creep=All.preds.whiskery.first.q
     for(o in 1:nrow(sens))
     {
       if(sens$Efficiency_increase[o]=="Yes")
@@ -4547,6 +4664,17 @@ if(Model.run=="First")      #takes 7 mins
                    upper.CL=upper.CL-(response-response*(1-add.crp)),
                    response=response*(1-add.crp))
         }
+        
+        for(i in 1:length(All.preds.whiskery.first.q.creep[[o]]$monthly))
+        {
+          #monthly
+          All.preds.whiskery.first.q.creep[[o]]$monthly[[i]]=All.preds.whiskery.first.q.creep[[o]]$monthly[[i]]%>%
+            mutate(add.crp=Eff.creep$effort.creep[match(finyear,Eff.creep$finyear)],
+                   lower.CL=lower.CL-(response-response*(1-add.crp)),
+                   upper.CL=upper.CL-(response-response*(1-add.crp)),
+                   response=response*(1-add.crp))
+         }
+        
       }
     }
     
@@ -4563,10 +4691,9 @@ if(Model.run=="First")      #takes 7 mins
                     All.preds.creep$`No efficiency`$daily[[s]])
       names(Da)=names(Da.daily)=sens$Scenario
       
-      LgND="NO"
-      if(Tar.sp[s]==5)LgND="YES"
-      Plot.cpue.delta(cpuedata=Da,cpuedata.daily=Da.daily,ADD.LGND=LgND,whereLGND='topright',
-                      COL="color",CxS=1.15,Yvar="finyear",add.lines="YES",firstyear=1975)
+      Plot.cpue.delta(cpuedata=Da,cpuedata.daily=Da.daily,
+                      CL=CLs,CxS=1.15,Yvar="finyear",add.lines="YES",firstyear=1975,
+                      ADD.nomnl=NULL,Whis.q1=NULL)
       
       legend("top",Nms.sp[Tar.sp[s]],bty='n',cex=1.75)
     }
@@ -4576,7 +4703,7 @@ if(Model.run=="First")      #takes 7 mins
     
   }
   stopCluster(cl)
-}
+}   
 
 # 4.22.6 Run standardisation for Other species (based on delta method due to excess zeros)
 cl <- makeCluster(detectCores()-1)
@@ -4622,8 +4749,8 @@ Stand.out.daily=Stand.out.daily[names(SP.list)]
 
 rm(Stand.out.other,Stand.out.daily.other)
 
-#   4.22.7 Export deviance explained
-if(Model.run=="First")  #takes 8 mins
+#   4.22.7 Export deviance explained 
+if(Model.run=="First")  #takes 4 mins
 {
   #calculate gam deviance explained by each term
   gam.list=Stand.out.daily
@@ -4767,12 +4894,12 @@ if(Model.run=="First")
   dev.off()
 }
 
-#   4.22.8 Plot base case and nominal   
+#   4.22.8 Plot base case, unstandardised and nominal   
 
-#Extract comparable nominal cpue
-Nominl=vector('list',length(SP.list)) 
-names(Nominl)=names(SP.list)
-Nominl.daily=Nominl
+#Extract comparable unstandardised cpue
+Unstandardised=vector('list',length(SP.list)) 
+names(Unstandardised)=names(SP.list)
+Unstandardised.daily=Unstandardised
 for(s in nnn)   
 {
   if(s%in%Tar.sp | (!s%in%Tar.sp & !is.null(Stand.out[[s]]$DATA)))
@@ -4781,7 +4908,7 @@ for(s in nnn)
     colnames(DAT)=tolower(colnames(DAT)) 
     DAT=DAT%>%filter(vessel%in%VES.used[[s]] & blockx%in%as.numeric(BLKS.used[[s]]))
     if(s%in%Tar.sp) DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) #select years with a min number of vessels
-    Nominl[[s]]=fn.out.nominal(d=DAT,method="DLnMean")
+    Unstandardised[[s]]=fn.out.nominal(d=DAT,method="DLnMean")
   }
    
   if(s%in%Tar.sp | (!s%in%Tar.sp & !is.null(Stand.out.daily[[s]]$DATA)))
@@ -4790,14 +4917,14 @@ for(s in nnn)
     colnames(DAT)=tolower(colnames(DAT)) 
     DAT=DAT%>%filter(vessel%in%VES.used.daily[[s]] & blockx%in%as.numeric(BLKS.used.daily[[s]]))
     if(s%in%Tar.sp) DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) #select years with a min number of vessels
-    Nominl.daily[[s]]=fn.out.nominal(d=DAT,method="DLnMean")
+    Unstandardised.daily[[s]]=fn.out.nominal(d=DAT,method="DLnMean")
   }
     
 }
 
 
 #Compare glm and gam spatial predictions
-if(compare.glm.gam=="YES")
+if(compare.glm.gam_spatial=="YES")
 {
   AOV.tab=function(Anova.tab,GLM)
   {
@@ -5125,7 +5252,7 @@ system.time({Pred.daily.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr','
 })
 names(Pred.other)=names(Pred.daily.other)=names(SP.list)[nnn[-sort(Tar.sp)]]
 
-  #Target species 
+  #Target species  
 if(Stand.approach=="Qualif.level")
 {
   #monthly          takes 80 sec
@@ -5160,6 +5287,20 @@ if(Stand.approach=="Delta")
                               ALL.terms=Predictors_monthly))
     }
   })
+  
+  #monthly for just Whiskery first q period
+  system.time({Pred.tar.whiskery.first.q=foreach(s=1,.packages=c('dplyr','mvtnorm')) %do%
+    {
+      return(fn.MC.delta.cpue(BiMOD=Stand.out.whiskery.first.q[[s]]$Bi$res,
+                              MOD=Stand.out.whiskery.first.q[[s]]$Pos$res,
+                              BiData=Stand.out.whiskery.first.q[[s]]$Bi$DATA%>%mutate(LNeffort=LN.effort),
+                              PosData=Stand.out.whiskery.first.q[[s]]$Pos$DATA,
+                              niter=Niter,
+                              pred.term='finyear',
+                              ALL.terms=Predictors_monthly))
+    }
+  })
+  
   #Daily              takes 70 sec
   system.time({Pred.daily.tar=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm')) %do%
     {
@@ -5174,6 +5315,7 @@ if(Stand.approach=="Delta")
   })
 }
 names(Pred.tar)=names(Pred.daily.tar)=names(SP.list)[Tar.sp]
+names(Pred.tar.whiskery.first.q)="Whiskery Shark"
 stopCluster(cl) 
 
 Pred=c(Pred.tar,Pred.other)
@@ -5181,12 +5323,16 @@ Pred=Pred[names(SP.list)]
 Pred.daily=c(Pred.daily.tar,Pred.daily.other)
 Pred.daily=Pred.daily[names(SP.list)]
 
+#remove early effective years for sandbar
+Effective$`Sandbar Shark`=Effective$`Sandbar Shark`%>%
+              filter(finyear%in%Pred$`Sandbar Shark`$finyear)
 
   #Apply efficiency creep      
 Pred.creep=Pred
+Pred.tar.whiskery.first.q.creep=Pred.tar.whiskery.first.q
 Pred.daily.creep=Pred.daily
-Nominl.creep=Nominl               
-Nominl.daily.creep=Nominl.daily
+Unstandardised.creep=Unstandardised               
+Unstandardised.daily.creep=Unstandardised.daily
 Effective.creep=Effective
 Effective.daily.creep=Effective_daily
 for(s in nnn)
@@ -5194,40 +5340,46 @@ for(s in nnn)
   #monthly
   if(!is.null(Pred.creep[[s]]))
   {
-    yrs=Nominl.creep[[s]]$finyear
+    yrs=Unstandardised.creep[[s]]$finyear
     Pred.creep[[s]]=subset(Pred.creep[[s]],finyear%in%yrs)
     add.crp=Eff.creep$effort.creep[match(Pred.creep[[s]]$finyear,Eff.creep$finyear)]
     
     Pred.creep[[s]]=Pred.creep[[s]]%>%
+                        mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+                               upper.CL=upper.CL-(response-response*(1-add.crp)),
+                               response=response*(1-add.crp))
+    
+    yrs=as.character(Pred.creep[[s]]$finyear)
+    Unstandardised.creep[[s]]=subset(Unstandardised.creep[[s]],finyear%in%yrs)%>%
+                                  mutate(lower.CL=lowCL-(mean-mean*(1-add.crp)),
+                                         upper.CL=uppCL-(mean-mean*(1-add.crp)),
+                                         response=mean*(1-add.crp))
+    if(!is.null(Effective.creep[[s]]))
+    {
+      add.crp=Eff.creep$effort.creep[match(Effective.creep[[s]]$finyear,Eff.creep$finyear)]
+      Effective.creep[[s]]=Effective.creep[[s]]%>%
+                              mutate(lower.CL=lowCL-(mean-mean*(1-add.crp)),
+                                     upper.CL=uppCL-(mean-mean*(1-add.crp)),
+                                     response=mean*(1-add.crp))
+    }
+  }
+  if(s==match(17003,SP.list))
+  {
+    yrs=Pred.tar.whiskery.first.q[[1]]$finyear
+    Pred.tar.whiskery.first.q[[1]]=subset(Pred.tar.whiskery.first.q[[1]],finyear%in%yrs)
+    add.crp=Eff.creep$effort.creep[match(Pred.tar.whiskery.first.q[[1]]$finyear,Eff.creep$finyear)]
+    
+    Pred.tar.whiskery.first.q[[1]]=Pred.tar.whiskery.first.q[[1]]%>%
       mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
              upper.CL=upper.CL-(response-response*(1-add.crp)),
              response=response*(1-add.crp))
     
-    yrs=as.character(Pred.creep[[s]]$finyear)
-    Nominl.creep[[s]]=subset(Nominl.creep[[s]],finyear%in%yrs)%>%
-      mutate(lower.CL=lowCL-(mean-mean*(1-add.crp)),
-             upper.CL=uppCL-(mean-mean*(1-add.crp)),
-             response=mean*(1-add.crp))
-    
-    Nominl[[s]]$response=Nominl[[s]]$mean
-    Nominl[[s]]$lower.CL=Nominl[[s]]$lowCL
-    Nominl[[s]]$upper.CL=Nominl[[s]]$uppCL
-    
-    if(!is.null(Effective.creep[[s]]))
-    {
-      Effective.creep[[s]]=Effective.creep[[s]]%>%
-        rename(finyear=FINYEAR)%>%
-        filter(finyear%in%yrs)%>%
-        mutate(lower.CL=lowCL-(mean-mean*(1-add.crp)),
-               upper.CL=uppCL-(mean-mean*(1-add.crp)),
-               response=mean*(1-add.crp))
-    }
   }
   
   #daily
   if(!is.null(Pred.daily.creep[[s]]))
   {
-    yrs=Nominl.daily.creep[[s]]$finyear
+    yrs=Unstandardised.daily.creep[[s]]$finyear
     Pred.daily.creep[[s]]=subset(Pred.daily.creep[[s]],finyear%in%yrs)
     add.crp=Eff.creep$effort.creep[match(Pred.daily.creep[[s]]$finyear,Eff.creep$finyear)]
     
@@ -5237,44 +5389,61 @@ for(s in nnn)
              response=response*(1-add.crp))
     
     yrs=as.character(Pred.daily.creep[[s]]$finyear)
-    
-    Nominl.daily.creep[[s]]=subset(Nominl.daily.creep[[s]],finyear%in%yrs)%>%
-      mutate(lower.CL=lowCL-(mean-mean*(1-add.crp)),
-             upper.CL=uppCL-(mean-mean*(1-add.crp)),
-             response=mean*(1-add.crp))
-    
-    Nominl.daily[[s]]$response=Nominl.daily[[s]]$mean
-    Nominl.daily[[s]]$lower.CL=Nominl.daily[[s]]$lowCL
-    Nominl.daily[[s]]$upper.CL=Nominl.daily[[s]]$uppCL
-    
+    Unstandardised.daily.creep[[s]]=subset(Unstandardised.daily.creep[[s]],finyear%in%yrs)%>%
+                                  mutate(lower.CL=lowCL-(mean-mean*(1-add.crp)),
+                                         upper.CL=uppCL-(mean-mean*(1-add.crp)),
+                                         response=mean*(1-add.crp))
     if(!is.null(Effective.daily.creep[[s]]))
     {
       Effective.daily.creep[[s]]=Effective.daily.creep[[s]]%>%
-        rename(finyear=FINYEAR)%>%
-        filter(finyear%in%yrs)%>%
-        mutate(lower.CL=lowCL-(mean-mean*(1-add.crp)),
-               upper.CL=uppCL-(mean-mean*(1-add.crp)),
-               response=mean*(1-add.crp))
+                                  filter(finyear%in%yrs)%>%
+                                  mutate(lower.CL=lowCL-(mean-mean*(1-add.crp)),
+                                         upper.CL=uppCL-(mean-mean*(1-add.crp)),
+                                         response=mean*(1-add.crp))
     }
   }
 }
 
-      #Plot Target   ACA
+#rename unstandardised for plotting purposes
+for(s in nnn)
+{
+  if(!is.null(Unstandardised[[s]]))
+  {
+     Unstandardised[[s]]=subset(Unstandardised[[s]],finyear%in%Unstandardised.creep[[s]]$finyear)%>%
+                              rename(response=mean,
+                                     lower.CL=lowCL,
+                                     upper.CL= uppCL) 
+  }
+
+  if(!is.null(Unstandardised.daily[[s]]))
+  {
+    Unstandardised.daily[[s]]=subset(Unstandardised.daily[[s]],finyear%in%
+                                       Unstandardised.daily.creep[[s]]$finyear)%>% 
+                            rename(response=mean,
+                                   lower.CL=lowCL,
+                                   upper.CL=uppCL)
+    
+  }
+}
+
+  #Plot Target standardised and nominal (i.e. effective)  
 show.how='together'
- 
+CxS=1.35
+CLs=c('grey40',"grey70")
 if(show.how=='together')
 {
   fn.fig("Figure 4.Annual_Index",1800, 2400)  
   par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
   for(s in Tar.sp)
   {
-    Da=list(Standardised=Pred.creep[[s]],Unstandardised=Nominl.creep[[s]])
-    Da.daily=list(Standardised=Pred.daily.creep[[s]],Nominal=Nominl.daily.creep[[s]])
-    LgND="NO"
-    if(s==5)LgND="YES"
-    Plot.cpue.delta(cpuedata=Da,cpuedata.daily=Da.daily,ADD.LGND=LgND,whereLGND='topright',
-                    COL='grey',CxS=1.15,Yvar="finyear",add.lines="YES",firstyear=1975)
-    
+    if(s==5) Whis.q1=Pred.tar.whiskery.first.q.creep$`Whiskery Shark` else
+      Whis.q1=NULL
+    Plot.cpue.delta(cpuedata=list(Standardised=Pred.creep[[s]]),
+                    cpuedata.daily=list(Standardised=Pred.daily.creep[[s]]),
+                    CL=CLs,CxS=CxS,Yvar="finyear",add.lines="YES",firstyear=1975,
+                    ADD.nomnl=rbind(Effective.creep[[s]],Effective.daily.creep[[s]]),
+                    Whis.q1=Whis.q1)
+    legend("topright",c("Standardised","Nominal"),bty='n',pch=c(16,4),col=1,cex=1.45)
     legend("top",Nms.sp[s],bty='n',cex=1.75)
   }
   mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
@@ -5288,14 +5457,14 @@ if(show.how=='separate')
   for(s in Tar.sp)
   {
     #Monthly
-    Mon.dat=list(Standardised=Pred.creep[[s]],Unstandardised=Nominl.creep[[s]])
+    Mon.dat=list(Standardised=Pred.creep[[s]],Unstandardised=Unstandardised.creep[[s]])
     LgND="NO"
     if(s==Tar.sp[1])LgND="YES"
     Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
     if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
     
     #Daily
-    Daily.dat=list(Standardised=Pred.daily.creep[[s]],Nominal=Nominl.daily.creep[[s]])
+    Daily.dat=list(Standardised=Pred.daily.creep[[s]],Unstandardised=Unstandardised.daily.creep[[s]])
     LgND="NO"
     Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
     if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
@@ -5307,56 +5476,12 @@ if(show.how=='separate')
 }
 
 
-  #Plot target without creep
-if(show.how=='together')
-{
-  fn.fig("Figure 4.Annual_Index_no.creep",1800, 2400)
-  par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
-  for(s in Tar.sp)
-  {
-    Da=list(Standardised=Pred[[s]],Unstandardised=Nominl[[s]])
-    Da.daily=list(Standardised=Pred.daily[[s]],Nominal=Nominl.daily[[s]])
-    LgND="NO"
-    if(s==5)LgND="YES"
-    Plot.cpue.delta(cpuedata=Da,cpuedata.daily=Da.daily,ADD.LGND=LgND,whereLGND='topright',
-                    COL='grey',CxS=1.15,Yvar="finyear",add.lines="YES",firstyear=1975)
-    
-    legend("top",Nms.sp[s],bty='n',cex=1.75)
-  }
-  mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-  mtext("CPUE (kg/km gillnet hour)",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
-  dev.off()
-}
-if(show.how=='separate')
-{
-  fn.fig("Figure 4.Annual_Index_no.creep",2000, 2400)  
-  par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
-  for(s in Tar.sp)
-  {
-    #Monthly
-    Mon.dat=list(Standardised=Pred[[s]],Unstandardised=Nominl[[s]])
-    LgND="NO"
-    if(s==Tar.sp[1])LgND="YES"
-    Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
-    if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
-    
-    #Daily
-    Daily.dat=list(Standardised=Pred.daily[[s]],Nominal=Nominl.daily[[s]])
-    LgND="NO"
-    Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
-    if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
-    mtext(Nms.sp[s],4,line=1,las=3,cex=1.5)
-  }
-  mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-  mtext("CPUE (kg/ km gillnet hour)",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
-  dev.off()
-}
-
-      #Plot Target normalised    
+  #Plot Target and nominal (i.e. effective) normalised    
 Pred.normlzd=Pred.creep
+Pred.normlzd.whiskery.first.q.creep=Pred.tar.whiskery.first.q.creep
 Pred.daily.normlzd=Pred.daily.creep
-Nominl.normlzd=Nominl.creep
-Nominl.daily.normlzd=Nominl.daily.creep
+Unstandardised.normlzd=Unstandardised.creep
+Unstandardised.daily.normlzd=Unstandardised.daily.creep
 Effective.normlzd=Effective.creep
 Effective.daily.normlzd=Effective.daily.creep
 for(s in nnn)
@@ -5364,25 +5489,44 @@ for(s in nnn)
   #monthly
   if(!is.null(Pred.normlzd[[s]]))
   {
+    if(s==match(17003,SP.list))
+    {
+      Mn=mean(c(Pred.normlzd[[s]]$response,
+                Pred.normlzd.whiskery.first.q.creep[[1]]$response))
+    }else
     Mn=mean(Pred.normlzd[[s]]$response)
     Pred.normlzd[[s]]$response=Pred.normlzd[[s]]$response/Mn
     Pred.normlzd[[s]]$lower.CL=Pred.normlzd[[s]]$lower.CL/Mn
     Pred.normlzd[[s]]$upper.CL=Pred.normlzd[[s]]$upper.CL/Mn
     
-    Mn=mean(Nominl.normlzd[[s]]$response)
-    Nominl.normlzd[[s]]$response=Nominl.normlzd[[s]]$response/Mn
-    Nominl.normlzd[[s]]$lower.CL=Nominl.normlzd[[s]]$lower.CL/Mn
-    Nominl.normlzd[[s]]$upper.CL=Nominl.normlzd[[s]]$upper.CL/Mn
+    if(s==match(17003,SP.list))
+    {
+      Pred.normlzd.whiskery.first.q.creep[[1]]=Pred.normlzd.whiskery.first.q.creep[[1]]%>%
+        mutate(response=response/Mn,
+               lower.CL=lower.CL/Mn,
+               upper.CL=upper.CL/Mn)
+    }
+    
+    
+    
+    Mn=mean(Unstandardised.normlzd[[s]]$response)
+    Unstandardised.normlzd[[s]]=Unstandardised.normlzd[[s]]%>%
+                                  mutate(response=response/Mn,
+                                         lower.CL=lower.CL/Mn,
+                                         upper.CL=upper.CL/Mn)
+
     
     if(!is.null(Effective.normlzd[[s]]))
     {
       Mn=mean(Effective.normlzd[[s]]$response)
-      Effective.normlzd[[s]]$response=Effective.normlzd[[s]]$response/Mn
-      Effective.normlzd[[s]]$lower.CL=Effective.normlzd[[s]]$lower.CL/Mn
-      Effective.normlzd[[s]]$upper.CL=Effective.normlzd[[s]]$upper.CL/Mn
+      Effective.normlzd[[s]]=Effective.normlzd[[s]]%>%
+                                mutate(response=response/Mn,
+                                       lower.CL=lower.CL/Mn,
+                                       upper.CL=upper.CL/Mn)
     }
 
   }
+
   
   #daily
   if(!is.null(Pred.daily.normlzd[[s]]))
@@ -5392,36 +5536,40 @@ for(s in nnn)
     Pred.daily.normlzd[[s]]$lower.CL=Pred.daily.normlzd[[s]]$lower.CL/Mn
     Pred.daily.normlzd[[s]]$upper.CL=Pred.daily.normlzd[[s]]$upper.CL/Mn
     
-    Mn=mean(Nominl.daily.normlzd[[s]]$response)
-    Nominl.daily.normlzd[[s]]$response=Nominl.daily.normlzd[[s]]$response/Mn
-    Nominl.daily.normlzd[[s]]$lower.CL=Nominl.daily.normlzd[[s]]$lower.CL/Mn
-    Nominl.daily.normlzd[[s]]$upper.CL=Nominl.daily.normlzd[[s]]$upper.CL/Mn
-    
+    Mn=mean(Unstandardised.daily.normlzd[[s]]$response)
+    Unstandardised.daily.normlzd[[s]]=Unstandardised.daily.normlzd[[s]]%>%
+                                          mutate(response=response/Mn,
+                                                 lower.CL=lower.CL/Mn,
+                                                 upper.CL=upper.CL/Mn)
     if(!is.null(Effective.daily.normlzd[[s]]))
     {
       Mn=mean(Effective.daily.normlzd[[s]]$response)
-      Effective.daily.normlzd[[s]]$response=Effective.daily.normlzd[[s]]$response/Mn
-      Effective.daily.normlzd[[s]]$lower.CL=Effective.daily.normlzd[[s]]$lower.CL/Mn
-      Effective.daily.normlzd[[s]]$upper.CL=Effective.daily.normlzd[[s]]$upper.CL/Mn
+      
+      Effective.daily.normlzd[[s]]=Effective.daily.normlzd[[s]]%>%
+                                        mutate(response=response/Mn,
+                                               lower.CL=lower.CL/Mn,
+                                               upper.CL=upper.CL/Mn)
     }
-
   }
 }
 
 if(show.how=='together')
 {
+  Drop.ys=c(2,1,1,1)
   fn.fig("Figure 4.Annual_Index_normalised",1800, 2400)
   par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
   for(s in Tar.sp)
   {
-    Da=list(Standardised=Pred.normlzd[[s]],Unstandardised=Nominl.normlzd[[s]])
-    Da.daily=list(Standardised=Pred.daily.normlzd[[s]],Nominal=Nominl.daily.normlzd[[s]])
-    LgND="NO"
-    if(s==5)LgND="YES"
-    Plot.cpue.delta(cpuedata=Da,cpuedata.daily=Da.daily,ADD.LGND=LgND,whereLGND='topright',
-                    COL='grey',CxS=1.15,Yvar="finyear",add.lines="YES",firstyear=1975)
-    
+    if(s==5) Whis.q1=Pred.normlzd.whiskery.first.q.creep$`Whiskery Shark` else
+      Whis.q1=NULL
+    Plot.cpue.delta(cpuedata=list(Standardised=Pred.normlzd[[s]]),
+                    cpuedata.daily=list(Standardised=Pred.daily.normlzd[[s]]),
+                    CL=CLs,CxS=CxS,Yvar="finyear",
+                    add.lines="YES",firstyear=1975,
+                    ADD.nomnl=rbind(Effective.normlzd[[s]],Effective.daily.normlzd[[s]]),
+                    Whis.q1=Whis.q1)
     legend("top",Nms.sp[s],bty='n',cex=1.75)
+    legend("topright",c("Standardised","Nominal"),bty='n',pch=c(16,4),col=1,cex=1.45)
   }
   mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
   mtext("Relative CPUE",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
@@ -5435,14 +5583,14 @@ if(show.how=='separate')
   for(s in Tar.sp)
   {
     #Monthly
-    Mon.dat=list(Standardised=Pred.normlzd[[s]],Unstandardised=Nominl.normlzd[[s]])
+    Mon.dat=list(Standardised=Pred.normlzd[[s]],Unstandardised=Unstandardised.normlzd[[s]])
     LgND="NO"
     if(s==Tar.sp[1])LgND="YES"
     Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
     if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
     
     #Daily
-    Daily.dat=list(Standardised=Pred.daily.normlzd[[s]],Unstandardised=Nominl.daily.normlzd[[s]])
+    Daily.dat=list(Standardised=Pred.daily.normlzd[[s]],Unstandardised=Unstandardised.daily.normlzd[[s]])
     LgND="NO"
     Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
     if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
@@ -5454,59 +5602,7 @@ if(show.how=='separate')
 }
 
 
-#relative nominal, effective, standardised   ACA
-if(show.how=='together')
-{
-  fn.fig("Figure 4.Annual_Index_normalised_effective.nominal.stand",1800, 2400)
-  par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
-  PcH=6
-  LgND="NO"
-  for(s in Tar.sp)
-  {
-    Da=list(Standardised=Pred.normlzd[[s]],Unstandardised=Nominl.normlzd[[s]])
-    Da.daily=list(Standardised=Pred.daily.normlzd[[s]],Nominal=Nominl.daily.normlzd[[s]])
-    LgND="NO"
-    if(s==5)LgND="YES"
-    Plot.cpue.delta(cpuedata=Da,cpuedata.daily=Da.daily,ADD.LGND=LgND,whereLGND='topright',
-                    COL='grey',CxS=1.15,Yvar="finyear",add.lines="YES",firstyear=1975)
-    with(rbind(Effective.normlzd[[s]],Effective.daily.normlzd[[s]]),points(as.numeric(substr(finyear,1,4))+.25,response,pch=PcH,cex=1))
-    legend("top",Nms.sp[s],bty='n',cex=1.75)
-  }
-  mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-  mtext("Relative CPUE",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
-  dev.off()
-}
-if(show.how=='separate')
-{
-  fn.fig("Figure 4.Annual_Index_normalised_effective.nominal.stand",2000, 2400)
-  PcH=6
-  LgND="NO"
-  par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
-  for(s in Tar.sp)
-  {
-    #Monthly
-    Mon.dat=list(Standardised=Pred.normlzd[[s]],Unstandardised=Nominl.normlzd[[s]])
-    cl.lgnd=gray.colors(length(Mon.dat),start=0.2,end=0.65)
-    Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
-    if(s==Tar.sp[1]) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
-    with(Effective.normlzd[[s]],points(as.numeric(substr(finyear,1,4))+.25,response,pch=PcH,cex=1))
-    if(s==Tar.sp[1]) legend('topright',c('Standardised','Unstandardised','Effective'),
-                            bty='n',pch=c(16,16,PcH),col=c(cl.lgnd,"black"),cex=1.45)
-    
-    #Daily
-    Daily.dat=list(Standardised=Pred.daily.normlzd[[s]],Nominal=Nominl.daily.normlzd[[s]])
-    Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
-    with(Effective.daily.normlzd[[s]],points(as.numeric(substr(finyear,1,4)),response,pch=PcH,cex=1))
-    if(s==Tar.sp[1]) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
-    mtext(Nms.sp[s],4,line=1,las=3,cex=1.5)
-  }
-  mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-  mtext("Relative CPUE",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
-  dev.off()
-}
-
-
-
+#ACA
 #Get glm predictions for daily and compare to gam
 if(Model.run=="First")
 {
