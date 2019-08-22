@@ -279,9 +279,6 @@ use.blok.area='NO'
 
 ##############--- 2. PARAMETERS SECTION ---###################
 
-#whiskery shark first period catchability
-whis.q.period1=paste(1975:1981,substr(1976:1982,3,4),sep="-") 
-
 #Criteria for keeping species for analysis
 N.keep=5      #in years
 Min.kg=100   #in kg
@@ -390,6 +387,7 @@ Q_change="1975-76"    #use all monthly records in one series (this bypasses the 
 #5% percent increase in catch and effort prior 1990 
 #note: Rory McAuley
 Inc.per=1.05  
+
 
 
 ##############--- 3. FUNCTIONS SECTION ---###################
@@ -2030,17 +2028,21 @@ Plot.cpue=function(cpuedata,ADD.LGND,whereLGND,COL,CxS,Yvar,add.lines)    #plot 
   }
 }
 Plot.cpue.delta=function(cpuedata,cpuedata.daily,CL,CxS,
-                         Yvar,add.lines,firstyear,ADD.nomnl,Whis.q1)    #plot cpues
+                         Yvar,add.lines,firstyear,ADD.nomnl)    #plot cpues
 {
   if(length(cpuedata)>3)tc=seq(-1.5*0.15,1.5*0.15,length.out=length(cpuedata))
   if(length(cpuedata)<=3)tc=seq(-.5*0.25,.5*0.25,length.out=length(cpuedata))
   
   Yrs=c(as.numeric(substr(cpuedata[[1]][,match(Yvar,names(cpuedata[[1]]))],1,4)),
         as.numeric(substr(cpuedata.daily[[1]][,match(Yvar,names(cpuedata.daily[[1]]))],1,4)))
-  ymax=max(c(unlist(lapply(cpuedata, `[`, "upper.CL")),
-             unlist(lapply(cpuedata.daily, `[`, "upper.CL")),
-             ADD.nomnl$response),na.rm=T)
-  if(!is.null(Whis.q1)) ymax=max(c(ymax,Whis.q1$upper.CL))
+  Tops=c(unlist(lapply(cpuedata, `[`, "upper.CL")),
+         unlist(lapply(cpuedata.daily, `[`, "upper.CL")),
+         ADD.nomnl$response)
+  ymax=max(Tops)
+  Quant=quantile(Tops,probs=c(.9,1))
+  if(diff(Quant)>3) ymax=quantile(Tops,probs=.99)
+  
+  
   plot(Yrs,Yrs,ylim=c(0,ymax),xlim=c(firstyear,max(Yrs)),ylab="",xlab="",
        col="transparent",cex.axis=1.25)
   for(l in 1:length(cpuedata))
@@ -2076,15 +2078,11 @@ Plot.cpue.delta=function(cpuedata,cpuedata.daily,CL,CxS,
            if(add.lines=="YES") points(finyear+tc[l], response, "o", pch=21,bg="white", lty=2, col=CL[l],cex=CxS)
          })
   }
-  if(!is.null(ADD.nomnl)) with(ADD.nomnl,points(as.numeric(substr(finyear,1,4))+.1,response,pch=4,cex=1))
-  if(!is.null(Whis.q1))
+  if(!is.null(ADD.nomnl))
   {
-    Yrs=as.numeric(substr(Whis.q1$finyear,1,4))
-    arrows(x0=Yrs, y0=Whis.q1$lower.CL, 
-           x1=Yrs, y1=Whis.q1$upper.CL, 
-           code=3, angle=90, length=0.05, col=1)
-    points(Yrs,Whis.q1$response,pch=21, lty=2, bg="grey80",cex=CxS)
+    with(ADD.nomnl,points(as.numeric(substr(finyear,1,4))+.1,response,pch=19,col=rgb(.1,.1,.1,alpha=.2),cex=CxS)) 
   }
+  
 }
 
 Plot.cpue.other=function(cpuedata,ADD.LGND,whereLGND,COL,CxS,Yvar,All.yrs)    #plot cpues other species
@@ -2694,6 +2692,7 @@ if(Model.run=="First")
 #Check whiskery shark change in catchability  
 if(Model.run=="First")
 {
+  whis.q.period1=c("1975-76","1976-77","1977-78","1978-79","1979-80","1980-81","1981-82")
   pdf('C:/Matias/Analyses/Catch and effort/Outputs/Paper/Whiskery_targeting.pdf')
   d=Data.monthly.GN%>%filter(!FINYEAR%in%Data.daily.GN$FINYEAR)%>%
     mutate(LAT=round(LAT),LONG=round(LONG))
@@ -3030,8 +3029,7 @@ BLKS.used=vector('list',length(SP.list))
 names(BLKS.used)=names(SP.list)
 BLKS.not.used=VES.used=VES.not.used=
 BLKS.used.daily=BLKS.not.used.daily=BLKS_10.used.daily=BLKS_10.not.used.daily=
-  VES.used.daily=VES.not.used.daily=
-  BLKS.used.whiskery.first.q=VES.used.whiskery.first.q=BLKS.used
+  VES.used.daily=VES.not.used.daily=BLKS.used
 if(Remove.blk.by=="blk_only")  
 {
   for(i in nnn)
@@ -3051,7 +3049,6 @@ if(Remove.blk.by=="blk_only")
           BLK.sel.BC=MIN.obs.BLK
           Min.ktch=MIN.ktch 
           if(18007%in%SP.list[[i]]) finy=finy[-match(c("1985-86","1986-87","1987-88"),finy)]
-          if(17003%in%SP.list[[i]]) finy=finy[-match(whis.q.period1,finy)]
         }
       }
       dummy=fn.see.all.yrs.ves.blks(a=subset(Species.list[[i]],FINYEAR%in%finy),SP=SP.list[[i]],
@@ -3066,19 +3063,6 @@ if(Remove.blk.by=="blk_only")
         VES.not.used[[i]]=dummy$Drop.ves
       }
       
-    }
-    #monthly whiskery q1
-    if(names(Species.list)[i]=="Whiskery Shark")
-    {
-      Ves.sel.BC=Threshold.n.yrs.monthly
-      BLK.sel.BC=MIN.obs.BLK
-      Min.ktch=MIN.ktch 
-      dummy=fn.see.all.yrs.ves.blks(a=subset(Species.list[[i]],FINYEAR%in%whis.q.period1),SP=SP.list[[i]],
-                                    NM=names(SP.list)[i],what=".monthly",
-                                    Ves.sel.BC=Ves.sel.BC,Ves.sel.sens=Threshold.n.yrs.sens,
-                                    BLK.sel.BC=BLK.sel.BC,BLK.sel.sens=MIN.obs.BLK.sens,Min.ktch=Min.ktch)
-         BLKS.used.whiskery.first.q[[i]]=dummy$Blks.BC
-        VES.used.whiskery.first.q[[i]]=dummy$Ves.BC
     }
     #Daily
     if(!is.null(Species.list.daily[[i]]))
@@ -4262,7 +4246,6 @@ if(Stand.approach=="Delta")
   system.time({Stand.out=foreach(s=Tar.sp,.packages=c('dplyr','cede')) %dopar%
     {
       DAT=DATA.list.LIVEWT.c[[s]]%>%filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]])
-      if(s==match(17003,SP.list)) DAT=subset(DAT,!FINYEAR%in%whis.q.period1)
       colnames(DAT)=tolower(colnames(DAT))
       #select years with a min number of vessels
       DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) 
@@ -4279,33 +4262,8 @@ if(Stand.approach=="Delta")
       return(list(Bi=Bi,Pos=Pos))
       rm(DAT)
     }
-  })    
-  
-  #Whiskery monthly first q period
-  system.time({Stand.out.whiskery.first.q=foreach(s=match(17003,SP.list),.packages=c('dplyr','cede')) %dopar%
-    {
-      DAT=DATA.list.LIVEWT.c[[s]]%>%filter(VESSEL%in%VES.used.whiskery.first.q[[s]] & 
-                                             BLOCKX%in%BLKS.used.whiskery.first.q[[s]] &
-                                             !BLOCKX%in%c(3115,3419,3421,3422,3517,3518) &
-                                             FINYEAR%in%whis.q.period1)
-      colnames(DAT)=tolower(colnames(DAT))
-      #select years with a min number of vessels
-      DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) 
-      #Binomial
-      DAT.bi=DAT%>%mutate(catch.target=ifelse(catch.target>0,1,0))
-      Bi=fn.stand.delta(d=DAT.bi,Response="catch.target",PREDS=Predictors_monthly,
-                        efrt="km.gillnet.hours.c",Formula=Best.Model_delta[[s]]$bi,
-                        Formula.gam=NULL,Family="binomial")
-      #Positive catch
-      DAT=DAT%>%filter(catch.target>0)
-      Pos=fn.stand.delta(d=DAT,Response="catch.target",PREDS=Predictors_monthly,
-                         efrt="km.gillnet.hours.c",Formula=Best.Model_delta[[s]]$pos,
-                         Formula.gam=NULL,Family="gaussian")
-      return(list(Bi=Bi,Pos=Pos))
-      rm(DAT)
-    }
-  })
-  
+  })   
+
   #daily
   system.time({Stand.out.daily=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv')) %dopar%
     {
@@ -4337,7 +4295,6 @@ if(Stand.approach=="Delta")
 }
 
 names(Stand.out)=names(Stand.out.daily)=names(SP.list)[Tar.sp]
-names(Stand.out.whiskery.first.q)="Whiskery Shark"
 stopCluster(cl)
 
 Nms.sp=names(SP.list)  
@@ -4505,7 +4462,6 @@ if(Model.run=="First")      #takes 7 mins
     system.time({sens_monthly=foreach(s=Tar.sp,.packages=c('dplyr','cede')) %dopar%
       {
         DAT=DATA.list.LIVEWT.c[[s]]
-        if(s==match(17003,SP.list)) DAT=subset(DAT,!FINYEAR%in%whis.q.period1)
         if(Nms.sp[s]=="Sandbar Shark") DAT=DAT%>%filter(!BLOCKX==9600 & 
                                         !FINYEAR%in%c('1986-87')) #cannot estimate this coefficient
         colnames(DAT)=tolower(colnames(DAT))
@@ -4525,29 +4481,6 @@ if(Model.run=="First")      #takes 7 mins
         rm(DAT)
       }
     })
-    
-    #Whiskery monthly first q period
-    system.time({sens_monthly.whiskery.first.q=foreach(s=match(17003,SP.list),.packages=c('dplyr','cede')) %dopar%
-      {
-         DAT=subset(DATA.list.LIVEWT.c[[s]],FINYEAR%in%whis.q.period1)
-         colnames(DAT)=tolower(colnames(DAT))
-        #select years with a min number of vessels
-        DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) 
-        #Binomial
-        DAT.bi=DAT%>%mutate(catch.target=ifelse(catch.target>0,1,0))
-        Bi=fn.stand.delta(d=DAT.bi,Response="catch.target",PREDS=Predictors_monthly,
-                          efrt="km.gillnet.hours.c",Formula=Best.Model_delta[[s]]$bi,
-                          Formula.gam=NULL,Family="binomial")
-        #Positive catch
-        DAT=DAT%>%filter(catch.target>0)
-        Pos=fn.stand.delta(d=DAT,Response="catch.target",PREDS=Predictors_monthly,
-                           efrt="km.gillnet.hours.c",Formula=Best.Model_delta[[s]]$pos,
-                           Formula.gam=NULL,Family="gaussian")
-        return(list(Bi=Bi,Pos=Pos))
-        rm(DAT)
-      }
-    })
-    
     #daily
     system.time({sens_daily=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv')) %dopar%
       {
@@ -4575,15 +4508,11 @@ if(Model.run=="First")      #takes 7 mins
       }})
     
     names(sens_monthly)=names(sens_daily)=names(SP.list)[Tar.sp]
-    names(sens_monthly.whiskery.first.q)="Whiskery Shark"
-    
     Store.sen=list(Stand.out,sens_monthly)
-    Store.sen.whiskery.first.q=list(Stand.out.whiskery.first.q,sens_monthly.whiskery.first.q)
     Store.sen.daily=list(Stand.out.daily,sens_daily)
-    names(Store.sen)=names(Store.sen.whiskery.first.q)=
-      names(Store.sen.daily)=sens$Scenario[-match("No efficiency",sens$Scenario)]
+    names(Store.sen)=names(Store.sen.daily)=sens$Scenario[-match("No efficiency",sens$Scenario)]
     
-    #2. Predict years considering log bias corr if required
+    #2. Predict years considering log bias corr if required  
     All.preds=vector('list',length(Store.sen))
     names(All.preds)=names(Store.sen)
     system.time({for(i in 1:length(Store.sen))
@@ -4619,32 +4548,9 @@ if(Model.run=="First")      #takes 7 mins
     })
     All.preds$`No efficiency`=All.preds$`Base case`
     
-    All.preds.whiskery.first.q=vector('list',length(Store.sen.whiskery.first.q))
-    names(All.preds.whiskery.first.q)=names(Store.sen.whiskery.first.q)
-    system.time({for(i in 1:length(Store.sen.whiskery.first.q))
-    {
-      #Monthly
-      Pred.sens=foreach(s=1,.packages=c('dplyr','mvtnorm')) %dopar%
-        {
-          return(fn.MC.delta.cpue(BiMOD=Store.sen.whiskery.first.q[[i]][[s]]$Bi$res,
-                                  MOD=Store.sen.whiskery.first.q[[i]][[s]]$Pos$res,
-                                  BiData=Store.sen.whiskery.first.q[[i]][[s]]$Bi$DATA%>%mutate(LNeffort=LN.effort),
-                                  PosData=Store.sen.whiskery.first.q[[i]][[s]]$Pos$DATA,
-                                  niter=100,
-                                  pred.term='finyear',
-                                  ALL.terms=Predictors_monthly))
-        }
-      names(Pred.sens)="Whiskery Shark"
-      All.preds.whiskery.first.q[[i]]=list(monthly=Pred.sens)
-    }
-    })
-    All.preds.whiskery.first.q$`No efficiency`=All.preds.whiskery.first.q$`Base case`
-    
-    
     
     #3. Apply efficiency creep where required
     All.preds.creep=All.preds
-    All.preds.whiskery.first.q.creep=All.preds.whiskery.first.q
     for(o in 1:nrow(sens))
     {
       if(sens$Efficiency_increase[o]=="Yes")
@@ -4664,17 +4570,6 @@ if(Model.run=="First")      #takes 7 mins
                    upper.CL=upper.CL-(response-response*(1-add.crp)),
                    response=response*(1-add.crp))
         }
-        
-        for(i in 1:length(All.preds.whiskery.first.q.creep[[o]]$monthly))
-        {
-          #monthly
-          All.preds.whiskery.first.q.creep[[o]]$monthly[[i]]=All.preds.whiskery.first.q.creep[[o]]$monthly[[i]]%>%
-            mutate(add.crp=Eff.creep$effort.creep[match(finyear,Eff.creep$finyear)],
-                   lower.CL=lower.CL-(response-response*(1-add.crp)),
-                   upper.CL=upper.CL-(response-response*(1-add.crp)),
-                   response=response*(1-add.crp))
-         }
-        
       }
     }
     
@@ -4692,13 +4587,16 @@ if(Model.run=="First")      #takes 7 mins
       names(Da)=names(Da.daily)=sens$Scenario
       
       Plot.cpue.delta(cpuedata=Da,cpuedata.daily=Da.daily,
-                      CL=CLs,CxS=1.15,Yvar="finyear",add.lines="YES",firstyear=1975,
-                      ADD.nomnl=NULL,Whis.q1=NULL)
+                      CL=c("black","forestgreen","red"),CxS=1.15,Yvar="finyear",
+                      add.lines="YES",firstyear=1975,
+                      ADD.nomnl=NULL)
       
       legend("top",Nms.sp[Tar.sp[s]],bty='n',cex=1.75)
     }
     mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
     mtext("CPUE (kg/km gillnet hour)",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
+    legend('topright',sens$Scenario,bty='n',col=c("black","forestgreen","red"),
+           pch=19,cex=1.25)
     dev.off()
     
   }
@@ -4922,6 +4820,26 @@ for(s in nnn)
     
 }
 
+#rename unstandardised for plotting purposes
+for(s in nnn)
+{
+  if(!is.null(Unstandardised[[s]]))
+  {
+    Unstandardised[[s]]=Unstandardised[[s]]%>%
+                                  rename(response=mean,
+                                         lower.CL=lowCL,
+                                         upper.CL= uppCL) 
+  }
+  
+  if(!is.null(Unstandardised.daily[[s]]))
+  {
+    Unstandardised.daily[[s]]=Unstandardised.daily[[s]]%>% 
+                                  rename(response=mean,
+                                         lower.CL=lowCL,
+                                         upper.CL=uppCL)
+    
+  }
+}
 
 #Compare glm and gam spatial predictions
 if(compare.glm.gam_spatial=="YES")
@@ -5287,20 +5205,6 @@ if(Stand.approach=="Delta")
                               ALL.terms=Predictors_monthly))
     }
   })
-  
-  #monthly for just Whiskery first q period
-  system.time({Pred.tar.whiskery.first.q=foreach(s=1,.packages=c('dplyr','mvtnorm')) %do%
-    {
-      return(fn.MC.delta.cpue(BiMOD=Stand.out.whiskery.first.q[[s]]$Bi$res,
-                              MOD=Stand.out.whiskery.first.q[[s]]$Pos$res,
-                              BiData=Stand.out.whiskery.first.q[[s]]$Bi$DATA%>%mutate(LNeffort=LN.effort),
-                              PosData=Stand.out.whiskery.first.q[[s]]$Pos$DATA,
-                              niter=Niter,
-                              pred.term='finyear',
-                              ALL.terms=Predictors_monthly))
-    }
-  })
-  
   #Daily              takes 70 sec
   system.time({Pred.daily.tar=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm')) %do%
     {
@@ -5315,7 +5219,6 @@ if(Stand.approach=="Delta")
   })
 }
 names(Pred.tar)=names(Pred.daily.tar)=names(SP.list)[Tar.sp]
-names(Pred.tar.whiskery.first.q)="Whiskery Shark"
 stopCluster(cl) 
 
 Pred=c(Pred.tar,Pred.other)
@@ -5327,9 +5230,35 @@ Pred.daily=Pred.daily[names(SP.list)]
 Effective$`Sandbar Shark`=Effective$`Sandbar Shark`%>%
               filter(finyear%in%Pred$`Sandbar Shark`$finyear)
 
+#Calculate CV
+for(s in nnn)
+{
+    #monthly
+    if(!is.null(Pred[[s]]))
+    {
+      Pred[[s]]=Pred[[s]]%>%mutate(CV=SD/response)
+      
+      if(!is.null(Effective[[s]]))
+      {
+        Effective[[s]]=Effective[[s]]%>%mutate(CV=se/mean)
+      }
+    }
+    
+  #daily
+    if(!is.null(Pred.daily[[s]]))
+    {
+      Pred.daily[[s]]=Pred.daily[[s]]%>%mutate(CV=SD/response)
+      
+      if(!is.null(Effective_daily[[s]]))
+      {
+        Effective_daily[[s]]=Effective_daily[[s]]%>%mutate(CV=se/mean)
+      }
+    }
+  }
+  
+  
   #Apply efficiency creep      
 Pred.creep=Pred
-Pred.tar.whiskery.first.q.creep=Pred.tar.whiskery.first.q
 Pred.daily.creep=Pred.daily
 Unstandardised.creep=Unstandardised               
 Unstandardised.daily.creep=Unstandardised.daily
@@ -5351,9 +5280,9 @@ for(s in nnn)
     
     yrs=as.character(Pred.creep[[s]]$finyear)
     Unstandardised.creep[[s]]=subset(Unstandardised.creep[[s]],finyear%in%yrs)%>%
-                                  mutate(lower.CL=lowCL-(mean-mean*(1-add.crp)),
-                                         upper.CL=uppCL-(mean-mean*(1-add.crp)),
-                                         response=mean*(1-add.crp))
+                                  mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+                                         upper.CL=upper.CL-(response-response*(1-add.crp)),
+                                         response=response*(1-add.crp))
     if(!is.null(Effective.creep[[s]]))
     {
       add.crp=Eff.creep$effort.creep[match(Effective.creep[[s]]$finyear,Eff.creep$finyear)]
@@ -5363,19 +5292,6 @@ for(s in nnn)
                                      response=mean*(1-add.crp))
     }
   }
-  if(s==match(17003,SP.list))
-  {
-    yrs=Pred.tar.whiskery.first.q[[1]]$finyear
-    Pred.tar.whiskery.first.q[[1]]=subset(Pred.tar.whiskery.first.q[[1]],finyear%in%yrs)
-    add.crp=Eff.creep$effort.creep[match(Pred.tar.whiskery.first.q[[1]]$finyear,Eff.creep$finyear)]
-    
-    Pred.tar.whiskery.first.q[[1]]=Pred.tar.whiskery.first.q[[1]]%>%
-      mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
-             upper.CL=upper.CL-(response-response*(1-add.crp)),
-             response=response*(1-add.crp))
-    
-  }
-  
   #daily
   if(!is.null(Pred.daily.creep[[s]]))
   {
@@ -5390,9 +5306,9 @@ for(s in nnn)
     
     yrs=as.character(Pred.daily.creep[[s]]$finyear)
     Unstandardised.daily.creep[[s]]=subset(Unstandardised.daily.creep[[s]],finyear%in%yrs)%>%
-                                  mutate(lower.CL=lowCL-(mean-mean*(1-add.crp)),
-                                         upper.CL=uppCL-(mean-mean*(1-add.crp)),
-                                         response=mean*(1-add.crp))
+                                  mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+                                         upper.CL=upper.CL-(response-response*(1-add.crp)),
+                                         response=response*(1-add.crp))
     if(!is.null(Effective.daily.creep[[s]]))
     {
       Effective.daily.creep[[s]]=Effective.daily.creep[[s]]%>%
@@ -5404,48 +5320,39 @@ for(s in nnn)
   }
 }
 
-#rename unstandardised for plotting purposes
+#keep only meaningfull years
 for(s in nnn)
 {
   if(!is.null(Unstandardised[[s]]))
   {
-     Unstandardised[[s]]=subset(Unstandardised[[s]],finyear%in%Unstandardised.creep[[s]]$finyear)%>%
-                              rename(response=mean,
-                                     lower.CL=lowCL,
-                                     upper.CL= uppCL) 
+    Unstandardised[[s]]=subset(Unstandardised[[s]],finyear%in%Unstandardised.creep[[s]]$finyear)
   }
-
+  
   if(!is.null(Unstandardised.daily[[s]]))
   {
     Unstandardised.daily[[s]]=subset(Unstandardised.daily[[s]],finyear%in%
-                                       Unstandardised.daily.creep[[s]]$finyear)%>% 
-                            rename(response=mean,
-                                   lower.CL=lowCL,
-                                   upper.CL=uppCL)
-    
+                                       Unstandardised.daily.creep[[s]]$finyear)
   }
 }
 
   #Plot Target standardised and nominal (i.e. effective)  
 show.how='together'
 CxS=1.35
-CLs=c('grey40',"grey70")
+CLs=c('black',"grey70")
 if(show.how=='together')
 {
   fn.fig("Figure 4.Annual_Index",1800, 2400)  
   par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
   for(s in Tar.sp)
   {
-    if(s==5) Whis.q1=Pred.tar.whiskery.first.q.creep$`Whiskery Shark` else
-      Whis.q1=NULL
     Plot.cpue.delta(cpuedata=list(Standardised=Pred.creep[[s]]),
                     cpuedata.daily=list(Standardised=Pred.daily.creep[[s]]),
                     CL=CLs,CxS=CxS,Yvar="finyear",add.lines="YES",firstyear=1975,
-                    ADD.nomnl=rbind(Effective.creep[[s]],Effective.daily.creep[[s]]),
-                    Whis.q1=Whis.q1)
-    legend("topright",c("Standardised","Nominal"),bty='n',pch=c(16,4),col=1,cex=1.45)
-    legend("top",Nms.sp[s],bty='n',cex=1.75)
+                    ADD.nomnl=rbind(Effective.creep[[s]],Effective.daily.creep[[s]]))
+    legend("topright",Nms.sp[s],bty='n',cex=1.75)
   }
+  legend("bottomleft",c("Standardised","Nominal"),bty='n',pch=c(16,16),
+         col=c(CLs[1],rgb(.1,.1,.1,alpha=.2)),cex=1.45)
   mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
   mtext("CPUE (kg/km gillnet hour)",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
   dev.off()
@@ -5478,7 +5385,6 @@ if(show.how=='separate')
 
   #Plot Target and nominal (i.e. effective) normalised    
 Pred.normlzd=Pred.creep
-Pred.normlzd.whiskery.first.q.creep=Pred.tar.whiskery.first.q.creep
 Pred.daily.normlzd=Pred.daily.creep
 Unstandardised.normlzd=Unstandardised.creep
 Unstandardised.daily.normlzd=Unstandardised.daily.creep
@@ -5489,32 +5395,16 @@ for(s in nnn)
   #monthly
   if(!is.null(Pred.normlzd[[s]]))
   {
-    if(s==match(17003,SP.list))
-    {
-      Mn=mean(c(Pred.normlzd[[s]]$response,
-                Pred.normlzd.whiskery.first.q.creep[[1]]$response))
-    }else
     Mn=mean(Pred.normlzd[[s]]$response)
     Pred.normlzd[[s]]$response=Pred.normlzd[[s]]$response/Mn
     Pred.normlzd[[s]]$lower.CL=Pred.normlzd[[s]]$lower.CL/Mn
     Pred.normlzd[[s]]$upper.CL=Pred.normlzd[[s]]$upper.CL/Mn
-    
-    if(s==match(17003,SP.list))
-    {
-      Pred.normlzd.whiskery.first.q.creep[[1]]=Pred.normlzd.whiskery.first.q.creep[[1]]%>%
-        mutate(response=response/Mn,
-               lower.CL=lower.CL/Mn,
-               upper.CL=upper.CL/Mn)
-    }
-    
-    
     
     Mn=mean(Unstandardised.normlzd[[s]]$response)
     Unstandardised.normlzd[[s]]=Unstandardised.normlzd[[s]]%>%
                                   mutate(response=response/Mn,
                                          lower.CL=lower.CL/Mn,
                                          upper.CL=upper.CL/Mn)
-
     
     if(!is.null(Effective.normlzd[[s]]))
     {
@@ -5555,22 +5445,19 @@ for(s in nnn)
 
 if(show.how=='together')
 {
-  Drop.ys=c(2,1,1,1)
   fn.fig("Figure 4.Annual_Index_normalised",1800, 2400)
   par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
   for(s in Tar.sp)
   {
-    if(s==5) Whis.q1=Pred.normlzd.whiskery.first.q.creep$`Whiskery Shark` else
-      Whis.q1=NULL
-    Plot.cpue.delta(cpuedata=list(Standardised=Pred.normlzd[[s]]),
+     Plot.cpue.delta(cpuedata=list(Standardised=Pred.normlzd[[s]]),
                     cpuedata.daily=list(Standardised=Pred.daily.normlzd[[s]]),
                     CL=CLs,CxS=CxS,Yvar="finyear",
                     add.lines="YES",firstyear=1975,
-                    ADD.nomnl=rbind(Effective.normlzd[[s]],Effective.daily.normlzd[[s]]),
-                    Whis.q1=Whis.q1)
-    legend("top",Nms.sp[s],bty='n',cex=1.75)
-    legend("topright",c("Standardised","Nominal"),bty='n',pch=c(16,4),col=1,cex=1.45)
+                    ADD.nomnl=rbind(Effective.normlzd[[s]],Effective.daily.normlzd[[s]]))
+    legend("topright",Nms.sp[s],bty='n',cex=1.75)
   }
+  legend("bottomleft",c("Standardised","Nominal"),bty='n',pch=c(16,16),
+         col=c(CLs[1],rgb(.1,.1,.1,alpha=.2)),cex=1.45)
   mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
   mtext("Relative CPUE",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
   
@@ -5602,64 +5489,25 @@ if(show.how=='separate')
 }
 
 
-#ACA
 #Get glm predictions for daily and compare to gam
 if(Model.run=="First")
 {
-  pred.fun_pred.glm=function(MOD,DAT,pred.term,ALL.terms)             
-  {
-    knstnt.terms=ALL.terms[-match(pred.term,ALL.terms)]
-    id.fctr=knstnt.terms[which(knstnt.terms%in%Categorical)]
-    id.cont=knstnt.terms[which(!knstnt.terms%in%Categorical)]
-    newdata=matrix(nrow=1,ncol=length(knstnt.terms))
-    colnames(newdata)=c(id.fctr,id.cont) 
-    newdata=as.data.frame(newdata)
-    for(ii in 1:ncol(newdata))
+  system.time({Pred.daily.tar.glm=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm')) %do%
     {
-      if(colnames(newdata)[ii]%in%id.fctr)
-      {
-        id=match(colnames(newdata)[ii],names(DAT))
-        if(!is.na(id))
-        {
-          dummy=sort(table(DAT[,id]))
-          newdata[,ii]= factor(names(dummy[length(dummy)]),levels(DAT[,id]))
-        }
-      }
-      if(colnames(newdata)[ii]%in%id.cont)
-      {
-        id=match(colnames(newdata)[ii],names(DAT))
-        newdata[,ii]= mean(DAT[,id])
-      }
-    }
-    nms.coef=names(unlist(dummy.coef(MOD)))
-    pred.var=sapply(strsplit(nms.coef[grepl(pred.term, nms.coef)], paste(pred.term,".",sep="")), "[", 2)
-    pred.dat.pos=data.frame(factor(pred.var,levels=pred.var))
-    colnames(pred.dat.pos)=pred.term
-    newdata=cbind(pred.dat.pos,newdata)
-    
-    a=predict(MOD,newdata=newdata, type="response",se.fit=T)
-    
-    newdata=newdata%>%mutate(lower.CL=a$fit-1.96*a$se.fit,
-                             upper.CL=a$fit+1.96*a$se.fit,
-                             response=exp(a$fit+(a$se.fit^2)/2),  #apply bias correction for log transf
-                             lower.CL=exp(lower.CL+(a$se.fit^2)/2),
-                             upper.CL=exp(upper.CL+(a$se.fit^2)/2))%>%
-      select(c(finyear,response,lower.CL,upper.CL))
-    return(newdata)
-  }
-  cl <- makeCluster(detectCores()-1)
-  registerDoParallel(cl)
-  system.time({Pred.daily.tar.glm=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
-    {
-      return(pred.fun_pred.glm(MOD=Stand.out.daily[[s]]$res,DAT=Stand.out.daily[[s]]$DATA,
-                               pred.term='finyear',ALL.terms=Predictors_daily))
+      return(fn.MC.delta.cpue(BiMOD=Stand.out.daily[[s]]$Bi$res,
+                              MOD=Stand.out.daily[[s]]$Pos$res,
+                              BiData=Stand.out.daily[[s]]$Bi$DATA%>%mutate(LNeffort=LN.effort),
+                              PosData=Stand.out.daily[[s]]$Pos$DATA,
+                              niter=Niter,
+                              pred.term='finyear',
+                              ALL.terms=c(Predictors_daily)))
     }
   })
   names(Pred.daily.tar.glm)=names(SP.list)[Tar.sp]
   stopCluster(cl)
   
   #relative glm and gam standardised
-  fn.fig("Figure 4.Annual_Index_glm_gam.stand",1600, 2400)    
+  fn.fig("Figure.Annual_Index_glm_gam.stand",1200, 2400)    
   par(mfrow=c(4,1),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
   for(s in 1:length(Tar.sp))
   {
@@ -5730,31 +5578,64 @@ if(Model.run=="First")
   }
 }
 
-
+#ACA
 #   4.22.9 Show effects for other terms 
 if(Model.run=="First")
 {
-  #Predict vessel based on emmeans (formerly lsmeans) considering log bias corr if required
+  
   cl <- makeCluster(detectCores()-1)
   registerDoParallel(cl)
-  #monthly          takes 80 sec
-  system.time({Pred.vess=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
-    {
-      d=Stand.out[[s]]$DATA   #note: need data as global for ref_grid
-      return(pred.fun(MOD=Stand.out[[s]]$res,biascor="YES",PRED="vessel",Pred.type="link"))
-      rm(d)
-    }
-  })
-  #Daily              takes 70 sec
-  system.time({Pred.vess.daily=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
-    {
-      d=Stand.out.daily[[s]]$DATA
-      return(pred.fun(MOD=Stand.out.daily[[s]]$res.gam,biascor="YES",PRED="vessel",Pred.type="link"))
-      rm(d)
-    }
-  })
+  
+  #Predict vessel effect
+  if(Stand.approach=="Qualif.level")
+  {
+    #emmeans (formerly lsmeans) considering log bias corr if required
+      #monthly          takes 80 sec
+      system.time({Pred.vess=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
+        {
+          d=Stand.out[[s]]$DATA   #note: need data as global for ref_grid
+          return(pred.fun(MOD=Stand.out[[s]]$res,biascor="YES",PRED="vessel",Pred.type="link"))
+          rm(d)
+        }
+      })
+      #Daily              takes 70 sec
+      system.time({Pred.vess.daily=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
+        {
+          d=Stand.out.daily[[s]]$DATA
+          return(pred.fun(MOD=Stand.out.daily[[s]]$res.gam,biascor="YES",PRED="vessel",Pred.type="link"))
+          rm(d)
+        }
+      })
+    
+  }
+  if(Stand.approach=="Delta")  
+  {
+    #monthly          takes 80 sec
+    system.time({Pred.vess=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm')) %do%
+      {
+        return(fn.MC.delta.cpue(BiMOD=Stand.out[[s]]$Bi$res,
+                                MOD=Stand.out[[s]]$Pos$res,
+                                BiData=Stand.out[[s]]$Bi$DATA%>%mutate(LNeffort=LN.effort),
+                                PosData=Stand.out[[s]]$Pos$DATA,
+                                niter=Niter,
+                                pred.term='vessel',
+                                ALL.terms=Predictors_monthly))
+      }
+    })
+    #Daily              takes 70 sec
+    system.time({Pred.vess.daily=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm')) %do%
+      {
+        return(fn.MC.delta.cpue(BiMOD=Stand.out.daily[[s]]$Bi$res.gam,
+                                MOD=Stand.out.daily[[s]]$Pos$res.gam,
+                                BiData=Stand.out.daily[[s]]$Bi$DATA%>%mutate(LNeffort=LN.effort),
+                                PosData=Stand.out.daily[[s]]$Pos$DATA,
+                                niter=Niter,
+                                pred.term='vessel',
+                                ALL.terms=c(Predictors_daily,'long10.corner','lat10.corner')))
+      }
+    })
+  }
   names(Pred.vess)=names(Pred.vess.daily)=names(SP.list)[Tar.sp]
-  stopCluster(cl)
   fn.fig("Figure 2.Vessel effect",2000, 2400)    
   par(mfrow=c(4,2),mar=c(1,2,1.5,2),oma=c(2.5,2.5,.1,.2),las=1,mgp=c(1.9,.7,0))
   for(s in 1:length(Pred.vess))
@@ -5763,6 +5644,10 @@ if(Model.run=="First")
     Mon.dat=Pred.vess[[s]]
     LgND="NO"
     Mon.dat$vessel=1:nrow(Mon.dat)
+    Mn=mean(Mon.dat$response)
+    Mon.dat=Mon.dat%>%mutate(response=response/Mn,
+                     lower.CL=lower.CL/Mn,
+                     upper.CL=upper.CL/Mn)
     if(s==1)LgND="YES"
     Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="vessel",add.lines="NO")
     if(s==1) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
@@ -5771,38 +5656,71 @@ if(Model.run=="First")
     Daily.dat=Pred.vess.daily[[s]]
     LgND="NO"
     Daily.dat$vessel=1:nrow(Daily.dat)
+    Mn=mean(Daily.dat$response)
+    Daily.dat=Daily.dat%>%mutate(response=response/Mn,
+                             lower.CL=lower.CL/Mn,
+                             upper.CL=upper.CL/Mn)
     Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="vessel",add.lines="NO")
     if(s==1) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
     mtext( Nms.sp[Tar.sp[s]],4,line=1,las=3,cex=1.5)
   }
   mtext("Vessel",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-  mtext("CPUE (kg/ km gillnet hour)",side=2,line=0.5,font=1,las=0,cex=1.5,outer=T)
+  mtext("Relative CPUE",side=2,line=0.5,font=1,las=0,cex=1.5,outer=T)
   dev.off()
   
   
-  #Predict month based on emmeans (formerly lsmeans) considering log bias corr if required
-  cl <- makeCluster(detectCores()-1)
-  registerDoParallel(cl)
+  #Predict month effect
+  if(Stand.approach=="Qualif.level")
+  {
+    #emmeans (formerly lsmeans) considering log bias corr if required
+      #monthly          takes 80 sec
+    system.time({Pred.month=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
+      {
+        d=Stand.out[[s]]$DATA   #note: need data as global for ref_grid
+        return(pred.fun(MOD=Stand.out[[s]]$res,biascor="YES",PRED="month",Pred.type="link"))
+        rm(d)
+      }
+    })
+      #Daily              takes 70 sec
+    system.time({Pred.month.daily=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
+      {
+        d=Stand.out.daily[[s]]$DATA
+        return(pred.fun(MOD=Stand.out.daily[[s]]$res.gam,biascor="YES",PRED="month",Pred.type="link"))
+        rm(d)
+      }
+    })
+  }
+  if(Stand.approach=="Delta")  
+  {
     #monthly          takes 80 sec
-  system.time({Pred.month=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
-    {
-      d=Stand.out[[s]]$DATA   #note: need data as global for ref_grid
-      return(pred.fun(MOD=Stand.out[[s]]$res,biascor="YES",PRED="month",Pred.type="link"))
-      rm(d)
-    }
-  })
+    system.time({Pred.month=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm')) %do%
+      {
+        return(fn.MC.delta.cpue(BiMOD=Stand.out[[s]]$Bi$res,
+                                MOD=Stand.out[[s]]$Pos$res,
+                                BiData=Stand.out[[s]]$Bi$DATA%>%mutate(LNeffort=LN.effort),
+                                PosData=Stand.out[[s]]$Pos$DATA,
+                                niter=Niter,
+                                pred.term='month',
+                                ALL.terms=Predictors_monthly))
+      }
+    })
     #Daily              takes 70 sec
-  system.time({Pred.month.daily=foreach(s=Tar.sp,.packages=c('dplyr','emmeans')) %do%
-    {
-      d=Stand.out.daily[[s]]$DATA
-      return(pred.fun(MOD=Stand.out.daily[[s]]$res.gam,biascor="YES",PRED="month",Pred.type="link"))
-      rm(d)
-    }
-  })
+    system.time({Pred.month.daily=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm')) %do%
+      {
+        return(fn.MC.delta.cpue(BiMOD=Stand.out.daily[[s]]$Bi$res.gam,
+                                MOD=Stand.out.daily[[s]]$Pos$res.gam,
+                                BiData=Stand.out.daily[[s]]$Bi$DATA%>%mutate(LNeffort=LN.effort),
+                                PosData=Stand.out.daily[[s]]$Pos$DATA,
+                                niter=Niter,
+                                pred.term='month',
+                                ALL.terms=c(Predictors_daily,'long10.corner','lat10.corner')))
+      }
+    })
+  }
   names(Pred.month)=names(Pred.month.daily)=names(SP.list)[Tar.sp]
   stopCluster(cl)
   
-  fn.fig("Figure.Monthly effect",2000, 2400)    
+  fn.fig("Figure.Monthly effects",2000, 2400)    
   par(mfrow=c(4,2),mar=c(1,2,1.5,2),oma=c(2.5,2.5,.1,.2),las=1,mgp=c(1.9,.7,0))
   for(s in 1:length(Pred.vess))
   {
@@ -5810,21 +5728,29 @@ if(Model.run=="First")
     Mon.dat=Pred.month[[s]]
     LgND="NO"
     if(s==1)LgND="YES"
+    Mn=mean(Mon.dat$response)
+    Mon.dat=Mon.dat%>%mutate(response=response/Mn,
+                             lower.CL=lower.CL/Mn,
+                             upper.CL=upper.CL/Mn)
     Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="month",add.lines="YES")
     if(s==1) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
     
     #Daily
     Daily.dat=Pred.month.daily[[s]]
     LgND="NO"
+    Mn=mean(Daily.dat$response)
+    Daily.dat=Daily.dat%>%mutate(response=response/Mn,
+                             lower.CL=lower.CL/Mn,
+                             upper.CL=upper.CL/Mn)
     Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="month",add.lines="YES")
     if(s==1) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
     mtext( Nms.sp[Tar.sp[s]],4,line=1,las=3,cex=1.5)
   }
   mtext("Month",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-  mtext("CPUE (kg/ km gillnet hour)",side=2,line=0,font=1,las=0,cex=1.5,outer=T)
+  mtext("Relative CPUE",side=2,line=0,font=1,las=0,cex=1.5,outer=T)
   dev.off()
   
-  
+  #ACA
   #Predict spatial cpue (monthly blocks and daily lat/long)
   cl <- makeCluster(detectCores()-1)
   registerDoParallel(cl)
@@ -6093,7 +6019,7 @@ system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))
 ##############--- 5. EXPORT INDICES---###################
 
 setwd("C:/Matias/Analyses/Catch and effort/Data_outs")
-Sel.vars=c("finyear","response","SE","lower.CL","upper.CL")
+Sel.vars=c("finyear","response","CV","lower.CL","upper.CL")
 nams.Sel.vars=c("Finyear","Mean","CV","LOW.CI","UP.CI")
  
 #Absolute scale 
@@ -6203,7 +6129,6 @@ for (s in nnn[-sort(Tar.sp)])
   {
     a=subset(Pred.normlzd[[s]],select=Sel.vars.other)   
     names(a)=nams.Sel.vars
-    a$CV=a$CV/a$Mean
     write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
   }
   
@@ -6211,7 +6136,6 @@ for (s in nnn[-sort(Tar.sp)])
   {
     a=subset(Pred.daily.normlzd[[s]],select=Sel.vars.other)   
     names(a)=nams.Sel.vars
-    a$CV=a$CV/a$Mean
     write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
   }
   rm(a)
