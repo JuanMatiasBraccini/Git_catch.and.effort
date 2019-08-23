@@ -25,6 +25,24 @@ Current.yr="2017-18"
 Percent.fin.of.livewt=0.03
 TDGDLF.lat.range=c(-26,-40)
 
+#bring in data from 1.Manipulate data.R
+setwd("C:/Matias/Analyses/Catch and effort/Data_outs")
+
+Data.monthly=read.csv("Data.monthly.csv",stringsAsFactors = F)
+Rec.fish.catch=read.csv("Rec.fish.catch.csv",stringsAsFactors = F)
+Data.current.Sofar=read.csv("Data.current.Sofar.csv",stringsAsFactors = F)
+PRICES=read.csv("PRICES.csv",stringsAsFactors = F)
+Total.effort.days.monthly=read.csv("Annual.total.eff.days.csv",stringsAsFactors = F)
+Total.effort.hours.monthly=read.csv("Annual.total.eff.hours.csv",stringsAsFactors = F)
+Total.effort.zone.hours.monthly=read.csv("Annual.zone.eff.hours.csv",stringsAsFactors = F)
+Total.effort.zone.days.monthly=read.csv("Annual.zone.eff.days.csv",stringsAsFactors = F)
+TEPS.current=read.csv("TEPS.current.csv",stringsAsFactors = F)
+Suite=read.csv("suite.csv",stringsAsFactors = F)$Suite
+TEPS.pre.current=read.csv("TEPS.pre.current.csv",stringsAsFactors = F)
+Results.pre.2013=read.csv("Results.pre.2013.csv",stringsAsFactors = F)
+
+
+
 Ray.species=25000:31000
 Elasmo.species=5001:31000
 Gummy=17001;Dusky_whaler=c(18003,18001);Whiskery=17003;Sandbar=18007;Hammerheads=19000;
@@ -74,21 +92,6 @@ Catch.range.key.species=data.frame(SPECIES=c("Gummy","Whiskery","Bronzy.Dusky","
                                    Max.catch=c(450,225,300,120))%>%
                         mutate(SPECIES=as.character(SPECIES))
 
-#bring in data from 1.Manipulate data.R
-setwd("C:/Matias/Analyses/Catch and effort/Data_outs")
-
-Data.monthly=read.csv("Data.monthly.csv",stringsAsFactors = F)
-Rec.fish.catch=read.csv("Rec.fish.catch.csv",stringsAsFactors = F)
-Data.current.Sofar=read.csv("Data.current.Sofar.csv",stringsAsFactors = F)
-PRICES=read.csv("PRICES.csv",stringsAsFactors = F)
-Total.effort.days.monthly=read.csv("Annual.total.eff.days.csv",stringsAsFactors = F)
-Total.effort.hours.monthly=read.csv("Annual.total.eff.hours.csv",stringsAsFactors = F)
-Total.effort.zone.hours.monthly=read.csv("Annual.zone.eff.hours.csv",stringsAsFactors = F)
-Total.effort.zone.days.monthly=read.csv("Annual.zone.eff.days.csv",stringsAsFactors = F)
-TEPS.current=read.csv("TEPS.current.csv",stringsAsFactors = F)
-Suite=read.csv("suite.csv",stringsAsFactors = F)$Suite
-TEPS.pre.current=read.csv("TEPS.pre.current.csv",stringsAsFactors = F)
-Results.pre.2013=read.csv("Results.pre.2013.csv",stringsAsFactors = F)
 
   
 handle.Sofar=paste("C:/Matias/Analyses/Catch and effort/State of fisheries/",Current.yr,sep="")
@@ -770,83 +773,85 @@ san.mon=read.csv(paste(HNDL,"Sandbar Shark.annual.abundance.basecase.monthly_rel
 san.daily=read.csv(paste(HNDL,"Sandbar Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
 
 #plot cpues
-Plot.cpue=function(cpuedata,ADD.LGND,whereLGND,COL,CxS,Yvar)    
+Plot.cpue.delta=function(cpuedata,cpuedata.daily,CL,CxS,
+                         Yvar,add.lines,firstyear,ADD.nomnl)    #plot cpues
 {
-  if(inherits(cpuedata, "list")) 
+  if(length(cpuedata)>3)tc=seq(-1.5*0.15,1.5*0.15,length.out=length(cpuedata))
+  if(length(cpuedata)<=3)tc=seq(-.5*0.25,.5*0.25,length.out=length(cpuedata))
+  
+  Yrs=c(as.numeric(substr(cpuedata[[1]][,match(Yvar,names(cpuedata[[1]]))],1,4)),
+        as.numeric(substr(cpuedata.daily[[1]][,match(Yvar,names(cpuedata.daily[[1]]))],1,4)))
+  Tops=c(unlist(lapply(cpuedata, `[`, "upper.CL")),
+         unlist(lapply(cpuedata.daily, `[`, "upper.CL")),
+         ADD.nomnl$response)
+  ymax=max(Tops)
+  Quant=quantile(Tops,probs=c(.9,1))
+  if(diff(Quant)>3) ymax=quantile(Tops,probs=.99)
+  
+  
+  plot(Yrs,Yrs,ylim=c(0,ymax),xlim=c(firstyear,max(Yrs)),ylab="",xlab="",
+       col="transparent",cex.axis=1.25)
+  for(l in 1:length(cpuedata))
   {
-    if(length(cpuedata)>3)tc=seq(-1.5*0.15,1.5*0.15,length.out=length(cpuedata))
-    if(length(cpuedata)<3)tc=seq(-.5*0.15,.5*0.15,length.out=length(cpuedata))
-    ymax = max(unlist(lapply(cpuedata, `[`, "upper.CL")))
-    Yrs=as.numeric(substr(cpuedata[[1]][,match(Yvar,names(cpuedata[[1]]))],1,4))
-    plot(Yrs,Yrs,ylim=c(0,ymax),ylab="",xlab="",col="transparent",cex.axis=1.25)
-    if(COL=='color')CL=c("black","forestgreen","dodgerblue","red","bisque3")
-    if(COL=='grey') CL=gray.colors(length(cpuedata),start=0.2,end=0.65)
-    for(l in 1:length(cpuedata))
+    aaa=cpuedata[[l]]%>%mutate(finyear=as.numeric(substr(finyear,1,4)))
+    aaa.daily=cpuedata.daily[[l]]%>%mutate(finyear=as.numeric(substr(finyear,1,4)))
+    
+    msn=Yrs[which(!Yrs%in%c(aaa$finyear,aaa.daily$finyear))]
+    if(length(msn)>0)
     {
-      aaa=cpuedata[[l]]
-      aaa$finyear=as.character(aaa$finyear)
-      msn=Yrs[which(!Yrs%in%as.numeric(substr(aaa$finyear,1,4)))]
-      if(length(msn)>0)
-      {
-        ad=aaa[length(msn),]
-        ad[,]=NA
-        ad$finyear=msn
-        aaa=rbind(aaa,ad)
-        aaa=aaa[order(aaa$finyear),]
-      }
-      
-      with(aaa,
-           {
-             points(Yrs+tc[l], response, "o", pch=16, lty=2, col=CL[l],cex=CxS)
-             arrows(x0=Yrs+tc[l], y0=lower.CL, 
-                    x1=Yrs+tc[l], y1=upper.CL, 
-                    code=3, angle=90, length=0.05, col=CL[l])
-           })
-      if(ADD.LGND=="YES") legend(whereLGND,names(cpuedata),bty='n',pch=16,col=CL,cex=1.45)
+      ad=aaa[length(msn),]
+      ad[,]=NA
+      ad$finyear=msn
+      aaa=rbind(aaa,ad)
+      aaa=aaa[order(aaa$finyear),]
     }
+    with(aaa,
+         {
+           if(add.lines=="NO") points(finyear+tc[l], response, pch=19, lty=2, col=CL[l],cex=CxS)
+           if(add.lines=="YES") points(finyear+tc[l], response, "o", pch=19, lty=2, col=CL[l],cex=CxS)
+           arrows(x0=finyear+tc[l], y0=lower.CL, 
+                  x1=finyear+tc[l], y1=upper.CL, 
+                  code=3, angle=90, length=0.05, col=CL[l])
+         })
+    with(aaa.daily,
+         {
+           if(l==1)polygon(x=c(finyear[1]-.5,finyear[length(finyear)]+.5,finyear[length(finyear)]+.5,finyear[1]-.5),
+                           y=c(0,0,ymax*.99,ymax*.99),col='grey92',border="transparent")
+           arrows(x0=finyear+tc[l], y0=lower.CL, 
+                  x1=finyear+tc[l], y1=upper.CL, 
+                  code=3, angle=90, length=0.05, col=CL[l])
+           if(add.lines=="NO") points(finyear+tc[l], response, pch=21, lty=2, col=CL[l],cex=CxS)
+           if(add.lines=="YES") points(finyear+tc[l], response, "o", pch=21,bg="white", lty=2, col=CL[l],cex=CxS)
+         })
+  }
+  if(!is.null(ADD.nomnl))
+  {
+    with(ADD.nomnl,points(as.numeric(substr(finyear,1,4))+.1,response,pch=19,col=rgb(.1,.1,.1,alpha=.2),cex=CxS)) 
   }
   
-  if(inherits(cpuedata, "data.frame"))
-  {
-    ymax = max(cpuedata$UP.CI)
-    Yrs=as.numeric(substr(cpuedata[,match(Yvar,names(cpuedata))],1,4))
-    plot(Yrs,Yrs,ylim=c(0,ymax),ylab="",xlab="",col="transparent",cex.axis=1.25)
-    CL="black"
-    points(Yrs, cpuedata$Mean, "o", pch=16, lty=2, col=CL,cex=CxS)
-    arrows(x0=Yrs, y0=cpuedata$LOW.CI, 
-           x1=Yrs, y1=cpuedata$UP.CI, 
-           code=3, angle=90, length=0.05, col=CL)
-  }
 }
 
-jpeg(file="Figure All.cpues.jpeg",width = 2200, height = 2400,units = "px", res = 300)
 Pred.creep=list(whis.mon,gum.mon,dus.mon,san.mon)
 Pred.daily.creep=list(whis.daily,gum.daily,dus.daily,san.daily)
 SPECIES.vec=c("Whiskery shark","Gummy shark","Dusky shark","Sandbar shark")
-par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
+
+jpeg(file="Figure All.cpues.jpeg",width = 1800, height = 2400,units = "px", res = 300)
+par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
 for(s in 1:length(Pred.creep))
 {
-  #Monthly
-  Mon.dat=Pred.creep[[s]]
-  LgND="NO"
-  if(s==1)LgND="YES"
-  Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="Finyear")
-  if(s==1) mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
+  dummy=Pred.creep[[s]]
+  colnames(dummy)=tolower(colnames(dummy))
+  dummy=dummy%>%rename(response=mean,upper.CL=up.ci,lower.CL=low.ci)
+  dummy.daily=Pred.daily.creep[[s]]
+  colnames(dummy.daily)=tolower(colnames(dummy.daily))
+  dummy.daily=dummy.daily%>%rename(response=mean,upper.CL=up.ci,lower.CL=low.ci)
   
-  #Daily
-  Daily.dat=Pred.daily.creep[[s]]
-  LgND="NO"
-  Plot.cpue(cpuedata=Daily.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="Finyear")
-  if(s==1) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
-  mtext(SPECIES.vec[s],4,line=1,las=3,cex=1.5)
+  Plot.cpue.delta(cpuedata=list(Standardised=dummy),
+                  cpuedata.daily=list(Standardised=dummy.daily),
+                  CL=1,CxS=1.5,Yvar="finyear",add.lines="YES",firstyear=1975,
+                  ADD.nomnl=NULL)
+  legend("topright",SPECIES.vec[s],bty='n',cex=1.5)
 }
 mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-mtext("CPUE (kg/ km gillnet hour)",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
+mtext("RELATIVE CPUE",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
 dev.off()
-
-
-
-
-
-
-
