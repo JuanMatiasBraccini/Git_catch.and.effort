@@ -125,7 +125,7 @@ source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
 
 ##############--- 1. DATA SECTION ---###################
 
-setwd('C:/Matias/Analyses/Catch and effort/Data_outs')
+setwd('C:/Matias/Analyses/Data_outs')
 Data.daily.original=read.csv("Data.daily.original.csv")
 Data.monthly.GN=read.csv("Data.monthly.GN.csv")
 Data.daily.GN=read.csv("Data.daily.GN.csv")
@@ -6298,7 +6298,7 @@ system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))
 
 ##############--- 5. EXPORT INDICES---###################
 
-setwd("C:/Matias/Analyses/Catch and effort/Data_outs")
+setwd("C:/Matias/Analyses/Data_outs")
 Sel.vars=c("finyear","response","CV","lower.CL","upper.CL")
 nams.Sel.vars=c("Finyear","Mean","CV","LOW.CI","UP.CI")
  

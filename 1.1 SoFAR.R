@@ -26,7 +26,7 @@ Percent.fin.of.livewt=0.03
 TDGDLF.lat.range=c(-26,-40)
 
 #bring in data from 1.Manipulate data.R
-setwd("C:/Matias/Analyses/Catch and effort/Data_outs")
+setwd("C:/Matias/Analyses/Data_outs")
 
 Data.monthly=read.csv("Data.monthly.csv",stringsAsFactors = F)
 Rec.fish.catch=read.csv("Rec.fish.catch.csv",stringsAsFactors = F)
@@ -755,7 +755,7 @@ dev.off()
 
 #Figures 5-8. Standardised cpue (zones combined)
   #read in data
-HNDL="C:/Matias/Analyses/Catch and effort/Data_outs/"
+HNDL="C:/Matias/Analyses/Data_outs/"
 #Whiskery
 whis.mon=read.csv(paste(HNDL,"Whiskery Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
 whis.daily=read.csv(paste(HNDL,"Whiskery Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)

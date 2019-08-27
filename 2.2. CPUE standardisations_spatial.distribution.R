@@ -1,7 +1,7 @@
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240) 
 
-setwd('C:/Matias/Analyses/Catch and effort/Data_outs')
+setwd('C:/Matias/Analyses/Data_outs')
 
 #vip: use WHOLE catch and effort data set (south and north) to show entire distribution across WA (though may have issues
 #of spatial resolution if north doesn't have block10....)
