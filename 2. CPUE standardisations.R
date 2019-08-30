@@ -259,7 +259,8 @@ compare.glm.gam_spatial="NO"
 #1.2.3 Reporting controls
 
 #Control if doing influence plots (Bentley et al 2012)
- do.influence="NO"
+if(Model.run=="First")  do.influence="YES"
+if(Model.run=="Standard")  do.influence="NO"
 
 
 #control color of plots
@@ -937,28 +938,6 @@ fn.box.plt.year=function(d)
   legend("topright",paste(vsls),bty='n',pch=19,col=CL)
 }
 
-#calculate effective as per McAuley
-fn.effective=function(cpuedata)
-{
-  out1 = cpuedata %>%
-    group_by(FINYEAR) %>%
-    summarise(My = mean(Catch.Target),
-              Mx = mean(Km.Gillnet.Hours.c),
-              Sy = sd(Catch.Target),
-              Sx = sd(Km.Gillnet.Hours.c),
-              r = cor(Catch.Target, Km.Gillnet.Hours.c),
-              n = length(Catch.Target)) %>%
-    as.data.frame
-  out1$r[is.na(out1$r)] = 0
-  out1 = out1 %>%
-    mutate(method = "Folly",
-           mean=My/Mx,
-           se =  sqrt(1/n*(My^2*Sx^2/(Mx^4) + Sy^2/(Mx^2) - 2*My*r*Sx*Sy/(Mx^3))),
-           lowCL = mean - 1.96*se,
-           uppCL = mean + 1.96*se) %>%
-    as.data.frame
-  return(out1)
-}
 
 #calculate 4 different nominal cpues and choose data based on qualification level (90% of years catch)
 fn.ainslie=function(dat,Ktch.targt,Effrt,explr,QL_prop_ktch,Prop.Malcolm,cpue.units,spname,BLks,VesL,Type)
@@ -2514,8 +2493,6 @@ Fig.CDI.paper.fn=function(store,SCALER,termS)
   }
 }
 
-
-
 Pos.Diag.fn=function(MODEL,SPECIES,M)   #function for positive catch diagnostics
 {
   RES=MODEL$residuals   #residuals
@@ -3694,8 +3671,6 @@ for(s in Tar.sp)
                 mutate(effort=Km.Gillnet.Hours.c,
                        catch=Catch.Target)
   colnames(DAT)=tolower(colnames(DAT))
-  DAT=DAT
-  #DAT=DAT%>%filter(vessel%in%VES.used[[s]] & blockx%in%as.numeric(BLKS.used[[s]]))
   Effective[[s]]=fn.out.nominal(d=DAT,method="Nominal")
   
   #Daily
@@ -3703,8 +3678,6 @@ for(s in Tar.sp)
                   mutate(effort=Km.Gillnet.Hours.c,
                          catch=Catch.Target)
   colnames(DAT)=tolower(colnames(DAT))
-
-  #DAT=DAT%>%filter(vessel%in%VES.used.daily[[s]] & blockx%in%as.numeric(BLKS.used.daily[[s]]))
   Effective_daily[[s]]=fn.out.nominal(d=DAT,method="Nominal")
 }
 
@@ -6019,7 +5992,7 @@ if(do.influence=="YES")
   #Compare influence of all terms
   LWD=3
   LTY.col=c("black","grey45","grey20","grey85","grey55","grey70")
-  Whr=c("bottomright","bottomright","bottomright","bottomleft")
+  Whr=c("topleft","topleft","topleft","topright")
   Whr.d1=c("bottomleft","bottomleft","bottomleft","topright")
   Whr.d2=c("topright","topright","topright","bottom")
   
@@ -6046,14 +6019,18 @@ if(do.influence=="YES")
   mtext("Influence",side=2,line=1.25,font=1,las=0,cex=1.5,outer=T)
   dev.off()
   
-  #Show sandbar monthly CDI
-  fn.fig("Figure 6.Sandbar_CDI",2400, 1200)
-  par(mfcol=c(2,3),mar=c(1,1,.5,1.25),oma=c(2,4,1,.2),las=1,mgp=c(1.9,.5,0))
-  Fig.CDI.paper.fn(store=Store.Influence$'Sandbar Shark'$store,
-                   SCALER=2.5,termS=c("vessel","blockx","month"))
-  mtext("Financial year                   Coefficient    ",
-        side=2,line=2.8,cex=1,las=3,outer=T)
-  dev.off()
+  #Show each species monthly CDI
+  for ( s in 1:length(Tar.sp))
+  {
+    fn.fig(paste("Figure 6.",Nms.sp[Tar.sp[s]],"_CDI",sep=''),2400, 1200)
+    par(mfcol=c(2,3),mar=c(1,1,.5,1.25),oma=c(2,4,1,.2),las=1,mgp=c(1.9,.5,0))
+    Fig.CDI.paper.fn(store=Store.Influence[[s]]$store,
+                     SCALER=2.5,termS=c("vessel","blockx","month"))
+    mtext("Financial year                   Coefficient    ",
+          side=2,line=2.8,cex=1,las=3,outer=T)
+    dev.off()
+  }
+
   
 }
 
