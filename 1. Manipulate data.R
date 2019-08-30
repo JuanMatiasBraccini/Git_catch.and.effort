@@ -10512,7 +10512,7 @@ if(do.Parks.Australia=="YES")
       summarise(Prop=sum(Prop))%>%
       data.frame%>%
       arrange(new.sp)
-    with(dd,barplot(Prop,horiz = T,xlim=c(0,yMx),col=colr,names.arg=new.sp,cex.names=CX.nm,las=2))
+    with(dd,barplot(Prop,horiz = T,col=colr,names.arg=new.sp,cex.names=CX.nm,las=2))
     box()
   }
   fn.ktch.comp=function(ktch,what,Min.overlap)
