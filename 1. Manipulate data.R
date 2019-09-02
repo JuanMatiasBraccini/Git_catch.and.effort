@@ -8328,9 +8328,6 @@ if(First.run=="YES")
 }
 
 
-
-
-
 #------ G 2. DATA REQUESTS ------
 hndl="C:/Matias/Analyses/Catch and effort/Data_Resquests"
 
@@ -10520,16 +10517,17 @@ if(do.Parks.Australia=="YES")
     ktch=ktch%>%mutate(SNAME=tolower(SNAME),
                        SNAME=ifelse(SNAME%in%c("shark, spinner (long-nose grey)",
                                                "shark, spinner (long-nose grey"),"shark, spinner",
-                                    ifelse(SNAME=="shark, thickskin (sandbar)","shark, sandbar",
-                                           ifelse(SNAME%in%c("shark, bronze whaler","dusky whaler oversize",
-                                                             "shark, bronze whaler (dusky)"),"shark, dusky",         
-                                                  ifelse(SNAME=="shark, golden, copper whaler","shark, copper",
-                                                         ifelse(SNAME=="jewfish, westralian (dhufish)","wa dhufish",
-                                                                ifelse(SNAME=="foxfish, hogfish, pigfish","foxfish",
-                                                                       ifelse(SNAME=="trevally, other (skippy)","trevally",
-                                                                              ifelse(SNAME=="snapper, nor_west (sp emperor)","spangled emperor",
-                                                                                     ifelse(SNAME=="footballer, ftbllr sweep, bndd","footballer sweep",
-                                                                                            ifelse(SNAME=="samson fish, sea kingfish","samson fish",SNAME)))))))))))
+                             ifelse(SNAME=="shark, thickskin (sandbar)","shark, sandbar",
+                             ifelse(SNAME%in%c("shark, bronze whaler","dusky whaler oversize",
+                                               "shark, bronze whaler (dusky)"),"shark, dusky",         
+                             ifelse(SNAME=="shark, golden, copper whaler","shark, copper",
+                             ifelse(SNAME=="jewfish, westralian (dhufish)","wa dhufish",
+                             ifelse(SNAME=="foxfish, hogfish, pigfish","foxfish",
+                             ifelse(SNAME=="trevally, other (skippy)","trevally",
+                             ifelse(SNAME=="salmon, western australian","salmon, australian",
+                             ifelse(SNAME=="snapper, nor_west (sp emperor)","spangled emperor",
+                             ifelse(SNAME=="footballer, ftbllr sweep, bndd","footballer sweep",
+                             ifelse(SNAME=="samson fish, sea kingfish","samson fish",SNAME))))))))))))
     
     
     
@@ -10539,9 +10537,9 @@ if(do.Parks.Australia=="YES")
     fn.fig(paste(hndl,"/Parks Australia/Catch_composition_GN_LL_overall",what,sep=""),2400,1600)
     par(mfcol=c(1,2),mar=c(2,9,1,.1),oma=c(1,.1,.5,.3),mgp=c(1.5,.5,0))
     fn.br.plt(dd=dat%>%filter(METHOD=='GN'),TOP=20,yMx=1,CX.nm=1)
-    mtext(paste("Gillnet (",round(sum(subset(dat,METHOD=='GN')$Total)/1000,1)," tonnes)",sep=""),3,cex=1)
+    mtext(paste("Gillnet (",round(sum(subset(dat,METHOD=='GN')$Total)/1000,0)," tonnes)",sep=""),3,cex=1)
     fn.br.plt(dd=dat%>%filter(METHOD=='LL'),TOP=20,yMx=1,CX.nm=1)
-    mtext(paste("Longline (",round(sum(subset(dat,METHOD=='LL')$Total)/1000,1)," tonnes)",sep=""),3,cex=1)
+    mtext(paste("Longline (",round(sum(subset(dat,METHOD=='LL')$Total)/1000,0)," tonnes)",sep=""),3,cex=1)
     mtext("Proportion of total catch",1,outer=T,line=0,cex=1.25) 
     dev.off()
     
@@ -10624,6 +10622,54 @@ if(do.Parks.Australia=="YES")
   fn.ktch.comp(ktch=Data.monthly%>%filter(METHOD%in%c('GN',"LL"))%>%select(Same.return,
                                                                            FINYEAR,METHOD,zone,BLOCKX,SPECIES,SNAME,LIVEWT.c,MONTH),
                what="_Monthly",Min.overlap=18)
+  
+  #Hook info
+  d=Effort.monthly%>%
+    filter(METHOD=="LL")%>%
+    select(c(Same.return,HOURS.c,HOOKS,SHOTS.c))%>%
+    mutate(dat="Monthly")%>%
+    distinct(Same.return,.keep_all=T)
+  d1=Data.daily.original%>%
+    filter(METHOD=="LL")%>%
+    select(c(DSNo,TSNo,SNo,HOURS,HOOKS,SHOTS,
+             HookSize,HookType))%>%
+    mutate(dat="Daily",Same.return.SNo=paste(DSNo,TSNo,SNo))%>%
+    distinct(Same.return.SNo,.keep_all=T)
+  colnames(d)=tolower(colnames(d))
+  colnames(d1)=tolower(colnames(d1))
+  d1$hours.c=d1$hours
+  d1$shots.c=d1$shots
+  
+  fn.fig(paste(hndl,"/Parks Australia/longline.number of hooks",sep=""),2400,1600)
+  rbind(d%>%select(dat,hooks),d1%>%select(dat,hooks)) %>% 
+    gather(key=dat, value=hooks) %>% 
+    ggplot(aes(x=hooks,fill=dat)) + 
+    geom_histogram(position="dodge",binwidth=100)+
+    scale_fill_manual(values=c("darksalmon", "steelblue"))+
+    xlab('Number of hooks')+ylab('Frequency')+ guides(fill=guide_legend(title="Data set"))
+  dev.off()
+  
+  fn.fig(paste(hndl,"/Parks Australia/longline.soak times",sep=""),2400,1600)
+  rbind(d%>%select(dat,hours.c),d1%>%select(dat,hours.c)) %>% 
+    gather(key=dat, value=hours.c) %>% 
+    ggplot(aes(x=hours.c,fill=dat)) + 
+    geom_histogram(position="dodge",binwidth=1)+
+    scale_fill_manual(values=c("darksalmon", "steelblue"))+
+    xlab('Soak hours')+ylab('Frequency')+ guides(fill=guide_legend(title="Data set"))
+  dev.off()
+  
+  fn.fig(paste(hndl,"/Parks Australia/longline.hook size_daily only",sep=""),2400,1600)
+  subset(d1,hooksize>0) %>%
+    ggplot(aes(x=hooksize)) + 
+    geom_histogram(position="dodge",binwidth=1,fill="steelblue")+
+    xlab('Hook size')+ylab('Frequency')+
+    scale_x_continuous(breaks=6:15,
+                       labels=6:15)
+  dev.off()
+  
+  fn.fig(paste(hndl,"/Parks Australia/longline.hook type_daily only",sep=""),2400,1600)
+  ggplot(subset(d1,!is.na(hooktype)), aes(hooktype)) + geom_bar(fill="steelblue")
+  dev.off()
   
   
   #Tim Nicholas request
@@ -10833,6 +10879,8 @@ if(do.Parks.Australia=="YES")
   dev.off()
   
 }
+
+
 
 
 ########### SECTION H. ----  EXPORT TOTAL CATCH FOR REFERENCE POINT ANALYSIS --- ###########
