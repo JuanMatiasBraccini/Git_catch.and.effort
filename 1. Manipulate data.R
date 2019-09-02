@@ -10646,7 +10646,8 @@ if(do.Parks.Australia=="YES")
     ggplot(aes(x=hooks,fill=dat)) + 
     geom_histogram(position="dodge",binwidth=100)+
     scale_fill_manual(values=c("darksalmon", "steelblue"))+
-    xlab('Number of hooks')+ylab('Frequency')+ guides(fill=guide_legend(title="Data set"))
+    xlab('Number of hooks')+ylab('Frequency')+ guides(fill=guide_legend(title="Data set"))+
+    theme_grey(base_size = 22)
   dev.off()
   
   fn.fig(paste(hndl,"/Parks Australia/longline.soak times",sep=""),2400,1600)
@@ -10655,20 +10656,23 @@ if(do.Parks.Australia=="YES")
     ggplot(aes(x=hours.c,fill=dat)) + 
     geom_histogram(position="dodge",binwidth=1)+
     scale_fill_manual(values=c("darksalmon", "steelblue"))+
-    xlab('Soak hours')+ylab('Frequency')+ guides(fill=guide_legend(title="Data set"))
+    xlab('Soak hours')+ylab('Frequency')+ guides(fill=guide_legend(title="Data set"))+
+    theme_grey(base_size = 22)
   dev.off()
   
   fn.fig(paste(hndl,"/Parks Australia/longline.hook size_daily only",sep=""),2400,1600)
   subset(d1,hooksize>0) %>%
     ggplot(aes(x=hooksize)) + 
-    geom_histogram(position="dodge",binwidth=1,fill="steelblue")+
+    geom_histogram(position="dodge",binwidth=1,fill="darksalmon")+
     xlab('Hook size')+ylab('Frequency')+
     scale_x_continuous(breaks=6:15,
-                       labels=6:15)
+                       labels=6:15)+
+    theme_grey(base_size = 22)
   dev.off()
   
   fn.fig(paste(hndl,"/Parks Australia/longline.hook type_daily only",sep=""),2400,1600)
-  ggplot(subset(d1,!is.na(hooktype)), aes(hooktype)) + geom_bar(fill="steelblue")
+  ggplot(subset(d1,!is.na(hooktype)), aes(hooktype)) + geom_bar(fill="darksalmon")+
+    theme_grey(base_size = 22)+ylab('Frequency')
   dev.off()
   
   
