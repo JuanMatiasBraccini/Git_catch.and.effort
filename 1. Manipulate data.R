@@ -1360,7 +1360,7 @@ Effort.daily$LONG=Effort.daily$LongDeg+(Effort.daily$LongMin/60)
 Effort.daily=Effort.daily[,-match(c("LatDeg","LongDeg","LatMin","LongMin"),names(Effort.daily))]
 
 #Export reported depth data
-write.csv(subset(Data.daily,species%in%c(17003,17001,18003,18007)),"C:/Matias/Analyses/Catch and effort/Data_outs/Daily.log.depth.csv",row.names=F)
+write.csv(subset(Data.daily,species%in%c(17003,17001,18003,18007)),"C:/Matias/Analyses/Data_outs/Daily.log.depth.csv",row.names=F)
 
 
 # B.1. Catch Inspections             
@@ -1882,6 +1882,26 @@ fn.chk.ktch(d1=Data.monthly.original,
 #                               LANDWT*Factor.c,LIVEWT))
 # }
    
+#Export conversion factors for fishers to check
+out.ratios=F
+if(out.ratios)
+{
+  Condition.codes=data.frame(CONDITN=c("HG","WH","WF","WD","SC","FL","NU","OT","GG","HD"),
+                             Description=c("Headed and gutted","Whole","Without head, without tail and fins",
+                                           "Without head, with tail and fins","Self consumption","Filleted",
+                                           "Number of fish (no weight reported)","Other",
+                                           "Gutted and gilled","Headed"))
+  
+  out1=Data.daily%>%mutate(dummy=paste(SPECIES,CONDITN,Factor.c))%>%
+    distinct(dummy,.keep_all = T)%>%
+    filter(!SPECIES==999999 & !is.na(Factor.c) & !CONDITN%in%c("SC","NU"))%>%
+    left_join(Condition.codes,by='CONDITN')%>%
+    arrange(SPECIES)%>%
+    rename(condition=CONDITN,Species=SNAME,Conversion.factor=Factor.c)%>%
+    select(c(Species,condition,Description,Conversion.factor))
+  write.csv(out1,"C:\\Matias\\Presentations\\DoF\\AMM\\2019\\Conversion.ratios.csv",row.names = F)
+}
+
 
 
     #C.5. Update CAESS data                     #Rory's rule 1a (iii)             
@@ -7247,7 +7267,7 @@ Data.monthly.GN$Boundary.blk=with(Data.monthly.GN,
 
 #SECTION F 2. ---- EXPORT DATA FOR ASSESSMENT AND CPUE STANDARDISATION ----
 
-setwd("C:/Matias/Analyses/Catch and effort/Data_outs")
+setwd("C:/Matias/Analyses/Data_outs")
 
 #some final amendments
 crap=c("GoodsplitID","Prop.sandbar","SanBar.rep",            
@@ -7399,6 +7419,26 @@ if(First.run=="YES")
   text(5,7,"Sandbar",cex=1.5)
   text(5,4,"shark",cex=1.75)
   dev.off()
+  
+  # tiff("Catch.density.whiskery.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+  # fn1=function(x) as.numeric(as.character(cut((x-trunc(x)),breaks=seq(0,60,10)/60,labels=seq(0,50,10)/60)))
+  # a1=Data.daily%>%filter(SPECIES==17003 )%>%
+  #   mutate(LAT=abs(LAT),
+  #               LAT10=-round(trunc(LAT)+fn1(LAT),2),
+  #               LONG10=round(trunc(LONG)+fn1(LAT),2))%>%
+  #               filter(!is.na(LONG10)&!is.na(LAT10))%>%
+  #   group_by(LAT10,LONG10)%>%
+  #   summarise(LIVEWT.c=sum(LIVEWT.c))%>%
+  #   spread(LAT10,LIVEWT.c,fill=0)
+  # 
+  # a2=as.matrix(a1[,-1])       
+  # x=a1$LONG10
+  # y=as.numeric(colnames(a1)[-1])
+  # filled.contour(x,y,a2,
+  #                plot.axes = { axis(1,seq(trunc(min(x)),trunc(max(x)),by=1) )
+  #                  axis(2, seq(trunc(min(y)),trunc(max(y)),by=1))},
+  #                key.axes = axis(4, seq(round(min(a2)), round(max(a2)), by = 5)))
+  # dev.off()
   
   #add effort to Data.monthly.GN
   s=subset(Eff,LAT<=(-26))
