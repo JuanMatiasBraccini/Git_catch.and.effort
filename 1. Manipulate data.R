@@ -10946,7 +10946,7 @@ if(do.annual.TEPS.extraction=="YES")
   
   
   #export table
-  TEPs=TEPs%>%group_by(DataEntryName,Bioregion,block10)%>%
+  TEPs=TEPs%>%group_by(DataEntryName,Bioregion,block10,Status)%>%
     summarise(N=sum(Number))%>%
     data.frame
   write.csv(TEPs,paste(hndl,"/TEPS_annual_reporting/TEPS.",TEP.yr,".csv",sep=""),row.names=F)
