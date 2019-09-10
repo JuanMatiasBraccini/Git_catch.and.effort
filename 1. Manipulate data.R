@@ -390,6 +390,7 @@ do.Nick_mesh.size.WCDGDLF="NO"
 do.ASL.action.2018="NO"
 do.financial.ass="NO"
 do.Parks.Australia="NO"
+do.annual.TEPS.extraction="NO"
 
 
 #Spatial range TDGDLF
@@ -10925,6 +10926,32 @@ if(do.Parks.Australia=="YES")
 }
 
 
+#Do annual extraction of TEPS by calendar year
+TEP.yr=2018
+if(do.annual.TEPS.extraction=="YES")
+{
+  These.TEPS=read.csv("C:/Matias/Analyses/Data_outs/TEPS.current.csv",stringsAsFactors = F)
+  TEPs=These.TEPS%>%filter(fishery%in%c("SGL","WCGL") & year==TEP.yr)%>%
+    mutate(LAT=-(as.numeric(substr(block10,1,2))+(as.numeric(substr(block10,3,3))/6)),
+           LONG=100+as.numeric(substr(block10,4,5))+(as.numeric(substr(block10,6,6))/6),
+           Bioregion=as.character(ifelse(LONG>=115.5 & LONG<=129 & LAT<=(-26),"SC", 
+                                         ifelse(LONG<115.5 & LAT<=(-27),"WC",
+                                                ifelse(LONG<=114.834 & LAT>(-27),"Gascoyne",
+                                                       ifelse(LONG>114.834 & LAT>=(-27) & LONG<=129,"NC",NA))))),
+           Bioregion=ifelse(Bioregion=="SC"& LAT>(-34) & LONG <115.91 ,"WC",Bioregion))
+  
+  #scan comments to check if not reported as a record
+  write.csv(TEPs%>%select(DailySheetNumber,SessionNumber,SpeciesCode,Status,
+                          Number,DataEntryName,ScientificName,Comments),paste(hndl,"/SCAN.TEPS.csv",sep=""))
+  
+  
+  #export table
+  TEPs=TEPs%>%group_by(DataEntryName,Bioregion,block10)%>%
+    summarise(N=sum(Number))%>%
+    data.frame
+  write.csv(TEPs,paste(hndl,"/TEPS_annual_reporting/TEPS.",TEP.yr,".csv",sep=""),row.names=F)
+  
+}
 
 
 ########### SECTION H. ----  EXPORT TOTAL CATCH FOR REFERENCE POINT ANALYSIS --- ###########
