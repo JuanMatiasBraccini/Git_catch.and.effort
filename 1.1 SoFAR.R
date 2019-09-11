@@ -269,7 +269,8 @@ FINS.value.species.zone=aggregate(cbind(Total.price,fin.weight)~SNAME+zone,Fin.W
 get.yr.price="dolar.per.kg"
 PRICES1=PRICES[,match(c("SPECIES",get.yr.price),names(PRICES))]
 names(PRICES1)=c("SPECIES","ABARE.dolar.per.kg")
-PRICES1=merge(DAT[,match(c("SPECIES","SNAME","zone","LIVEWT.c"),names(DAT))],PRICES1,by="SPECIES",all.x=T)
+PRICES1=merge(DAT[,match(c("SPECIES","SNAME","zone","LANDWT","LIVEWT.c","CONDITN"),names(DAT))],
+              PRICES1,by="SPECIES",all.x=T)
 
 # PRICES1=PRICES[,match(c("SPECIES","Weighted.Average.Price.kg","Abare.unit.."),names(PRICES))]
 # names(PRICES1)=c("SPECIES","DOF.dolar.per.kg","ABARE.dolar.per.kg")
@@ -281,9 +282,11 @@ No.price=PRICES1[is.na(PRICES1$ABARE.dolar.per.kg),]
 No.price=No.price[!duplicated(No.price$SPECIES),]
 
 Default.price=1
-
 PRICES1$ABARE.dolar.per.kg=with(PRICES1,ifelse(is.na(ABARE.dolar.per.kg),Default.price,ABARE.dolar.per.kg))  #add default if no price data
-PRICES1$Total.price=PRICES1$LIVEWT.c*PRICES1$ABARE.dolar.per.kg
+
+  #calculate catch price (landed weight X price)
+PRICES1$Total.price=PRICES1$LANDWT*PRICES1$ABARE.dolar.per.kg
+#PRICES1$Total.price=PRICES1$LIVEWT.c*PRICES1$ABARE.dolar.per.kg
 
 CATCH.value=aggregate(Total.price~zone,PRICES1,sum,na.rm=T)
 

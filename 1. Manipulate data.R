@@ -805,10 +805,10 @@ Data.monthly=Data.monthly[,-match("fishery",names(Data.monthly))]
 #simple financial assessment
 if(do.financial.ass=="YES")
 {
-  b=aggregate(livewt~vessel+species,subset(Data.daily,finyear==Current.yr,select=c(livewt,vessel,species)),sum,na.rm=T)
+  b=aggregate(landwt~vessel+species,subset(Data.daily,finyear==Current.yr,select=c(landwt,vessel,species)),sum,na.rm=T)
   bb=merge(b,subset(PRICES,select=c(SPECIES,uv1516)),by.x="species",by.y="SPECIES",all.x=T)
   bb$Revenue_annual=bb$livewt*bb$uv1516
-  dd=aggregate(cbind(Revenue_annual,livewt)~vessel,bb,sum,na.rm=T)
+  dd=aggregate(cbind(Revenue_annual,landwt)~vessel,bb,sum,na.rm=T)
   v=subset(Data.daily,vessel%in%dd$vessel & finyear==Current.yr,select=c(TSNo,vessel,BoatName,MastersName,crew,date,fdays,bdays))
   d=v[!duplicated(v$vessel),]
   vv=aggregate(crew~vessel,v,mean,na.rm=T)
@@ -827,8 +827,8 @@ if(do.financial.ass=="YES")
   A$Revenue_per_fishing_day=A$Revenue_annual/A$fdays.c
   A=A[order(A$Revenue_per_fishing_day),]
   A$Costs="?"
-  A=A[,match(c("vessel","BoatName","MastersName","crew","fdays.c" ,"livewt","Revenue_annual","Revenue_per_fishing_day","Costs"),names(A))]
-  names(A)[match(c("crew","fdays.c","livewt","Revenue_annual","Revenue_per_fishing_day"),names(A))]=
+  A=A[,match(c("vessel","BoatName","MastersName","crew","fdays.c" ,"landwt","Revenue_annual","Revenue_per_fishing_day","Costs"),names(A))]
+  names(A)[match(c("crew","fdays.c","landwt","Revenue_annual","Revenue_per_fishing_day"),names(A))]=
     c("crew_average","fishing_days_annual","livewt_annual(kg)","Revenue_annual (AUD$)","Revenue_per_fishing_day (AUD$)")
   write.csv(A,paste("C:/Matias/Analyses/Catch and effort/Annual.revenue.",Current.yr,".csv",sep=""),row.names=F)
   
@@ -1269,6 +1269,12 @@ Data.daily$zone=as.character(with(Data.daily,
                 ifelse((LatDeg+LatMin/60)<(26) & (LongDeg+LongMin/60)<114,"Closed",
                 ifelse((LatDeg+LatMin/60)<(26) & (LongDeg+LongMin/60)>=114 & (LongDeg+LongMin/60)<123.75,"North",
                 ifelse((LatDeg+LatMin/60)<(26) & (LongDeg+LongMin/60)>=123.75,"Joint",NA))))))))
+
+  #Realocate zone 3 to 1 or 2 depending on shot proximity (raised at AMM 2019)
+Zn3.lim.eas=116+55.4/60
+Zn3.lim.wes=116+30/60
+Zn3.mid=(Zn3.lim.wes+Zn3.lim.eas)/2
+Data.daily=Data.daily%>%mutate(zone=ifelse(zone=="Zone2"& (LongDeg+LongMin/60)<=Zn3.mid,"Zone1",zone))
 
 
 if(nrow(Data.daily.FC.2005_06)>0)
