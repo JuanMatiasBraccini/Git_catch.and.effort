@@ -2845,6 +2845,8 @@ Core$"Whiskery Shark"$Long[2]=Whiskery.range[2]
 Gummy.range=c(116,129)
 Core$"Gummy Shark"$Long=Gummy.range
 
+#adjust hammerheads to remove potential scalloped or great hammerheads
+Core$`Hammerhead Sharks`$Lat=c(-35,-33)
 
 #put date back in Daily data set
 get.dates=subset(Effort.daily,Same.return.SNo%in%unique(Data.daily.GN$Same.return.SNo),select=c(Same.return.SNo,date))
