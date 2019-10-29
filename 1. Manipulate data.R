@@ -10250,6 +10250,7 @@ if(do.ASL.action.2018=="YES")
   
 } 
 
+#do. Parks Australia
 if(do.Parks.Australia=="YES")  
 {
   #Power analysis
@@ -10928,6 +10929,35 @@ if(do.Parks.Australia=="YES")
     
   }
   dev.off()
+  
+  #Average catch price per shot
+  a= Data.daily%>%
+    filter(FINYEAR=="2017-18" & METHOD%in%c("GN","LL"))%>%
+    group_by(Same.return.SNo,VESSEL,SPECIES)%>%
+    summarize(Total.ktch = sum(LIVEWT.c))
+  setwd("C:/Matias/Analyses/Data_outs")
+  PRICES=read.csv("PRICES.csv",stringsAsFactors = F)
+  PRICES=PRICES%>%mutate(dolar.per.kg=PRICES[,match(paste("uv",substr(Current.yr,3,4),
+                                                          substr(Current.yr,6,7),sep=""),names(PRICES))],
+                         dolar.per.kg=as.numeric(gsub("\\$", "", dolar.per.kg)))%>%
+    select(-uv1718)
+  a=left_join(a,PRICES,by="SPECIES")%>%
+    mutate(ktch.price=dolar.per.kg*Total.ktch)%>%
+    group_by(Same.return.SNo,VESSEL)%>%
+    summarize(Catch.value=sum(ktch.price))
+  
+  b=Effort.daily%>%filter(finyear=="2017-18" & method%in%c("GN","LL"))%>%
+    group_by(Same.return.SNo,vessel)%>%
+    summarize(Effort = max(Km.Gillnet.Hours.c))
+  
+  d=left_join(a,b,by=c("Same.return.SNo"))%>%
+    group_by(vessel)%>%
+    summarise(average.ktch.value=mean(Catch.value,na.rm=T),
+              min.ktch.value=min(Catch.value,na.rm=T),
+              max.ktch.value=max(Catch.value,na.rm=T),
+              average.effort=mean(Effort,na.rm=T))%>%
+    data.frame
+  write.csv(d,paste(hndl,"/Parks Australia/Average catch price per shot.csv",sep=""),row.names = F)
   
 }
 
