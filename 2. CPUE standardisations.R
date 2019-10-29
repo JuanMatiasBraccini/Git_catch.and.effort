@@ -512,14 +512,23 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
     Z.this=ZZ[,WHICh]
     if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
     Ves.BC=Vess[WHICh]
-    ID.sort=match(names(sort(colSums(Z.this,na.rm=TRUE))),colnames(Z.this))
-    Z.this=Z.this[,ID.sort]
-    if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
-    Ves.BC=Ves.BC[ID.sort]
-    image(x=1:length(Yrs),y=1:ncol(Z.this),Z.this,xaxt='n',yaxt='n',ann=F)
-    axis(1,1:length(Yrs),Yrs)
-    axis(2,1:ncol(Z.this),Ves.BC,las=1,cex.axis=.9)
-    legend("top",paste("vessels with >=",Ves.sel.BC, "years of records and >",Min.ktch,"kg per year"),bty='n')
+    if(length(Ves.BC)==1)
+    {
+      plot.new()
+      legend("center","only 1 vessel selected",bty='n',cex=2)
+    }
+      
+    if(length(Ves.BC)>1)
+    {
+      ID.sort=match(names(sort(colSums(Z.this,na.rm=TRUE))),colnames(Z.this))
+      Z.this=Z.this[,ID.sort]
+      if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
+      Ves.BC=Ves.BC[ID.sort]
+      image(x=1:length(Yrs),y=1:ncol(Z.this),Z.this,xaxt='n',yaxt='n',ann=F)
+      axis(1,1:length(Yrs),Yrs)
+      axis(2,1:ncol(Z.this),Ves.BC,las=1,cex.axis=.9)
+      legend("top",paste("vessels with >=",Ves.sel.BC, "years of records and >",Min.ktch,"kg per year"),bty='n')
+    }
     Drop.ves=All.ves[which(!All.ves%in%Ves.BC)]
     
         #Ves.sel.sens
@@ -596,15 +605,25 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
     Z.this=ZZ[,WHICh]
     if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
     Blks.BC=BLOCs[WHICh]
-    ID.sort=match(names(sort(colSums(Z.this,na.rm=TRUE))),colnames(Z.this))
-    Z.this=Z.this[,ID.sort]
-    if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
-    Blks.BC=Blks.BC[ID.sort]
-    image(x=1:length(Yrs),y=1:ncol(Z.this),Z.this,xaxt='n',yaxt='n',ann=F)
-    axis(1,1:length(Yrs),Yrs)
-    axis(2,1:ncol(Z.this),Blks.BC,las=1,cex.axis=.9)
-    legend("top",paste("blocks with >=",BLK.sel.BC, "years of records for vessels >=",Ves.sel.BC,"years of records and >",Min.ktch,"kg per year"),
-           cex=0.75,bty='n')
+    if(length(Blks.BC)==0)
+    {
+      plot.new()
+      legend("center","no blocks selected",bty='n',cex=2)
+    }
+    
+    if(length(Blks.BC)>0)
+    {
+      ID.sort=match(names(sort(colSums(Z.this,na.rm=TRUE))),colnames(Z.this))
+      Z.this=Z.this[,ID.sort]
+      if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
+      Blks.BC=Blks.BC[ID.sort]
+      image(x=1:length(Yrs),y=1:ncol(Z.this),Z.this,xaxt='n',yaxt='n',ann=F)
+      axis(1,1:length(Yrs),Yrs)
+      axis(2,1:ncol(Z.this),Blks.BC,las=1,cex.axis=.9)
+      legend("top",paste("blocks with >=",BLK.sel.BC, "years of records for vessels >=",Ves.sel.BC,"years of records and >",Min.ktch,"kg per year"),
+             cex=0.75,bty='n')
+      
+    }
     Drop.blks=All.blk[which(!All.blk%in%Blks.BC)]  
     
         #Ves.Sens
@@ -2711,6 +2730,9 @@ SP.list=as.list(SpiSis)
 SP.list=SP.list[-match(c("Thresher Shark","Angel Shark"
                          ,"Gulper sharks, Sleeper Sharks & Dogfishes"),names(SP.list))]
 
+#remove wobbies as too many species mixed up
+SP.list=SP.list[-match(c("Wobbegong"),names(SP.list))]
+
 #remove blacktips because only a few years of daily data available
 SP.list=SP.list[-match(c("Blacktip Shark"),names(SP.list))]
 
@@ -2719,7 +2741,7 @@ SP.list=SP.list[-match(c("Common Sawshark","SawShark",'Dusky Whaler','Bronze Wha
 
 SP.list$'Dusky Whaler Bronze Whaler'=c(18003,18001)
 SP.list$'Sawsharks'=c(23900,23002)
-SP.list$All.Non.indicators=Shark.species[-match(Indicator.sp,Shark.species)]    
+# SP.list$All.Non.indicators=Shark.species[-match(Indicator.sp,Shark.species)]    #no point in grouping all species together
 nnn=1:length(SP.list)
 
 
@@ -3117,9 +3139,12 @@ if(Remove.blk.by=="blk_only")
     if(!is.null(Species.list[[i]]))
     {
       finy=sort(unique(Species.list[[i]]$FINYEAR))
-      Ves.sel.BC=0
-      BLK.sel.BC=0
-      Min.ktch=1
+      Ves.sel.BC=Threshold.n.yrs.monthly
+      BLK.sel.BC=MIN.obs.BLK
+      Min.ktch=MIN.ktch*.1
+      #Ves.sel.BC=0
+      #BLK.sel.BC=0
+      #Min.ktch=1
       if(length(SP.list[[i]])<3)
       {
         if(SP.list[[i]][1]%in%Indicator.sp)
@@ -3146,9 +3171,12 @@ if(Remove.blk.by=="blk_only")
     #Daily
     if(!is.null(Species.list.daily[[i]]))
     {
-      Ves.sel.BC=0
-      BLK.sel.BC=0
-      Min.ktch=1
+      Ves.sel.BC=Threshold.n.yrs.daily
+      BLK.sel.BC=MIN.obs.BLK
+      Min.ktch=MIN.ktch*.1 
+      #Ves.sel.BC=0
+      #BLK.sel.BC=0
+      #Min.ktch=1
       finy=unique(Species.list.daily[[i]]$FINYEAR)
       if(length(SP.list[[i]])<3)
       {
@@ -3181,7 +3209,7 @@ if(Remove.blk.by=="blk_only")
                                 length(vsl.used),length(vsl.not.used)),ncol=2,nrow=2),2),
             col=c("grey80","grey40"),names.arg=NMS.arg)
   }
-  fn.fig("Outputs/Kept_blocks_vessels/Used_not.used_blocks_vessels",1400,2400)
+  fn.fig("C:/Matias/Analyses/Catch and effort/Outputs/Kept_blocks_vessels/Used_not.used_blocks_vessels",1400,2400)
   par(mfrow=c(length(nnn),2),mar=c(1,1,.1,.3),oma=c(2,2,1,.1),las=1,mgp=c(1,.5,0),xpd=T)
   for(i in nnn)
   {
@@ -4143,6 +4171,12 @@ if(Def.mod.Str=="NO")
     Best.Model.daily.gam[[s]]=formula(LNcpue ~ finyear + vessel + s(long10.corner,lat10.corner) + month)
   }
   
+  #only 1 vessel level for 7gill sharks after data selection
+  Best.Model$`Sevengill Sharks`=Best.Model.daily$`Sevengill Sharks`=
+    formula(LNcpue ~ finyear + blockx + month)
+  Best.Model.daily.gam$`Sevengill Sharks`=formula(LNcpue ~ finyear + 
+                                                    s(long10.corner,lat10.corner) + month)
+  
     #Target species
   #Monthly
   Best.Model$`Gummy Shark`=formula(LNcpue ~ finyear + vessel + blockx  + month)
@@ -4375,7 +4409,7 @@ Nms.sp=names(SP.list)
 Nms.sp[match("Dusky Whaler Bronze Whaler",Nms.sp)]=c("Dusky Shark")
 Nms.sp[match("All.Non.indicators",Nms.sp)]=c("All non-ind.")
 Nms.sp[match("Hammerhead Sharks",Nms.sp)]=c("Hammerhead")
-Nms.sp[match("Wobbegong",Nms.sp)]=c("Wobbegongs")
+#Nms.sp[match("Wobbegong",Nms.sp)]=c("Wobbegongs")
 Nms.sp[match("Shortfin Mako",Nms.sp)]=c("Mako")
 
 # rm(Species.list.daily,Species.list,Data.daily.GN,
