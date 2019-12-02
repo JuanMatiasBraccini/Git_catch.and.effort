@@ -1,8 +1,10 @@
 ###--- SHARK GILLNET AND LONGLINE FISHERY CATCH AND EFFORT MANIPULATIONS ----###
 
-#MISSING:  1. charter.mean.w is dummy. Go out with them to calculate properly!
+#MISSING:  1. charter.mean.w is dummy. Go out with them to calculate properly! (or use Karina's rec fish size)
 #             another issue with Charter data is species id (e.g. bull sharks for licence FT1L373 may not be)
 
+
+# Charter boat data: Each year ask Rhonda to do a data extraction from FishCube
 
 #Index for navigation
 #SECTION A. ---- MONTHLY RECORDS 
@@ -268,7 +270,6 @@ Spec.catch.zone.pre.2013=read.csv("Historic/Spec.catch.zone.csv")
 
 
 #Charter operators                            
-#note: each year ask Rhonda to do a data extraction from FishCube
 #       species identification is an issue
 channel <- odbcConnectExcel2007("Charter/Charter.xlsx") 
 Charter.fish.catch<- sqlFetch(channel,"Data")
@@ -277,7 +278,7 @@ charter.mean.w=read.csv('Charter/Sp_mean_weight.csv')
 charter.blk=read.csv('Charter/Centroid_Grid_Block_5NM_All.csv')
 
 
-#Rec fisheries
+#Rec fisheries  
 #note:  iSurvey 2011-12 Tables 7-10 (estimated retained number of shark and ray individuals in 2011-12,boat-based
 #       phone diary survey (Ryan et al 2013)
 Rec.fish.catch=read.csv("Recreational/I.Survey.csv")

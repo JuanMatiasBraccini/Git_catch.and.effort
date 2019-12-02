@@ -133,6 +133,8 @@ Effort.daily=read.csv("Effort.daily.csv")
 Effort.monthly=read.csv("Effort.monthly.csv")
 Mesh.monthly=read.csv("Mesh.monthly.csv")
 Mesh.size=read.csv("Mesh.size.csv")
+Mangmnt.TDGDLF=read.csv("Mangmnt.TDGDLF.csv")
+
 
 lst <- strsplit(Data.daily.GN$Same.return.SNo, "\\s+")
 Data.daily.GN$SNo <- sapply(lst ,'[', 1)
@@ -246,7 +248,11 @@ Stand.approach="Delta"
 do_cluster="NO"
 
 #Control if doing PCA analysis of daily data
-do_pca="YES"
+#not applicable to biotic data (no-linear relation)
+do_pca="NO"
+
+#Control if doing MDS analysis of daily data
+do_mds="YES"
 
 #Control if doing sensitivity tests
 if(Model.run=="First") do.sensitivity="YES"
@@ -3643,7 +3649,7 @@ if(do_pca=="YES")
     dev.off()
   }
 }
-
+#ACA
 #4.15 Table of sensitivity scenarios       
 Tab.Sensi=data.frame(Scenario=c("Base case","Nominal","All vessels & blocks","No efficiency"),
                      Standardisation=c("Yes","No",rep("Yes",2)),
