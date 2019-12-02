@@ -451,14 +451,22 @@ Do.jpeg="YES"
 
 #Non-commercial Fisheries
  #a. recreational
-Rec.fish.catch$FinYear=as.character(Rec.fish.catch$Survey)
-Rec.fish.catch=subset(Rec.fish.catch,!FinYear=="Grand Total")
-names(Rec.fish.catch)[match("Estimated.Kept.Catch..by.numbers.",names(Rec.fish.catch))]="Kept.Number"
-names(Rec.fish.catch)[match("Estimated.Released.Catch..by.numbers.",names(Rec.fish.catch))]="Rel.Number"
-names(Rec.fish.catch)[match("Species.Common.Name",names(Rec.fish.catch))]="Common.Name"
-names(Rec.fish.catch)[match("Species.Scientific.Name",names(Rec.fish.catch))]="Scientific.Name"
-if(is.factor(Rec.fish.catch$Kept.Number)) Rec.fish.catch$Kept.Number <- as.numeric(gsub(",","",Rec.fish.catch$Kept.Number))
-if(is.factor(Rec.fish.catch$Rel.Number)) Rec.fish.catch$Rel.Number <- as.numeric(gsub(",","",Rec.fish.catch$Rel.Number))
+Rec.fish.catch=Rec.fish.catch%>%
+   mutate(FinYear=paste(2000+as.numeric(substr(Year,1,2)),substr(Year,3,4),sep="-"),
+         Bioregion=paste(sapply(strsplit(Rec.fish.catch$RegionReportingGroupName, "_"), "[", 2),
+                         sapply(strsplit(Rec.fish.catch$RegionReportingGroupName, "_"), "[", 3)),
+         Common.Name=Lowlevelgrouping,
+         Scientific.Name=ScientificName,
+         Kept.Number=Kept,
+         Kept.Number.se=se.Kept,
+         Rel.Number=Released,
+         Rel.Number.se=se.Released,
+         Caught.Number=Total,
+         Caught.Number.se=se.Total)%>%
+   filter(!FinYear=="Grand Total")%>%
+  select(FinYear,Bioregion,Common.Name,Scientific.Name,Kept.Number,Kept.Number.se,
+         Rel.Number,Rel.Number.se,Caught.Number,Caught.Number.se)
+
 
   #b. charter boats
 names(Charter.fish.catch)[match("TO Zone",names(Charter.fish.catch))]="Zone"
