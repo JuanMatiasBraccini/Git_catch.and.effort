@@ -247,12 +247,9 @@ Stand.approach="Delta"
 #Control if doing cluster analysis of daily data
 do_cluster="NO"
 
-#Control if doing PCA analysis of daily data
+#Control if doing PCA analysis of daily data                    #MISSING: review/replace PCA. MDS takes too long, do cluster?
 #not applicable to biotic data (no-linear relation)
-do_pca="NO"
-
-#Control if doing MDS analysis of daily data
-do_mds="YES"
+do_pca="YES"
 
 #Control if doing sensitivity tests
 if(Model.run=="First") do.sensitivity="YES"
@@ -3649,7 +3646,7 @@ if(do_pca=="YES")
     dev.off()
   }
 }
-#ACA
+
 #4.15 Table of sensitivity scenarios       
 Tab.Sensi=data.frame(Scenario=c("Base case","Nominal","All vessels & blocks","No efficiency"),
                      Standardisation=c("Yes","No",rep("Yes",2)),
@@ -3994,6 +3991,91 @@ if(Model.run=="First")
   dev.off()
 }
 Eff.creep=data.frame(finyear=FINYEAR.ALL,effort.creep=Fish.pow.inc)
+
+#ACA. explore GAM issues
+fn.explr.gam.rel=function(d)
+{
+  colnames(d)=tolower(colnames(d))
+  d=d%>%mutate(month.cat=factor(month),
+               moon=factor(as.character(lunar),ordered = T,
+                           levels=c("New","Waxing","Full","Waning")))
+  
+  
+  #To do GAM term selection:
+  #gam(y~s(x1)+s(x2)+...s(xn),select=T)
+  
+  #BAM: for big data gam (much faster...)
+  
+  #Tweedie vs normal
+  a=d%>%mutate(finyear=factor(finyear,ordered = T,levels=sort(unique(finyear))),
+               ln.cpue=log(catch.target+1e-5/km.gillnet.hours.c))
+  #Mod=gam(ln.cpue~finyear,dat=a,family=tw,method="REML")  
+  #Mod1=gam(ln.cpue~finyear,dat=a,method="REML")
+  #par(mfcol=c(2,1))
+  #plot(coef(Mod),main="Mod")
+  #lines(coef(Mod1),main="Mod default")
+  
+  
+  
+  
+  #binomial part
+  d.bi=d%>%mutate(catch.target=ifelse(catch.target>0,1,0))
+  d.bi$LN.effort=log(d.bi[,match(efrt,names(d.bi))])
+  
+  #pos part
+  d=d%>%filter(catch.target>0)
+  d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
+  
+  
+  ggplot(d) +
+    aes(x = lunar, y = LNcpue) +
+    geom_boxplot() + facet_wrap(~zone)
+  
+  
+  ggplot(d) +
+    aes(x = mesh, y = LNcpue)+geom_point()+ facet_wrap(~zone)
+  
+  
+  qplot(x = year.c, y = temperature, data = d, color = month.cat) +
+    geom_smooth(method = "lm") + facet_wrap(~zone)
+  
+  #Model year as an autocorrelated continuous variable
+  par(mfcol=c(2,1))
+  Mod=gam(LNcpue~s(year.c,bs='gp'),dat=d)  #specify a gaussian process
+  Mod1=gam(LNcpue~s(year.c),dat=d)
+  plot(Mod,main="Mod")
+  plot(Mod1,main="Mod default")
+  
+  #Model year as ordered factor
+  d$finyear.ordered=factor(d$finyear,ordered = T,levels=sort(unique(d$finyear)))
+  d$finyear=factor(d$finyear)
+  Mod=gam(LNcpue~finyear.ordered,dat=d) 
+  Mod1=gam(LNcpue~finyear,dat=d)
+  plot(coef(Mod),main="Mod")
+  lines(coef(Mod1),main="Mod default")
+  
+  #Model month as smoothing term
+  Mod=gam(LNcpue~s(month,k=2,bs='cc'),dat=d)  #specify a cyclical smoother
+  Mod1=gam(LNcpue~s(month,k=2),dat=d)
+  plot(Mod,main="Mod")
+  plot(Mod1,main="Mod default")
+  anova(Mod)
+  anova(Mod1)
+  
+  #Model vessel as random effect
+  d$vessel=factor(d$vessel)
+  Mod=gam(LNcpue~s(vessel,bs='re'),dat=d,method="REML")  
+  Mod1=gam(LNcpue~s(vessel),dat=d,method="REML")
+  plot(Mod,main="Mod")
+  plot(Mod1,main="Mod default")
+  
+  #model lat and long as a sphere
+  Mod=gam(LNcpue~s(long10.corner,lat10.corner,bs='sos'),dat=d,method="REML")  
+  Mod1=gam(LNcpue~s(long10.corner,lat10.corner),dat=d,method="REML")
+  plot(Mod,main="Mod")
+  plot(Mod1,main="Mod default")
+}
+#fn.explr.gam.rel(d=DATA.list.LIVEWT.c.daily[[3]])
 
 
 #   4.22.3 Select model structure  
