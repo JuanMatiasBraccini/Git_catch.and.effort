@@ -150,22 +150,18 @@ Data.monthly=Data.monthly[,-match(drop,names(Data.monthly))]
   #combine Table 81d.mdb and CAESS
 if(Get.CAESS.Logbook=="YES")
 {
-  Data.monthly$FINYEAR=as.character(Data.monthly$FINYEAR)
-  Data.monthly$VESSEL=as.character(Data.monthly$VESSEL)
-  Data.monthly$METHOD=as.character(Data.monthly$METHOD)
-  Data.monthly$SNAME=as.character(Data.monthly$SNAME)
-  Data.monthly$CONDITN=as.character(Data.monthly$CONDITN)
   keep=c("1975-76","1976-77","1977-78","1978-79","1979-80","1980-81","1981-82",
           "1982-83","1983-84","1984-85","1985-86","1986-87","1987-88")
-  Data.monthly=subset(Data.monthly,FINYEAR%in%keep)
-  Data.monthly$fishery=NA
-  Data.monthly$licence=NA
-  Data.monthly$PORT=NA
-  Data.monthly$rowid=NA
-  
-  names(Data.monthly.CAESS)[match(c("sname1","FACTOR"),names(Data.monthly.CAESS))]=c("SNAME","Factor")
-   # names(Mesh.monthly)[match(c("month"),names(Mesh.monthly))]=c("MONTH")
-  
+  Data.monthly=subset(Data.monthly,FINYEAR%in%keep)%>%
+    mutate(fishery=NA,
+           licence=NA,
+           PORT=NA,
+           rowid=NA)
+  Data.monthly.CAESS=Data.monthly.CAESS%>%
+                      rename(LIVEWT=livewt,
+                             SNAME=sname1,
+                             Factor=FACTOR)
+
   ID=match(names(Data.monthly),names(Data.monthly.CAESS))
   Data.monthly.CAESS=Data.monthly.CAESS[,ID]
   Data.monthly=rbind(Data.monthly,Data.monthly.CAESS)
@@ -751,6 +747,11 @@ Data.monthly$LONG=with(Data.monthly,ifelse(BLOCKX%in%c(96021),113,
 
 Data.monthly$LONG=floor(Data.monthly$LONG)
 
+#add Fishery code if missing
+Data.monthly=Data.monthly%>%
+  mutate(fishery=ifelse(METHOD%in%c("GN","LL")& LAT <(-26) & LAT >=(-33) & LONG<116.5,'WCGL',
+                 ifelse(METHOD%in%c("GN","LL")& LAT <(-33) & LONG<116.5,'SGL1',
+                 ifelse(METHOD%in%c("GN","LL")& LAT <(-26) & LONG>=116.5,'SGL2',fishery))))
 
 # A.7. Fix condition
 Data.monthly$CONDITN=as.character(Data.monthly$CONDITN)
