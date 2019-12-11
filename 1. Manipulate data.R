@@ -137,7 +137,7 @@ Current.yr.dat=paste(substr(Current.yr,1,4),substr(Current.yr,6,7),sep="_")
 Get.CAESS.Logbook="YES"
 
 #if(Get.CAESS.Logbook=="YES")Data.monthly.CAESS=read.csv("CAESS/CAES.data.8889.to.1415.csv",stringsAsFactors =F) 		
-if(Get.CAESS.Logbook=="YES")Data.monthly.CAESS=read.csv("M:/CAEMaster/Commercial/FishCubeWA/Fisheries/CAES Monthly Fisheries/02. Data/CAES Monthly Data - Shark.csv",stringsAsFactors =F) 		
+if(Get.CAESS.Logbook=="YES")Data.monthly.CAESS=read.csv("M:/CAEMaster/Commercial/FishCubeWA/Fisheries/CAES Monthly Fisheries/02. Data/CAES Monthly Data - Shark.csv") 		
 if(Get.CAESS.Logbook=="YES") Mesh.monthly=subset(Data.monthly.CAESS,METHOD=="GN",select=c(VESSEL,FINYEAR,MONTH,BLOCKX,METHOD,MSLOW,MSHIGH))
 
   #Table81.d data
@@ -752,7 +752,7 @@ Data.monthly=Data.monthly%>%
   mutate(fishery=ifelse(METHOD%in%c("GN","LL")& LAT <(-26) & LAT >=(-33) & LONG<116.5,'WCGL',
                  ifelse(METHOD%in%c("GN","LL")& LAT <(-33) & LONG<116.5,'SGL1',
                  ifelse(METHOD%in%c("GN","LL")& LAT <(-26) & LONG>=116.5,'SGL2',fishery))))
-
+#ACA
 # A.7. Fix condition
 Data.monthly$CONDITN=as.character(Data.monthly$CONDITN)
 Data.monthly$CONDITN=with(Data.monthly,ifelse(is.na(SPECIES),"NIL",CONDITN))
