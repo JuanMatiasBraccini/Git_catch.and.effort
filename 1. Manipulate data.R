@@ -133,10 +133,9 @@ Current.yr.dat=paste(substr(Current.yr,1,4),substr(Current.yr,6,7),sep="_")
 #       Also, don't use CAESS from non TDGDLF of NSF fisheries for catch rate standardisations as
 #       0 catch records are missing/incomplete
 
-#Get.CAESS.Logbook="NO"
 Get.CAESS.Logbook="YES"
 
-#if(Get.CAESS.Logbook=="YES")Data.monthly.CAESS=read.csv("CAESS/CAES.data.8889.to.1415.csv",stringsAsFactors =F) 		
+#CAES extract done by Paul Fildes from FishCUBE. This has all fisheries reporting shark
 if(Get.CAESS.Logbook=="YES")Data.monthly.CAESS=read.csv("M:/CAEMaster/Commercial/FishCubeWA/Fisheries/CAES Monthly Fisheries/02. Data/CAES Monthly Data - Shark.csv") 		
 if(Get.CAESS.Logbook=="YES") Mesh.monthly=subset(Data.monthly.CAESS,METHOD=="GN",select=c(VESSEL,FINYEAR,MONTH,BLOCKX,METHOD,MSLOW,MSHIGH))
 
@@ -172,91 +171,70 @@ if(Get.CAESS.Logbook=="YES")
   #Select previous daily logbooks (static) or Eva's dynamic data dump
 #Get.Daily.Logbook="NO"  #use Rory's files
 Get.Daily.Logbook="YES"  #use SADA's annual extraction
-if(Get.Daily.Logbook=="YES")
-{
-  #Daily records 
-  Daily.source="M:/CAEMaster/Commercial/FishCubeWA/Fisheries/Shark/02. Data/"
-  Daily.file="1. Shark Daily Logbook Data.xlsx"
-  Daily.dat=paste(Daily.source,Daily.file,sep="")
-  channel <- odbcConnectExcel2007(Daily.dat)
-  Data.daily<- sqlFetch(channel,"CATCH", colnames = F)
-  close(channel)
+#Daily records from shark fisheries
+Daily.source="M:/CAEMaster/Commercial/FishCubeWA/Fisheries/Shark/02. Data/"
+Daily.file="1. Shark Daily Logbook Data.xlsx"
+Daily.dat=paste(Daily.source,Daily.file,sep="")
+channel <- odbcConnectExcel2007(Daily.dat)
+Data.daily<- sqlFetch(channel,"CATCH", colnames = F)
+close(channel)
 
-  #teps
-  TEPS.current<- read.csv(paste(Current.yr.dat,"/TEPS_PROTECTEDSP.csv",sep=""),stringsAsFactors=F)
-  Comments.TEPS.current<- read.csv(paste(Current.yr.dat,"/TEPS_Comments.csv",sep=""),stringsAsFactors=F)
-  if(!is.na(match("DSNo",names(Comments.TEPS.current))))
-  {
-    names(Comments.TEPS.current)[match("DSNo",names(Comments.TEPS.current))]="DailySheetNumber"
-  }
-  
-  TEPS.current=TEPS.current%>%left_join(Comments.TEPS.current,
-                                        by=c("DailySheetNumber","fishery","vessel","year","month"))
-  if(!is.na(match("financial year",names(TEPS.current))))
-  {
-    names(TEPS.current)[match("financial year",names(TEPS.current))]="finyear"
-    names(TEPS.current)[match("financial.year",names(TEPS.current))]="finyear"
-  }
-  
-  #other fisheries
-  #note: can extract from FishCube running this query:
-  # http://F01-FIMS-WEBP01/FishCubeWA/Query.aspx?CubeId=CommercialDPIRDOnly&QueryId=8729f44a-3f88-4fb2-80d3-81a80aad9734
-  #     however, since 2017 'other.fishery.catch' is provided by Paul F in the updated Data.monthly
-  #Other.fishery.catch=read.csv(paste(Current.yr.dat,"/otherSH.csv",sep=""),stringsAsFactors=F)      
-  
-  #Catch price
-  PRICES=read.csv(paste(Current.yr.dat,"/PriceComparison.csv",sep=""),stringsAsFactors=F)  #update 2016-17
-}
-if(Get.Daily.Logbook=="NO")
+
+#Daily records from other fisheries reporting shark catch in daily returns
+#note: run this FishCube query (copy to browser and update) 
+#      http://f01-fims-webp01/FishCubeWA/Query.aspx?CubeId=CommercialDPIRDOnly
+#and update the excel file that the query creates
+channel <- odbcConnectExcel2007("Fish Cube WA_daily.other.xlsx") 
+Data.daily.other.fisheries<- sqlFetch(channel,"Data")
+close(channel)
+channel <- odbcConnectExcel2007("Fish Cube WA_daily.other_names.xlsx") 
+Data.daily.other.fisheries.names<- sqlFetch(channel,"Sheet1")
+close(channel)
+Data.daily.other.fisheries.names=Data.daily.other.fisheries.names%>%
+  select(RSSpeciesId,species,CAESname)%>%
+  filter(RSSpeciesId%in%unique(Data.daily.other.fisheries$`Species Id`)&
+           species<31000)
+
+Data.daily.other.fisheries=Data.daily.other.fisheries%>%
+  rename(method='Fishing Method Code',
+         fishery='Fishery Code',
+         fishery.name='Fishery Name',
+         livewt='Weight (kg) Total',
+         date=Date,
+         block10='10x10NM Block',
+         finyear='Financial Year',
+         year='Calendar Year',
+         RSCommonName='Species Common Name')%>%
+  left_join(Data.daily.other.fisheries.names,by=c("Species Id" = "RSSpeciesId"))%>%
+  select(Bioregion,date,Vessel,method,fishery,fishery.name,block10,finyear,year,
+         species,RSCommonName,CAESname,livewt)
+
+#TEPS
+TEPS.current<- read.csv(paste(Current.yr.dat,"/TEPS_PROTECTEDSP.csv",sep=""),stringsAsFactors=F)
+Comments.TEPS.current<- read.csv(paste(Current.yr.dat,"/TEPS_Comments.csv",sep=""),stringsAsFactors=F)
+if(!is.na(match("DSNo",names(Comments.TEPS.current))))
 {
-  channel <- odbcConnectExcel2007("2009_10_(Jan_2011)") 
- Data.daily.2006.07<- sqlFetch(channel,"2006-07")
- Data.daily.2007.08<- sqlFetch(channel,"2007-08")
- Data.daily.2008.09<- sqlFetch(channel,"2008-09")
- Data.daily.2009.10<- sqlFetch(channel,"2009-10")
- close(channel) 
- 
- channel <- odbcConnectExcel2007("2012_Sharkfigs")
- Data.daily.2010.11<- sqlFetch(channel,"DATA")
- close(channel)
- 
- 
- #Daily records 2011-12 (for 2013 report)
- channel <- odbcConnectAccess2007("2011_12/updated/Shark1213.mdb")
- Data.daily.2011.12<- sqlFetch(channel,"shark", colnames = F)
- close(channel)
- Data.daily.2011.12=subset(Data.daily.2011.12,finyear=="2011-12")
- 
-   #teps 
- channel <- odbcConnectExcel2007("2011_12/comments&PS-1213")
- TEPS.2011_12<- sqlFetch(channel,"protectedSp")
- Comments.TEPS.2011_12<- sqlFetch(channel,"comments")
- close(channel)
- colnames(Comments.TEPS.2011_12)[match("DSNo",names(Comments.TEPS.2011_12))]="DailySheetNumber"
- TEPS.2011_12=merge(TEPS.2011_12,Comments.TEPS.2011_12,by=c("DailySheetNumber","fishery","vessel","year","month"),all.x=T)
- 
- 
- 
- #Daily records 2012-13 (2014 report)
- channel <- odbcConnectAccess2007("2012_13/Shark2013.mdb")
- Data.daily.2012.13<- sqlFetch(channel,"sharklog", colnames = F)
- close(channel)
- Data.daily.2012.13=subset(Data.daily.2012.13,finyear=="2012-13")
- 
- #teps
- channel <- odbcConnectExcel2007("2012_13/TEPS")
- TEPS.2012_13<- sqlFetch(channel,"PROTECTEDSP")
- Comments.TEPS.2012_13<- sqlFetch(channel,"comments")
- close(channel)
- colnames(Comments.TEPS.2012_13)[match("DSNo",names(Comments.TEPS.2012_13))]="DailySheetNumber"
- TEPS.2012_13=merge(TEPS.2012_13,Comments.TEPS.2012_13,by=c("DailySheetNumber","fishery","vessel","year","month"),all.x=T)
- names(TEPS.2012_13)[match("financial year",names(TEPS.2012_13))]="finyear"
- 
- 
- #Other fisheries
- Other.fishery.catch.2011.12=read.csv("2011_12/SOF1213-others.csv")     #2011_12
- Other.fishery.catch.2012.13=read.csv("2012_13/SOF1214-others.csv")      #2012_13      
+  names(Comments.TEPS.current)[match("DSNo",names(Comments.TEPS.current))]="DailySheetNumber"
 }
+
+TEPS.current=TEPS.current%>%left_join(Comments.TEPS.current,
+                                      by=c("DailySheetNumber","fishery","vessel","year","month"))
+if(!is.na(match("financial year",names(TEPS.current))))
+{
+  names(TEPS.current)[match("financial year",names(TEPS.current))]="finyear"
+  names(TEPS.current)[match("financial.year",names(TEPS.current))]="finyear"
+}
+
+#other fisheries
+#note: can extract from FishCube running this query:
+# http://F01-FIMS-WEBP01/FishCubeWA/Query.aspx?CubeId=CommercialDPIRDOnly&QueryId=8729f44a-3f88-4fb2-80d3-81a80aad9734
+#     however, since 2017 'other.fishery.catch' is provided by Paul F in the updated Data.monthly
+#Other.fishery.catch=read.csv(paste(Current.yr.dat,"/otherSH.csv",sep=""),stringsAsFactors=F)      
+
+#Catch price
+PRICES=read.csv(paste(Current.yr.dat,"/PriceComparison.csv",sep=""),stringsAsFactors=F)  #update 2016-17
+
+
 
 
 #Historic TEP data (Prior to 2012 report)
@@ -7333,13 +7311,14 @@ Exprt.list=list(
   Data.monthly.NSF=Data.monthly.north[,-match(crap,names(Data.monthly.north))],
   Data.monthly.GN=Data.monthly.GN[,-match(crap,names(Data.monthly.GN))],
   Data.monthly.LL=Data.monthly.LL[,-match(crap,names(Data.monthly.LL))],
-  Data.monthly.other=Data.monthly.other,
+  #Data.monthly.other=Data.monthly.other,
   Data.daily=Data.daily[,-match(crap.daily,names(Data.daily))],
   Data.daily.NSF=Data.daily.north[,-match(crap.daily,names(Data.daily.north))],
   Data.daily.original=Data.daily.original,
+  Data.daily.other.fisheries=Data.daily.other.fisheries,
   Data.daily.GN=Data.daily.GN[,-match(crap.daily,names(Data.daily.GN))],
-  Data.daily.LL=Data.daily.LL[,-match(crap.daily,names(Data.daily.LL))],
-  Data.daily.other=Data.daily.other[,-match(crap.daily,names(Data.daily.other))])
+  #  Data.daily.other=Data.daily.other[,-match(crap.daily,names(Data.daily.other))],
+  Data.daily.LL=Data.daily.LL[,-match(crap.daily,names(Data.daily.LL))])
 for(i in 1:length(Exprt.list)) fwrite(Exprt.list[[i]],paste(names(Exprt.list)[i],".csv",sep=""),row.names=F)
 rm(Exprt.list)
 

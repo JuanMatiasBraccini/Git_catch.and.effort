@@ -20,6 +20,10 @@ source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R")
 
 #     Before executing SOFAR bit, run "2.CPUE standardisations.R" to construct latest standardised cpue
 
+#MISSING for 2020: add daily.other to the catch of other (this is daily not reported in CAES for other methods)
+
+options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)
+
 Current.yr="2017-18"
 
 Percent.fin.of.livewt=0.03
@@ -28,18 +32,19 @@ TDGDLF.lat.range=c(-26,-40)
 #bring in data from 1.Manipulate data.R
 setwd("C:/Matias/Analyses/Data_outs")
 
-Data.monthly=read.csv("Data.monthly.csv",stringsAsFactors = F)
-Rec.fish.catch=read.csv("Rec.fish.catch.csv",stringsAsFactors = F)
-Data.current.Sofar=read.csv("Data.current.Sofar.csv",stringsAsFactors = F)
-PRICES=read.csv("PRICES.csv",stringsAsFactors = F)
-Total.effort.days.monthly=read.csv("Annual.total.eff.days.csv",stringsAsFactors = F)
-Total.effort.hours.monthly=read.csv("Annual.total.eff.hours.csv",stringsAsFactors = F)
-Total.effort.zone.hours.monthly=read.csv("Annual.zone.eff.hours.csv",stringsAsFactors = F)
-Total.effort.zone.days.monthly=read.csv("Annual.zone.eff.days.csv",stringsAsFactors = F)
-TEPS.current=read.csv("TEPS.current.csv",stringsAsFactors = F)
-Suite=read.csv("suite.csv",stringsAsFactors = F)$Suite
-TEPS.pre.current=read.csv("TEPS.pre.current.csv",stringsAsFactors = F)
-Results.pre.2013=read.csv("Results.pre.2013.csv",stringsAsFactors = F)
+Data.monthly=read.csv("Data.monthly.csv")
+daily.other=read.csv("Data.daily.other.fisheries.csv")
+Rec.fish.catch=read.csv("Rec.fish.catch.csv")
+Data.current.Sofar=read.csv("Data.current.Sofar.csv")
+PRICES=read.csv("PRICES.csv")
+Total.effort.days.monthly=read.csv("Annual.total.eff.days.csv")
+Total.effort.hours.monthly=read.csv("Annual.total.eff.hours.csv")
+Total.effort.zone.hours.monthly=read.csv("Annual.zone.eff.hours.csv")
+Total.effort.zone.days.monthly=read.csv("Annual.zone.eff.days.csv")
+TEPS.current=read.csv("TEPS.current.csv")
+Suite=read.csv("suite.csv")$Suite
+TEPS.pre.current=read.csv("TEPS.pre.current.csv")
+Results.pre.2013=read.csv("Results.pre.2013.csv")
 
 
 
@@ -112,7 +117,7 @@ DAT$Bioregion=with(DAT,ifelse(Bioregion=="Gascoyne","WC",Bioregion))
 #Create current year data set for other fisheries in temperate region (i.e non TDGDLF or NSF)  
 #select south and west coast fisheries
 CAESS.shark.fishery.codes=c("SGL1","SGL2","SGL","WCGL","C127","CL02")
-Other.fishery.catch=subset(Data.monthly,SPECIES<=31000 & !FisheryCode%in%CAESS.shark.fishery.codes)
+Other.fishery.catch=subset(Data.monthly,SPECIES<=31000 & !FisheryCode%in%CAESS.shark.fishery.codes)  #HERE: add daily.other
 Other.fishery.catch=subset(Other.fishery.catch, !(METHOD=="LL"&Estuary=="NO"))
 Other.fishery.catch$LAT=-as.numeric(substr(Other.fishery.catch$BLOCKX,1,2))
 Other.fishery.catch=subset(Other.fishery.catch, !(METHOD=="GN"&Estuary=="NO" & LAT<(-26)))
