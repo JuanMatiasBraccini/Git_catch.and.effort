@@ -273,6 +273,8 @@ Bathymetry=rbind(Bathymetry_120,Bathymetry_138)
 #Block10 locations
 BlOCK_10=read.csv("C:/Matias/Data/Mapping/Blocks_10NM.csv")
 
+#All block 60 lat and long, including estuaries
+BLOCK_60=read.csv("C:/Matias/Data/Mapping/Block60s.csv")
 
 #Weight ranges
 Wei.range=read.csv("C:/Matias/Data/Length_Weights/Data.Ranges.csv")
@@ -423,7 +425,7 @@ Do.jpeg="YES"
 
 ##################--- DATA MANIPULATION SECTION ---##############
 
-#Non-commercial Fisheries
+#Non-commercial Fisheries             ACA: missing, replace a.recreational and b.Charter for source(recreational.)
  #a. recreational
 Rec.fish.catch=Rec.fish.catch%>%
    mutate(FinYear=paste(2000+as.numeric(substr(Year,1,2)),substr(Year,3,4),sep="-"),
@@ -463,22 +465,22 @@ Charter.fish.catch=Charter.fish.catch%>%left_join(charter.blk,by=c("Block5"="Blo
 Tab.chart.blck.sp=aggregate(cbind(Kept_N,Released_N)~SNAME+Block5,Charter.fish.catch,sum)
 Tab.chart.blck.sp_w=aggregate(cbind(Kept_w,Released_w)~SNAME+Block5,Charter.fish.catch,sum)
 Tab.chart.yr.sp_w=aggregate(cbind(Kept_w,Released_w)~SNAME+Year,Charter.fish.catch,sum)
-par(mfcol=c(2,1),mar=c(2,2,1,1),oma=c(1,1,1,1),las=1,mgp=c(1,.5,0))
-with(aggregate(cbind(Kept_N,Released_N)~LAT+LONG,Charter.fish.catch,sum),
-{
-       plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Kept_N,3),
-            main=paste("All years. Kept numbers","(n=",sum(Kept_N),")"),ylab='',xlab='')
-       plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Released_N,3),
-            main=paste("All years. Released numbers","(n=",sum(Released_N),")"),ylab='',xlab='')
-     })
+# par(mfcol=c(2,1),mar=c(2,2,1,1),oma=c(1,1,1,1),las=1,mgp=c(1,.5,0))
+# with(aggregate(cbind(Kept_N,Released_N)~LAT+LONG,Charter.fish.catch,sum),
+# {
+#        plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Kept_N,3),
+#             main=paste("All years. Kept numbers","(n=",sum(Kept_N),")"),ylab='',xlab='')
+#        plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Released_N,3),
+#             main=paste("All years. Released numbers","(n=",sum(Released_N),")"),ylab='',xlab='')
+#      })
 yr=as.numeric(substr(Current.yr,1,4))
-with(aggregate(cbind(Kept_N,Released_N)~LAT+LONG,subset(Charter.fish.catch,Year==yr),sum),
-{
-       plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Kept_N,3),
-            main=paste(yr,"Kept numbers","(n=",sum(Kept_N),")"),ylab='',xlab='')
-       plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Released_N,3),
-            main=paste(yr,"Released numbers","(n=",sum(Released_N),")"),ylab='',xlab='')
-     })
+# with(aggregate(cbind(Kept_N,Released_N)~LAT+LONG,subset(Charter.fish.catch,Year==yr),sum),
+# {
+#        plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Kept_N,3),
+#             main=paste(yr,"Kept numbers","(n=",sum(Kept_N),")"),ylab='',xlab='')
+#        plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Released_N,3),
+#             main=paste(yr,"Released numbers","(n=",sum(Released_N),")"),ylab='',xlab='')
+#      })
 
 #Quick check to determine samples size catch age composition
 if(explore.Catch.compo=="YES")
@@ -644,7 +646,7 @@ fn.chk.ktch(d1=Data.monthly.original,
 
   #define estuaries
 Estuaries=c(95010,95020,95030,95040,95050,95060,95070,95080,95090,85010,85020,85030,85040,85050,85060,
-            85070,85080,85090,85100,85110,85130,85990)
+            85070,85080,85090,85100,85110,85120,85130,85210,85220,85990)
 Bays=96000:98000
 Shark.Bay=96021
 Abrolhos=97011
@@ -672,6 +674,14 @@ Data.monthly$BLOCKX=with(Data.monthly,ifelse(BLOCKX%in%c(Shark.Bay),25120,
                     ifelse(BLOCKX%in%c(Cockburn.sound),32150,                        
                     ifelse(BLOCKX%in%c(King.George.sound),35181,BLOCKX)))))))))         
 
+# Dumi.blk=BLOCK_60%>%
+#           mutate(BlockCode=ifelse(grepl("s",BlockCode),paste(substr(BlockCode,1,4),0,sep=''),BlockCode),
+#                  BLOCKX=as.numeric(BlockCode),
+#                  LAT=ifelse(BLOCKX==85990,NA,NorthWestPointGPSLatitude),
+#                  LONG=ifelse(BLOCKX==85990,NA,NorthWestPointGPSLongitude))%>%
+#           select(BLOCKX,LAT,LONG)%>%
+#           filter(BLOCKX%in%unique(Data.monthly$BLOCKX))
+
 Data.monthly$LAT=-as.numeric(substr(Data.monthly$BLOCKX,1,2))
 Data.monthly$LONG=100+as.numeric(substr(Data.monthly$BLOCKX,3,4))
 
@@ -697,10 +707,19 @@ Data.monthly$LAT=with(Data.monthly,ifelse(BLOCKX%in%c(96021),-25,
                 ifelse(BLOCKX%in%c(95070),-34.9731,
                 ifelse(BLOCKX%in%c(95080),-34.9278,
                 ifelse(BLOCKX%in%c(85990),NA,
+                ifelse(BLOCKX==85010,-34.06976,
                 ifelse(BLOCKX%in%c(85130),-34.9278,LAT
-                ))))))))))))))))))))
+                )))))))))))))))))))))
 
 Data.monthly$LAT=ceiling(Data.monthly$LAT)
+
+if(min(Data.monthly$LAT,na.rm=T)<(-40))
+{
+  plot(1,1,col='transparent',ann=F,axes=F)
+  text(1,1,"ERROR IN LATITUDE",col=2,cex=3)
+  stop("CHECK LATITUDE")
+}
+  
 
 Data.monthly$LONG=with(Data.monthly,ifelse(BLOCKX%in%c(96021),113,
                   ifelse(BLOCKX%in%c(96022,96023),113,
@@ -720,30 +739,27 @@ Data.monthly$LONG=with(Data.monthly,ifelse(BLOCKX%in%c(96021),113,
                   ifelse(BLOCKX%in%c(95070),116.9744,
                   ifelse(BLOCKX%in%c(95080),116.4489,
                   ifelse(BLOCKX%in%c(85990),NA,
+                  ifelse(BLOCKX==85010,115.1438 ,
                   ifelse(BLOCKX%in%c(85130),116.4489,LONG
-                  ))))))))))))))))))))
+                  )))))))))))))))))))))
 
 Data.monthly$LONG=floor(Data.monthly$LONG)
 
 #add Fishery code if missing
 Data.monthly=Data.monthly%>%
-  mutate(fishery=ifelse(METHOD%in%c("GN","LL")& LAT <(-26) & LAT >=(-33) & LONG<116.5,'WCGL',
-                 ifelse(METHOD%in%c("GN","LL")& LAT <(-33) & LONG<116.5,'SGL1',
-                 ifelse(METHOD%in%c("GN","LL")& LAT <(-26) & LONG>=116.5,'SGL2',fishery))))
-#ACA
+  mutate(fishery=ifelse(is.na(fishery) & METHOD%in%c("GN","LL")& LAT <(-26) & 
+                          LAT >=(-33) & LONG<116.5,'WCGL',
+                 ifelse(is.na(fishery) & METHOD%in%c("GN","LL")& LAT <(-33) &
+                          LONG<116.5,'SGL1',
+                 ifelse(is.na(fishery) & METHOD%in%c("GN","LL")& LAT <(-26) &
+                          LONG>=116.5,'SGL2',fishery))))
+
 # A.7. Fix condition
 Data.monthly$CONDITN=as.character(Data.monthly$CONDITN)
 Data.monthly$CONDITN=with(Data.monthly,ifelse(is.na(SPECIES),"NIL",CONDITN))
 
 
 # A.8. Add bioregion and zone                                                               
-Data.monthly$LONG=with(Data.monthly,ifelse(BLOCKX==85990,NA,
-                    ifelse(BLOCKX==31300,130,
-                    ifelse(BLOCKX==32300,130,LONG))))
-Data.monthly$LAT=with(Data.monthly,ifelse(BLOCKX==85990,NA,
-                    ifelse(BLOCKX==31300,-31,
-                    ifelse(BLOCKX==32300,-32,LAT))))
-
 Data.monthly$Bioregion=as.character(with(Data.monthly,ifelse(LONG>=115.5 & LONG<=129 & LAT<=(-26),"SC", 
              ifelse(LONG<115.5 & LAT<=(-27),"WC",
              ifelse(LONG<=114.834 & LAT>(-27),"Gascoyne",
@@ -995,112 +1011,6 @@ if(Get.Daily.Logbook=="YES")
     ifelse(finyear=="2012-13" & TSNo=="TDGLF8002261" & netlen==300,3000,
     ifelse(finyear=="2012-13" & TSNo%in%c("TDGLF8008946","TDGLF8008924") & netlen==400,4000,netlen))))
 }
-if(Get.Daily.Logbook=="NO")
-{
-  # B.1. Combine data sets and create copy
-  
-  #2006-2010
-  Data.daily=rbind(Data.daily.2006.07,Data.daily.2007.08,Data.daily.2008.09,Data.daily.2009.10)
-  Data.daily.1=Data.daily
-  
-  #note: SNo is the session number, this get's repeated
-  #       DSNo is daily sheet number, this is unique and it groups all SNos within a date
-  #       TSNo is trip sheet number, which is the DSNo were the total download weigth of the trip is reported
-  Data.daily$nfish=Data.daily$orgnfish
-  
-  Data.daily=Data.daily[,match(This,names(Data.daily))]
-  
-  
-  
-  #2010-2011
-  Data.daily.2010.11.1=Data.daily.2010.11
-  Data.daily.2010.11$date=with(Data.daily.2010.11,as.POSIXct(paste(year,"-",month,"-",day,sep="")))
-  Data.daily.2010.11$hooks=0
-  Data.daily.2010.11$nlines=0
-  Data.daily.2010.11$Bioregion=Data.daily.2010.11$bioregion
-  Data.daily.2010.11=Data.daily.2010.11[,match(This,names(Data.daily.2010.11))]
-  
-  
-  
-  #2011-2012
-  Data.daily.2011.12$hooks=0
-  Data.daily.2011.12$nlines=0
-  Data.daily.2011.12$Bioregion=Data.daily.2011.12$bioregion
-  Data.daily.2011.12$date=with(Data.daily.2011.12,as.POSIXct(paste(year,"-",month,"-",day,sep="")))
-  
-  #manually fix some catch records identified as incorrect in "#---- CATCH INSPECTIONS -----" 
-  #note: the ammended values were provided by data entry girls
-  id=subset(Data.daily.2011.12,TSNo=="TDGLF8000737" & DSNo=="TDGLF8000734" & sname1=="Blue Morwong (queen snapper)")
-  if(nrow(id)>=1)Data.daily.2011.12=subset(Data.daily.2011.12,!(TSNo=="TDGLF8000737" & DSNo=="TDGLF8000734" & sname1=="Blue Morwong (queen snapper)"))
-  
-  Data.daily.2011.12$livewt=with(Data.daily.2011.12,
-                                 ifelse(TSNo=="TDGLF6007702" & DSNo=="TDGLF6007702" & sname1=="Blue Morwong (queen snapper)"& livewt<700,5.04,
-                                        ifelse(TSNo=="TDGLF6007702" & DSNo=="TDGLF6007702" & sname1=="Blue Morwong (queen snapper)"& livewt>700,10.06,
-                                               ifelse(TSNo=="TDGLF8004653" & DSNo=="TDGLF8004653" & sname1=="Blue Morwong (queen snapper)"& livewt<200,13,
-                                                      ifelse(TSNo=="TDGLF8004653" & DSNo=="TDGLF8004653" & sname1=="Blue Morwong (queen snapper)"& livewt>200,26,livewt)))))
-  
-  Data.daily.2011.12$nfish=with(Data.daily.2011.12,
-                                ifelse(DSNo=="TDGLF8003608" & TSNo=="TDGLF8003611" & sname1=="Shark, Whiskery"& nfish>3,52,
-                                       ifelse(DSNo=="TDGLF8003608" & TSNo=="TDGLF8003611" & sname1=="Shark, Whiskery"& nfish<3,12,nfish)))
-  
-  Data.daily.2011.12$netlen=with(Data.daily.2011.12,ifelse(vessel=="B 067"& netlen==650,6500,
-                                                           ifelse(vessel=="B 142"& netlen==540,5400,
-                                                                  ifelse(vessel=="E 009"& netlen==420,4320,
-                                                                         ifelse(vessel=="E 009"& netlen==400,4000,
-                                                                                ifelse(vessel=="E 035"& netlen==380,3800,
-                                                                                       ifelse(vessel=="F 417"& netlen==6000,600,netlen)))))))
-  
-  Data.daily.2011.12$shots=with(Data.daily.2011.12,ifelse(vessel=="F 541"& shots==5,1,shots))
-  
-  #create historic file
-  Data.daily.2011.12.1=Data.daily.2011.12
-  
-  #select appropriate variables
-  Data.daily.2011.12=Data.daily.2011.12[,match(This,names(Data.daily.2011.12))]
-  
-  #create demersal suite scalefish species
-  Suite=subset(Data.daily.2011.12.1,type=="demersal")     #MISSING: NEED PROPER LIST FROM EVA/DAVE
-  Suite=unique(Suite$species)
-  
-  
-  
-  #2012-2013
-  Data.daily.2012.13$hooks=0
-  Data.daily.2012.13$nlines=0
-  Data.daily.2012.13$Bioregion=Data.daily.2012.13$bioregion
-  Data.daily.2012.13$date=with(Data.daily.2012.13,as.POSIXct(paste(year,"-",month,"-",day,sep="")))
-  
-  #manually fix some catch records identified as incorrect in "#---- CATCH INSPECTIONS -----" 
-  #note: the ammended values were provided by data entry girls
-  Data.daily.2012.13$nfish=with (Data.daily.2012.13,
-                                 ifelse(species==377004 & vessel=="G 297" & landwt == 92.57,7,nfish))
-  
-  Data.daily.2012.13$livewt=with (Data.daily.2012.13,
-                                  ifelse(species==377004 & vessel=="E 035" & landwt == 49,6.7,
-                                         ifelse(species==377004 & vessel=="G 297" & landwt == 92.57,216,
-                                                ifelse(species==17003 & vessel=="E 059" & landwt == 1769,17,livewt))))
-  
-  
-  Data.daily.2012.13$netlen=with (Data.daily.2012.13,
-                                  ifelse(DSNo=="TDGLF8002239" &  TSNo=="TDGLF8002240" & netlen==165,3500,
-                                         ifelse(TSNo=="TDGLF8002261" & netlen==300,3000,
-                                                ifelse(TSNo%in%c("TDGLF8008946","TDGLF8008924") & netlen==400,4000,netlen))))
-  
-  #create historic file
-  Data.daily.2012.13.1=Data.daily.2012.13
-  
-  #select appropriate variables
-  Data.daily.2012.13=Data.daily.2012.13[,match(This,names(Data.daily.2012.13))]
-  
-  #Merge daily data sets
-  Data.daily=rbind(Data.daily,Data.daily.2010.11)           
-  Data.daily=rbind(Data.daily,Data.daily.2011.12)
-  Data.daily=rbind(Data.daily,Data.daily.2012.13)
-  
-  #Set finyear to character
-  Data.daily$finyear=as.character(Data.daily$finyear)
-  
-}
 
   #Remove incomplete years  
 FINYrs=c(sort(as.character(unique(Data.monthly$FINYEAR))),sort(as.character(unique(Data.daily$finyear))))
@@ -1111,8 +1021,8 @@ FINYrs=FINYrs[1:match(Current.yr,FINYrs)]
 Data.daily.incomplete=subset(Data.daily,!finyear%in%FINYrs)
 Data.daily.incomplete=subset(Data.daily.incomplete,!(species==99999 | is.na(species)))
 
-
 Data.daily=subset(Data.daily,finyear%in%FINYrs)
+
 
 #remove fins and livers to avoid duplication 
   #no livers reported, only fins. If conditn=="FI" then 
@@ -1150,7 +1060,6 @@ if(Inspect.New.dat=="YES")
   }
   rm(A,a,b,guarda)
 }
-
 Data.daily=subset(Data.daily,!(species%in%c(22997,22998)))
 if(nrow(Data.daily.incomplete))Data.daily.incomplete=subset(Data.daily.incomplete,!(species%in%c(22997,22998)))
 if(nrow(Data.daily.FC.2005_06))Data.daily.FC.2005_06=subset(Data.daily.FC.2005_06,!(species%in%c(22997,22998)))
@@ -1191,8 +1100,9 @@ Data.daily$LatDeg=with(Data.daily,ifelse(blockx%in%c(96021),25,
                   ifelse(blockx%in%c(95070),34.9731,
                   ifelse(blockx%in%c(95080),34.9278,
                   ifelse(blockx%in%c(85990),NA,
+                  ifelse(blockx==85010,34.06976,
                   ifelse(blockx%in%c(85130),34.9278,LatDeg
-                  ))))))))))))))))))))
+                  )))))))))))))))))))))
 Data.daily$LatDeg=floor(Data.daily$LatDeg)
 
 Data.daily$LongDeg=with(Data.daily,ifelse(blockx%in%c(96021),113,
@@ -1213,14 +1123,16 @@ Data.daily$LongDeg=with(Data.daily,ifelse(blockx%in%c(96021),113,
                    ifelse(blockx%in%c(95070),116.9744,
                    ifelse(blockx%in%c(95080),116.4489,
                    ifelse(blockx%in%c(85990),NA,
+                   ifelse(blockx==85010,115.1438,
                    ifelse(blockx%in%c(85130),116.4489,LongDeg
-                   ))))))))))))))))))))
+                   )))))))))))))))))))))
 Data.daily$LongDeg=floor(Data.daily$LongDeg)    
 
   #Idenfity estuaries
 Data.daily$Estuary=with(Data.daily,ifelse(blockx%in%Estuaries,"YES","NO"))
 
-# fix blocks                                                                        
+# fix blocks 
+#note: this creates a dummy blockx just for extracting lat and long, it gets reset below
 Data.daily$blockx=with(Data.daily,ifelse(blockx%in%c(96021),25120,     #Shark Bay
                   ifelse(blockx%in%c(96022,96023),26131,
                   ifelse(blockx%in%c(97011),27132,                        #Abrolhos
@@ -1547,12 +1459,6 @@ Data.daily$species=with(Data.daily,ifelse(is.na(species),999999,species))
 THIS.10=c("finyear","year","month","day","fishery","licence","zone","orgzone","targetSpecies","block10","blockx",
           "LatDeg","LatMin","LongDeg","LongMin","method","species","sname1","vessel","NilCatch",
           "hours","netlen","shots","depthMax","depthMin","landwt","livewt","totlandwt","bdays")     
-if(Get.Daily.Logbook=="NO")
-{
-  Fine.scale.eff=rbind(Data.daily.1[,match(THIS.10,names(Data.daily.1))],
-                       Data.daily.2010.11.1[,match(THIS.10,names(Data.daily.2010.11.1))],
-                       Data.daily.2011.12.1[,match(THIS.10,names(Data.daily.2011.12.1))])
-}
 if(Get.Daily.Logbook=="YES") Fine.scale.eff=Data.daily.1
 Fine.scale.eff=subset(Fine.scale.eff,method=="GN")
 
