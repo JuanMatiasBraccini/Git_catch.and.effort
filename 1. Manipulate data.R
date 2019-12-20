@@ -1,31 +1,13 @@
 ###--- SHARK GILLNET AND LONGLINE FISHERY CATCH AND EFFORT MANIPULATIONS ----###
 
-#MISSING:  1. charter.mean.w is dummy. Go out with them to calculate properly! (or use Karina's rec fish size)
+#MISSING:
+#       1. charter.mean.w is dummy. Go out with them to calculate properly! (or use Karina's rec fish size)
 #             another issue with Charter data is species id (e.g. bull sharks for licence FT1L373 may not be)
 
-
-# Charter boat data: Each year ask Rhonda to do a data extraction from FishCube
-
-#Index for navigation
-#SECTION A. ---- MONTHLY RECORDS 
-#SECTION B. ---- DAILY LOGBOOKS 
-#SECTION C. ---- CATCH MERGING AND CORRECTIONS 
-#SECTION D. ---- EFFORT INSPECTIONS 
-#SECTION E. ---- EFFORT CORRECTIONS 
-#SECTION F. ---- PROCEDURE SECTION 
-          # F 1. EXTRACT QUANTITIES 
-          # F 2. EXPORT DATA FOR ASSESSMENT AND CPUE STANDARDISATION
-#SECTION G. ---- REPORT SECTION 
-          # G 1. SPATIO TEMPORAL CATCH AND EFFORT DISTRIBUTION
-          # G 2. DATA REQUESTS 
-#SECTION H. ----  EXPORT TOTAL CATCH FOR REFERENCE POINT ANALYSIS ---
-#SECTION I. ----  EXPLORATORY ANALYSES ---   (including movies)
-#SECTION J. ----  DROPPED CODE ---
-
+#      BUT, directly source recreational and charter catches from 'Catch.recons.Recreational.R', this will sort all issues!!!
 
 #NOTES:
-
-#MONTHLY RECORDS:   CAESS data from 1988/89 to 2007/08 (some fishers kept reporting in CAESS 
+  #MONTHLY RECORDS:   CAESS data from 1988/89 to 2007/08 (some fishers kept reporting in CAESS 
 #                      after introduction of daily logbooks).
 #                   Records include shark data from all fisheries, not just TDGDLF (fishery
 #                     code: SGL & WCGL) and NSF (code C127 & CL02)
@@ -35,13 +17,11 @@
 #                   In 2002 each unit became 270 m of net (Rory per comm)
 #                   After 1988, estuary blocks are true shark shots (Rory per comm)
 
-#FishCUBE index
+  #FishCUBE index
                #Extract data for FishCUBE
                #G 4.9 FishCUBE 
 
-
-
-#Data inspections:
+  #Data inspections:
                  # CATCH INSPECTIONS
                  #     Set current.yr; Identify 0 catch shots (are they real?), ID catch records
                  #         where catch is too large of too small compared to species weight range
@@ -50,40 +30,34 @@
                  #     Visually inspect effort variables, identify suspicious records and raise to data
                  #         entry staff
 
-
-#Data structure
+  #Data structure
 #     . Data.monthly: CAESS monthly records 1975-1976 to 2005-2006
 #               each row is a species' monthly catch per fisher per block, 
 #               including the effort exerted by that fisher in that block
 
 #     . Data.daily: daily logbooks 2006-2007 onwards
 
-
-#Catch correction criteria:
+  #Catch correction criteria:
 #           1. Reapportion catch composition of main commercial shark species
 #           2. All catch data prior to 1990 are increased by 5%
 
-
-#Effort correction criteria:
+  #Effort correction criteria:
 #           1. Fix invalid effort records by
 #                 - using vessel's annual average parameter values if available
 #                 - using the monthly fleet average if average annual values not available
 #                   for the individual vessel (e.g. vessel only submitting 1 record for that year)
 #           2. All effort data prior to 1990 are increased by 5%
 
-
-#Effort standardisation:
+  #Effort standardisation:
 #           1. Standardise longline effort to gillnet equivalent effort (used for reporting only)
 
-
-#Effective effort:
+  #Effective effort:
 #           1. Define area ranges for each species and use only those records for CPUE analysis
 
-
-#Fishing efficiency:
+  #Fishing efficiency:
 #           1. Adjust for increase in fishing efficiency for early years
 
-#Estuaries catch:
+  #Estuaries catch:
 #           1. Catch from estuaries is kept for total catch calculation but dropped for cpue standardisation
 
 
@@ -117,7 +91,7 @@ setwd("C:/Matias/Data/Catch and Effort")  # working directory
 
 
 
-First.run="NO"    #turn to yes when new year's data is included
+First.run="NO"    #turn to 'yes' when new year's data is included
 #First.run="YES"
 
 Current.yr="2017-18"    #Set current financial year 
@@ -228,7 +202,7 @@ if(!is.na(match("financial year",names(TEPS.current))))
 #other fisheries
 #note: can extract from FishCube running this query:
 # http://F01-FIMS-WEBP01/FishCubeWA/Query.aspx?CubeId=CommercialDPIRDOnly&QueryId=8729f44a-3f88-4fb2-80d3-81a80aad9734
-#     however, since 2017 'other.fishery.catch' is provided by Paul F in the updated Data.monthly
+#     however, since 2017 'other.fishery.catch' is provided by Paul F in the updated 'Data.monthly' file
 #Other.fishery.catch=read.csv(paste(Current.yr.dat,"/otherSH.csv",sep=""),stringsAsFactors=F)      
 
 #Catch price
@@ -576,13 +550,14 @@ Data.monthly$Same.return.SNo=Data.monthly$Same.return
 Data.monthly$TYPE.DATA="monthly"
 
 
-#remove fins and livers to avoid duplication 
+#remove fins and livers to avoid duplication when calculating live weight
   #note: id records were only fins or livers were reported.
   # for this, check with species were wrongly assigned a liver
   # or fin code and remove records from those where liver/fin and
   # WF or WH weights were reported
-A=subset(Data.monthly,CONDITN%in%c("LI","FI") & 
-           !SPECIES%in%c(22997,22998))
+A=Data.monthly%>%
+        filter(CONDITN%in%c("LI","FI") &
+               !SPECIES%in%c(22997,22998))
 SPEC.livr.fin=unique(A$SPECIES)
 A=subset(Data.monthly,SPECIES%in%SPEC.livr.fin)
 Data.monthly=subset(Data.monthly,!SPECIES%in%SPEC.livr.fin)
@@ -593,7 +568,7 @@ for(s in 1:length(SPEC.livr.fin))
   Tbl.x=with(x,table(Same.return,CONDITN))
   Tbl.x=as.data.frame.matrix(Tbl.x) 
   Tbl.x$Sums=rowSums(Tbl.x)
-  if(!is.null(Tbl.x$LI)) KEEP=subset(Tbl.x,(Sums==1 & FI==1)| (Sums==1 & LI==1)) else
+  if(!is.null(Tbl.x$LI)) KEEP=subset(Tbl.x,(Sums==1 & FI==1) | (Sums==1 & LI==1)) else
   KEEP=subset(Tbl.x,(Sums==1 & FI==1))
   keep.these[[s]]=row.names(KEEP)
 }
@@ -604,11 +579,73 @@ A$KEEP=with(A,ifelse(!CONDITN%in%c("FI","LI"),"KEEP",KEEP))
 Data.monthly$KEEP=with(Data.monthly,
         ifelse(CONDITN%in%c("FI","LI"),"DROP","KEEP"))
 Data.monthly=rbind(Data.monthly,A)
+
+  #a. reconstruct landed and livewt records that only reported 'liver' or 'fin'
+only.liver.fin=Data.monthly%>%
+                  filter(SPECIES%in%c(22997,22998))%>%
+                  distinct(Same.return)%>%
+                  pull(Same.return)
+only.liver.fin=Data.monthly%>%
+                filter(Same.return%in%only.liver.fin & SPECIES<50000)%>%
+                group_by(Same.return,SNAME)%>%
+                summarise(n = n()) %>%
+                mutate(freq = n / sum(n))%>%
+                select(-n)%>%
+                spread(SNAME,freq,fill=0)%>%
+                data.frame%>%
+                mutate(Prop=shark.fins+shark.liver)
+Prop.fin=only.liver.fin%>%
+                filter(shark.fins>0)%>%
+                pull(Same.return)
+Prop.fin=Data.monthly%>%
+                filter(Same.return%in%Prop.fin & SPECIES<50000)%>%
+                mutate(fin.no.fin=ifelse(SPECIES==22998,"Fin","No.Fin"))%>%
+                group_by(fin.no.fin)%>%
+                summarise(livewt=sum(LIVEWT),
+                          landwt=sum(LANDWT))
+Prop.fin.livewt=Prop.fin$livewt[1]/Prop.fin$livewt[2]
+Prop.fin.landwt=Prop.fin$landwt[1]/Prop.fin$landwt[2]
+
+Prop.livr=only.liver.fin%>%
+                filter(shark.liver>0)%>%
+                pull(Same.return)
+Prop.livr=Data.monthly%>%
+                filter(Same.return%in%Prop.livr & SPECIES<50000)%>%
+                mutate(livr.no.livr=ifelse(SPECIES==22997,"Livr","No.Livr"))%>%
+                group_by(livr.no.livr)%>%
+                summarise(livewt=sum(LIVEWT),
+                          landwt=sum(LANDWT))
+Prop.livr.livewt=Prop.livr$livewt[1]/Prop.livr$livewt[2]
+Prop.livr.landwt=Prop.livr$landwt[1]/Prop.livr$landwt[2]
+
+add.only.liver.fin=only.liver.fin%>%filter(Prop==1)%>%pull(Same.return)
+add.only.liver.fin=Data.monthly%>%
+                filter(Same.return%in%add.only.liver.fin & 
+                         SPECIES%in%c(22997,22998))%>%
+                mutate(SPECIES=22999,
+                       SNAME='shark, other',
+                       LIVEWT=ifelse(SPECIES==22998,LIVEWT/Prop.fin.livewt,
+                                                    LIVEWT/Prop.livr.livewt),
+                       LANDWT=ifelse(SPECIES==22998,LANDWT/Prop.fin.landwt,
+                                                    LANDWT/Prop.livr.livewt),
+                       CONDITN='WF',
+                       KEEP='KEEP')
+
+Data.daily.other.fisheries=Data.daily.other.fisheries%>%
+                        filter(!species==22998)    #remove fins as already part of 'shark other'
+
+Data.monthly=Data.monthly%>%     
+              filter(!(Same.return%in%add.only.liver.fin$Same.return & 
+                      SPECIES%in%c(22997,22998)))
+Data.monthly=rbind(Data.monthly,add.only.liver.fin)
+
+
+#b. now remove fins and livers
 Data.monthly=subset(Data.monthly,!(SPECIES%in%c(22997,22998)))
 Data.monthly=subset(Data.monthly,KEEP=="KEEP")
 Data.monthly$CONDITN=with(Data.monthly,
       ifelse(CONDITN%in%c("FI","LI"),"WF",CONDITN))
-rm(A)
+rm(A,add.only.liver.fin,only.liver.fin)
 Data.monthly=Data.monthly[,-match("KEEP",names(Data.monthly))]
 
 
