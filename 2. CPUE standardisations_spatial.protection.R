@@ -202,10 +202,12 @@ fn.pred=function(dd)
     Mn=sort(table(dat$MONTH))
     new.gam=data.frame(log.effort=mean(dat$log.effort),
                        MONTH=as.numeric(names(Mn[length(Mn)])),
+                       BLOCKX=dat$BLOCKX,
                        long.corner=dat$long.corner,
                        lat.corner=dat$lat.corner)%>%
-      mutate(long.lat=paste(long.corner,lat.corner))%>%
-      distinct(long.lat,.keep_all = T)
+      mutate(long.lat=paste(long.corner,lat.corner))
+    if("block10" %in% colnames(dat)) new.gam$block10=dat$block10
+    new.gam=new.gam%>%distinct(long.lat,.keep_all = T)
     new.gam$Prob=predict(mod,newdata=new.gam,type='response')
     Store[[i]]=new.gam
   }
@@ -217,16 +219,78 @@ system.time({
   Pred.daily=fn.pred(dd=Res.daily)
   Pred.monthly.NSF=fn.pred(dd=Res.monthly.NSF)
   Pred.daily.NSF=fn.pred(dd=Res.daily.NSF)
-})
+})  #takes 8 secs
 
 
-# 4.4 Calculate spatial overlap
+# 4.4 Convert Prob of occurrence into categories
+fn.cat=function(dd)
+{
+  for( i in 1:length(dd))
+  {
+    dd[[i]]=dd[[i]]%>%mutate(Suitability=
+                               ifelse(Prob< .3,'Low',
+                               ifelse(Prob>= .3 & Prob<.6,'Suitable',
+                               ifelse(Prob>=.6,'High',NA))))
+  }
+  return(dd)
+}
+system.time({
+  Pred.monthly=fn.cat(dd=Pred.monthly)
+  Pred.daily=fn.cat(dd=Pred.daily)
+  Pred.monthly.NSF=fn.cat(dd=Pred.monthly.NSF)
+  Pred.daily.NSF=fn.cat(dd=Pred.daily.NSF)
+})  #takes 1 secs
+
+
+# 4.5 Calculate spatial overlap   Deje aca (create dummy spatial closure data, link by blockx or block10)
 
 
 # 5. Outputs section ---------------------------------------------------------
+setwd('C:\\Matias\\Analyses\\Catch and effort\\Outputs\\Spatial protection')
 
-# 5.1 Export spatial overlap table
+# 5.1 Summary of available data
+Tab.sp.name= Data.monthly%>%
+           dplyr::select(SNAME,SPECIES)%>%
+                  bind_rows(Data.daily%>%
+           dplyr::select(SNAME,SPECIES))%>%
+                  bind_rows(Data.monthly.NSF%>%
+           dplyr::select(SNAME,SPECIES))%>%
+                  bind_rows(Data.daily.NSF%>%
+           dplyr::select(SNAME,SPECIES))%>%
+                  distinct(SPECIES,.keep_all = T)
+
+fn.tab1=function(dd)
+{
+  Tbl=as.data.frame(table(dd$SPECIES))
+  colnames(Tbl)=c("SPECIES","N")
+  Tbl$SPECIES=as.character(Tbl$SPECIES)
+  return(Tbl)
+}
+N.monthly=fn.tab1(dd=Data.monthly)
+N.daily=fn.tab1(dd=Data.daily)
+N.monthly.NSF=fn.tab1(dd=Data.monthly.NSF)
+N.daily.NSF=fn.tab1(dd=Data.daily.NSF) 
+N.tot=full_join(N.monthly,N.daily,by="SPECIES")%>%
+  full_join(N.monthly.NSF,by="SPECIES")%>%
+  full_join(N.daily.NSF,by="SPECIES")%>%
+  replace(is.na(.), 0)%>%
+  mutate(Number.of.occurrences=N.x+N.y+N.x.x+N.y.y,
+         SPECIES=as.numeric(SPECIES))%>%
+  dplyr::select(SPECIES,Number.of.occurrences)%>%
+  full_join(Tab.sp.name,by="SPECIES")%>%
+  select(SNAME,Number.of.occurrences)
+
+write.csv(N.tot,'Table1_Number of records per species.csv',row.names = F)
+
+Total.records=length(unique(Data.monthly$Same.return))+
+              length(unique(Data.daily$Same.return.SNo))+
+              length(unique(Data.monthly.NSF$Same.return))+
+              length(unique(Data.daily.NSF$Same.return.SNo))
+
+write.csv(Total.records,'Table1_Total records.csv',row.names = F)
+
+# 5.2 Export spatial overlap table
 
 
-# 5.2 Map spatial overlap table
+# 5.3 Map spatial overlap table
 
