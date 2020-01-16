@@ -1,5 +1,7 @@
 # MISSING: Spatial closures and marine parks shape files and blockx within closures
-#           calculate overlap
+#           calculate overlap. 
+#         Note that Figure 3 of Brikmanis paper has the MAPs
+#           used in their study, make sure these are accounted for
 
 
 # Header ---------------------------------------------------------
@@ -25,6 +27,22 @@ Effort.daily.NSF=read.csv("Effort.daily.NSF.csv")
 
 
   #Shape files. Spatial closures and marine parks       #MISSING
+######dummy
+Closed.Blks=c(20000:25000,31000:33000)
+BLKS=sort(c(unique(Data.monthly$BLOCKX),
+            unique(Data.monthly.NSF$BLOCKX),
+            unique(Data.daily$BLOCKX),
+            unique(Data.daily.NSF$BLOCKX)))
+Closures=rbind(Data.daily%>%dplyr::select(BLOCKX,block10),
+              Data.daily.NSF%>%dplyr::select(BLOCKX,block10))%>%
+                    distinct(block10,.keep_all = T)
+Misn.blk=data.frame(BLOCKX=BLKS[which(!BLKS%in%Closures$BLOCKX)])%>%
+  mutate(block10=BLOCKX*10)
+Closures=rbind(Closures,Misn.blk)%>%
+              mutate(Closed=ifelse(BLOCKX%in%Closed.Blks,"YES","NO"))
+
+###
+
 
 # 3. Parameters section ---------------------------------------------------------
 Min.obs=100
@@ -230,7 +248,11 @@ fn.cat=function(dd)
     dd[[i]]=dd[[i]]%>%mutate(Suitability=
                                ifelse(Prob< .3,'Low',
                                ifelse(Prob>= .3 & Prob<.6,'Suitable',
-                               ifelse(Prob>=.6,'High',NA))))
+                               ifelse(Prob>=.6,'High',NA))),
+                             Suitability=factor(Suitability,
+                                                levels=c('Low',
+                                                         'Suitable',
+                                                         'High')))
   }
   return(dd)
 }
@@ -242,8 +264,35 @@ system.time({
 })  #takes 1 secs
 
 
-# 4.5 Calculate spatial overlap   Deje aca (create dummy spatial closure data, link by blockx or block10)
+# 4.5 Calculate spatial overlap   
+#note:  calculate the number of grid cells within
+#       each IUCN zone for each habitat category (low, suitable, high)
+fn.overlap=function(dd)
+{
+  Overlap=vector('list',length(dd))
+  names(Overlap)=names(dd)
+  for( i in 1:length(dd))
+  {
+    Clsd=Closures%>%filter(BLOCKX%in%unique(dd[[i]]$BLOCKX))
+    if("block10" %in% colnames(dd[[i]])) 
+    {
+      dd[[i]]=dd[[i]]%>%left_join(Clsd,by=c("block10"))
+    }else
+    {
+      dd[[i]]=dd[[i]]%>%left_join(Clsd,by=c("BLOCKX"))
+    }
+    
+    Overlap[[i]]=with(dd[[i]],table(Closed,Suitability,useNA = 'ifany'))
+  }
+  return(Overlap)
+}
 
+Overlap.monthly=fn.overlap(dd=Pred.monthly)
+Overlap.daily=fn.overlap(dd=Pred.daily)
+Overlap.monthly.NSF=fn.overlap(dd=Pred.monthly.NSF)
+Overlap.daily.NSF=fn.overlap(dd=Pred.daily.NSF)
+
+#Deje aca: how to output this???
 
 # 5. Outputs section ---------------------------------------------------------
 setwd('C:\\Matias\\Analyses\\Catch and effort\\Outputs\\Spatial protection')
