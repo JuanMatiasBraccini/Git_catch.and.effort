@@ -2,6 +2,7 @@
 #           calculate overlap. 
 #         Note that Figure 3 of Brikmanis paper has the MAPs
 #           used in their study, make sure these are accounted for
+#         Add all no shark fishing closures to MAPS
 
 
 # Header ---------------------------------------------------------
@@ -9,6 +10,11 @@ rm(list=ls(all=TRUE))
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)
 library(tidyverse)
 library(mgcv)
+library(PBSmapping)
+library(fields)
+library(Hmisc)
+
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
 
 # 2. Data section ---------------------------------------------------------
 setwd('C:/Matias/Analyses/Data_outs')
@@ -46,6 +52,8 @@ Closures=rbind(Closures,Misn.blk)%>%
 
 # 3. Parameters section ---------------------------------------------------------
 Min.obs=100
+Min.rec.ves=100   #minimum number of records (either positive or 0 catch) to keep a vessel
+Min.rec.ves.NSF=20  #lower number of vessels and records per vessel
 
 # 4. Procedure section ---------------------------------------------------------
 
@@ -151,8 +159,8 @@ Effort.daily.NSF=Effort.daily.NSF%>%
 
 # 4.2 Analyse data  
 #note: this function puts data in wide form (one observation per record,
-#       adds effort and performs GAM)
-fn.ann=function(ktch,efrt,Joint)
+#       adds effort, and performs GAM)
+fn.ann=function(ktch,efrt,Joint,Min.rec)
 {
   #add effort   
   d=left_join(ktch,efrt,by=Joint)%>%
@@ -184,9 +192,12 @@ fn.ann=function(ktch,efrt,Joint)
             rename(LIVEWT.c=!!Sp[s])%>%
             mutate(LIVEWT.c=ifelse(LIVEWT.c>0,1,0),
                    log.effort=log(Effort))
+    Ves=table(dd$VESSEL)
+    dd=dd%>%filter(VESSEL%in%names(Ves[Ves>Min.rec]))
+    dd$VESSEL=as.factor(dd$VESSEL)
     
     #binominal gam
-    mod <-gam(LIVEWT.c~s(MONTH,bs='cc', k = 12)+s(long.corner,lat.corner)+offset(log.effort),
+    mod <-gam(LIVEWT.c~s(VESSEL, bs="re")+s(MONTH,bs='cc', k = 12)+s(long.corner,lat.corner)+offset(log.effort),
               data=dd,family=binomial,method="REML")
     Store[[s]]=list(mod=mod,dat=dd)
   }
@@ -195,16 +206,20 @@ fn.ann=function(ktch,efrt,Joint)
 system.time({
   Res.monthly=fn.ann(ktch=Data.monthly,
                      efrt=Effort.monthly,
-                     Joint='Same.return')
+                     Joint='Same.return',
+                     Min.rec=Min.rec.ves)
   Res.daily=fn.ann(ktch=Data.daily,
                    efrt=Effort.daily,
-                   Joint='Same.return.SNo')
+                   Joint='Same.return.SNo',
+                   Min.rec=Min.rec.ves)
   Res.monthly.NSF=fn.ann(ktch=Data.monthly.NSF,
                          efrt=Effort.monthly.NSF,
-                         Joint='Same.return')
+                         Joint='Same.return',
+                         Min.rec=Min.rec.ves.NSF)
   Res.daily.NSF=fn.ann(ktch=Data.daily.NSF,
                        efrt=Effort.daily.NSF,
-                       Joint='Same.return.SNo')
+                       Joint='Same.return.SNo',
+                       Min.rec=Min.rec.ves.NSF)
 })    #takes 525 secs
 
 
@@ -218,8 +233,10 @@ fn.pred=function(dd)
     mod=dd[[i]]$mod
     dat=dd[[i]]$dat
     Mn=sort(table(dat$MONTH))
+    Vess=sort(table(dat$VESSEL))
     new.gam=data.frame(log.effort=mean(dat$log.effort),
                        MONTH=as.numeric(names(Mn[length(Mn)])),
+                       VESSEL=factor(names(Vess[length(Vess)]),levels(dat$VESSEL)),
                        BLOCKX=dat$BLOCKX,
                        long.corner=dat$long.corner,
                        lat.corner=dat$lat.corner)%>%
@@ -240,7 +257,25 @@ system.time({
 })  #takes 8 secs
 
 
-# 4.4 Convert Prob of occurrence into categories
+# 4.4 Combine South and North
+fn.combo=function(South,North)
+{
+  Unik=sort(unique(c(names(South),names(North))))
+  New.list=vector('list',length(Unik))
+  names(New.list)=Unik
+  for(u in 1:length(Unik))
+  {
+    dummy=South[[match(Unik[u],names(South))]]
+    dummy.north=North[[match(Unik[u],names(North))]]
+    New.list[[u]]=rbind(dummy,dummy.north)
+  }
+  return(New.list)
+}
+All.pred.monthly=fn.combo(South=Pred.monthly,North=Pred.monthly.NSF)
+All.pred.daily=fn.combo(South=Pred.daily,North=Pred.daily.NSF)
+
+
+# 4.5 Convert Prob of occurrence into categories
 fn.cat=function(dd)
 {
   for( i in 1:length(dd))
@@ -257,14 +292,12 @@ fn.cat=function(dd)
   return(dd)
 }
 system.time({
-  Pred.monthly=fn.cat(dd=Pred.monthly)
-  Pred.daily=fn.cat(dd=Pred.daily)
-  Pred.monthly.NSF=fn.cat(dd=Pred.monthly.NSF)
-  Pred.daily.NSF=fn.cat(dd=Pred.daily.NSF)
+  All.pred.monthly=fn.cat(dd=All.pred.monthly)
+  All.pred.daily=fn.cat(dd=All.pred.daily)
 })  #takes 1 secs
 
 
-# 4.5 Calculate spatial overlap   
+# 4.6 Calculate spatial overlap   
 #note:  calculate the number of grid cells within
 #       each IUCN zone for each habitat category (low, suitable, high)
 fn.overlap=function(dd)
@@ -286,13 +319,9 @@ fn.overlap=function(dd)
   }
   return(Overlap)
 }
+Overlap.monthly=fn.overlap(dd=All.pred.monthly)
+Overlap.daily=fn.overlap(dd=All.pred.daily)
 
-Overlap.monthly=fn.overlap(dd=Pred.monthly)
-Overlap.daily=fn.overlap(dd=Pred.daily)
-Overlap.monthly.NSF=fn.overlap(dd=Pred.monthly.NSF)
-Overlap.daily.NSF=fn.overlap(dd=Pred.daily.NSF)
-
-#Deje aca: how to output this???
 
 # 5. Outputs section ---------------------------------------------------------
 setwd('C:\\Matias\\Analyses\\Catch and effort\\Outputs\\Spatial protection')
@@ -306,7 +335,19 @@ Tab.sp.name= Data.monthly%>%
            dplyr::select(SNAME,SPECIES))%>%
                   bind_rows(Data.daily.NSF%>%
            dplyr::select(SNAME,SPECIES))%>%
-                  distinct(SPECIES,.keep_all = T)
+                  distinct(SPECIES,.keep_all = T)%>%
+                  mutate(SNAME=ifelse(SNAME=='shark, thickskin (sandbar)','shark, sandbar',
+                               ifelse(SNAME=='shark, eastern school','shark, school',
+                               ifelse(SNAME=='shark, mako (shortfin)','shark, shortfin mako',
+                               ifelse(SNAME=='shark, golden, copper whaler','shark, bronze whaler',
+                               ifelse(SNAME=='shark, bronze whaler','shark, dusky',
+                               SNAME))))),
+                         SNAME=paste(capitalize(sapply(strsplit(SNAME, split=', ', fixed=TRUE), 
+                                                        function(x) (x[2]))),'shark'),
+                         SNAME=ifelse(SNAME=='Wobbegong shark','Wobbegong sharks',
+                               ifelse(SNAME=='Hammerhead shark','Hammerhead sharks',
+                                      ifelse(SNAME=='Shortfin mako shark','Shortfin mako',
+                               SNAME))))
 
 fn.tab1=function(dd)
 {
@@ -338,8 +379,126 @@ Total.records=length(unique(Data.monthly$Same.return))+
 
 write.csv(Total.records,'Table1_Total records.csv',row.names = F)
 
-# 5.2 Export spatial overlap table
+
+# 5.2 Map spatial overlap table
+smart.par=function(n.plots,MAR,OMA,MGP) return(par(mfrow=n2mfrow(n.plots),mar=MAR,oma=OMA,las=1,mgp=MGP))
+
+WA.lat=c(-36,-10)
+WA.long=c(112,129)
+data(worldLLhigh)
+a=WA.long[1]:WA.long[2]
+b=seq(WA.lat[1],WA.lat[2],length.out=length(a))
+PLATE=c(.01,.9,.075,.9)
+All.long.10=unique(c(Data.daily$long.corner,Data.daily.NSF$long.corner))
+All.lat.10=unique(c(Data.daily$lat.corner,Data.daily.NSF$lat.corner))
+
+#Plot.cpue.spatial           MISSING: add polygons with all no-shark-fishing areas
+Plot.spatial.occur=function(dd,Full.long,Full.lat,delta,var)
+{
+  for(i in 1:length(dd))
+  {
+    NAME=Tab.sp.name%>%
+      filter(SPECIES==names(dd)[i])%>%
+      pull(SNAME)
+    cpuedata=dd[[i]]%>%
+      rename(Lat=lat.corner,
+             Long=long.corner)
+    if(var[1]=='BLOCKX')
+    {
+      misn.lat=sort(Full.lat[which(!Full.lat%in%unique(cpuedata$Lat))])
+      misn.lon=sort(Full.long[which(!Full.long%in%unique(cpuedata$Long))])
+    }else
+    {
+      misn.lat=sort(All.lat.10[which(!All.lat.10%in%unique(cpuedata$Lat))])
+      misn.lon=sort(All.long.10[which(!All.long.10%in%unique(cpuedata$Long))])
+    }
+    if(length(misn.lat)>0 | length(misn.lon)>0)
+    {
+      if(var[1]=='BLOCKX')
+      {
+        combo=expand.grid(Lon=Full.long,Lat=Full.lat)%>%
+          mutate(BLOCKX=as.numeric(paste(abs(Lat),Lon-100,sep=''))*10)%>%
+          select(BLOCKX)
+        
+        cpuedata=combo%>%left_join(cpuedata,by=var)%>%
+          mutate( Lat=-round(as.numeric(substr(get(var),1,2)),2),
+                  Long=round(100+as.numeric(substr(get(var),3,4)),2))
+      }else
+      {
+        combo=expand.grid(Long=All.long.10,Lat=All.lat.10)
+        cpuedata=combo%>%left_join(cpuedata,by=c('Long','Lat'))
+      }
+    }
+    
+    cpuedata.spread=cpuedata%>%
+      dplyr::select(c(Prob,Lat,Long))%>%
+      spread(Lat,Prob)
+    Lon=as.numeric(cpuedata.spread$Long)
+    cpuedata.spread=as.matrix(cpuedata.spread[,-1]) 
+    LaT=as.numeric(colnames(cpuedata.spread))
+    brk<- seq(0,1,.1)
+    
+    YLIM=floor(range(Full.lat))    
+    XLIM=floor(range(Full.long)) 
+    YLIM[1]=YLIM[1]-0.5
+    YLIM[2]=YLIM[2]+0.5
+    XLIM[1]=XLIM[1]-0.5
+    XLIM[2]=XLIM[2]+0.5
+    plotmap(a,b,PLATE,"dark grey",WA.long,WA.lat)
+    image(Lon+delta,LaT-delta,cpuedata.spread, breaks=brk, col=rev(heat.colors(length(brk)-1)),add=T)
+    par(new=T)
+    plotmap(a,b,PLATE,"dark grey",WA.long,WA.lat)
+    if(i==length(dd))suppressWarnings(image.plot(Lon+delta,LaT-delta,cpuedata.spread, breaks=brk, 
+                                                 col=rev(heat.colors(length(brk)-1)),lab.breaks=names(brk),add=T,
+                                                 legend.only=T,legend.shrink=.5,legend.mar=c(15,5)))
+    axis(side = 1, at =WA.long[1]:WA.long[2], labels = F, tcl = 0.15)
+    axis(side = 2, at = WA.lat[2]:WA.lat[1], labels = F,tcl =0.15)
+    n=seq(WA.long[1],WA.long[2],4)
+    axis(side = 1, at =n, labels = n, tcl = 0.3,padj=-.5)
+    n=seq(WA.lat[1]+1,WA.lat[2],4)
+    axis(side = 2, at = n, labels = abs(n),las=2,tcl =0.3,hadj=.6)
+    mtext(NAME,3,cex=.8)
+  }
+}
+
+  #Monthly
+tiff("Figure 1.Spatial.monthly.tiff",width=2200,height=2400,units="px",res=300,compression="lzw")
+smart.par(length(All.pred.monthly),c(1,2,1.5,1),c(2.5,1,.1,1),c(1.2,.5,0))
+Plot.spatial.occur(dd=All.pred.monthly,
+                   Full.long=WA.long[1]:WA.long[2],
+                   Full.lat=WA.lat[1]:WA.lat[2],
+                   delta=.5,
+                   var='BLOCKX')
+mtext(expression(paste("Longitude (",degree,"E)",sep="")),side=1,line=1.4,font=1,las=0,cex=1.2,outer=T)
+mtext(expression(paste("Latitude (",degree,"S)",sep="")),side=2,line=-0.85,font=1,las=0,cex=1.2,outer=T)
+dev.off()
+
+  #Daily
+tiff("Figure 1.Spatial.daily.tiff",width=2000,height=2400,units="px",res=300,compression="lzw")
+smart.par(length(All.pred.daily),c(1,1,1.5,.5),c(2,2,.1,.1),c(1.2,.5,0))
+Plot.spatial.occur(dd=All.pred.daily,
+                   Full.long=WA.long[1]:WA.long[2],
+                   Full.lat=WA.lat[1]:WA.lat[2],
+                   delta=.16,
+                   var=c('Long','Lat'))
+mtext(expression(paste("Longitude (",degree,"E)",sep="")),side=1,line=1,font=1,las=0,cex=1.2,outer=T)
+mtext(expression(paste("Latitude (",degree,"S)",sep="")),side=2,line=0,font=1,las=0,cex=1.2,outer=T)
+dev.off()
 
 
-# 5.3 Map spatial overlap table
 
+# 5.3 Display spatial overlap    #Deje aca: how to output this???
+Overlap.monthly
+Overlap.daily
+library(treemap)
+data(GNI2014)
+treemap(GNI2014,
+        index=c("continent", "iso3"),
+        vSize="population",
+        vColor="GNI",
+        type="value",
+        format.legend = list(scientific = FALSE, big.mark = " "))
+
+treemap(as.data.frame(Overlap.monthly$`17001`),
+        index=c("Suitability","Closed"),
+        vSize="Freq")
