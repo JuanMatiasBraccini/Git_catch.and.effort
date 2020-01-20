@@ -13,6 +13,11 @@ library(mgcv)
 library(PBSmapping)
 library(fields)
 library(Hmisc)
+library(officer)
+library(flextable)
+library(ggplot2)
+library(treemapify)
+library(gridExtra)
 
 source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
 
@@ -220,7 +225,7 @@ system.time({
                        efrt=Effort.daily.NSF,
                        Joint='Same.return.SNo',
                        Min.rec=Min.rec.ves.NSF)
-})    #takes 525 secs
+})    #takes 872 secs
 
 
 # 4.3 Predict spatial occurrence
@@ -369,8 +374,13 @@ N.tot=full_join(N.monthly,N.daily,by="SPECIES")%>%
   dplyr::select(SPECIES,Number.of.occurrences)%>%
   full_join(Tab.sp.name,by="SPECIES")%>%
   select(SNAME,Number.of.occurrences)
+colnames(N.tot)=c("Common name","Number of records with catch")
+Tbl <- flextable(N.tot)
+Tbl = autofit(Tbl)
+doc <- read_docx()
+doc <- body_add_flextable(doc, value = Tbl)
+print(doc, target = "Table1_Number of records per species.docx")
 
-write.csv(N.tot,'Table1_Number of records per species.csv',row.names = F)
 
 Total.records=length(unique(Data.monthly$Same.return))+
               length(unique(Data.daily$Same.return.SNo))+
@@ -474,7 +484,7 @@ mtext(expression(paste("Latitude (",degree,"S)",sep="")),side=2,line=-0.85,font=
 dev.off()
 
   #Daily
-tiff("Figure 1.Spatial.daily.tiff",width=2000,height=2400,units="px",res=300,compression="lzw")
+tiff("Figure 2.Spatial.daily.tiff",width=2000,height=2400,units="px",res=300,compression="lzw")
 smart.par(length(All.pred.daily),c(1,1,1.5,.5),c(2,2,.1,.1),c(1.2,.5,0))
 Plot.spatial.occur(dd=All.pred.daily,
                    Full.long=WA.long[1]:WA.long[2],
@@ -487,18 +497,36 @@ dev.off()
 
 
 
-# 5.3 Display spatial overlap    #Deje aca: how to output this???
-Overlap.monthly
-Overlap.daily
-library(treemap)
-data(GNI2014)
-treemap(GNI2014,
-        index=c("continent", "iso3"),
-        vSize="population",
-        vColor="GNI",
-        type="value",
-        format.legend = list(scientific = FALSE, big.mark = " "))
+# 5.3 Display spatial overlap    
+fn.treemap=function(dd,Ncol,Nrow)
+{
+  PP=vector('list',length(dd))
+  names(PP)=names(dd)
+  for( i in 1:length(PP))
+  {
+    ddd=as.data.frame(dd[[i]])%>%
+            mutate(Prop=paste(round(100*Freq/sum(Freq),1),"%",sep=""))
+    NAMe=Tab.sp.name%>%filter(SPECIES==names(dd)[i])%>%pull(SNAME)
+    p=ggplot(ddd, aes(area = Freq,fill = Closed, label = Prop,
+                       subgroup = Suitability)) +
+      geom_treemap() +
+      geom_treemap_subgroup_border(colour="white",size=5) +
+      geom_treemap_subgroup_text(place = "centre", grow = T, alpha = 0.5,
+                                 colour ="white", fontface = "italic")+
+      geom_treemap_text(colour = "black", place = "topleft",size=9, reflow = T)+ 
+      scale_fill_manual(values=c("grey75", "grey55")) +
+      theme(legend.position = "none") +
+      ggtitle(NAMe) +
+      theme(plot.title = element_text(hjust = 0.5,size=10))
+    PP[[i]]=p
+  }
+  do.call("grid.arrange", c(PP,ncol=Ncol, nrow=Nrow))
+}
 
-treemap(as.data.frame(Overlap.monthly$`17001`),
-        index=c("Suitability","Closed"),
-        vSize="Freq")
+tiff("Figure 3.overlap.monthly.tiff",width=2400,height=2400,units="px",res=300,compression="lzw")
+fn.treemap(dd=Overlap.monthly,Ncol=4,Nrow=4)
+dev.off()
+
+tiff("Figure 4.overlap.daily.tiff",width=2000,height=2400,units="px",res=300,compression="lzw")
+fn.treemap(dd=Overlap.daily,Ncol=4,Nrow=6)
+dev.off()
