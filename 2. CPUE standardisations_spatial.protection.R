@@ -1,10 +1,3 @@
-# MISSING: Spatial closures and marine parks shape files and blockx within closures
-#           calculate overlap. 
-#         Note that Figure 3 of Brikmanis paper has the MAPs
-#           used in their study, make sure these are accounted for
-#         Add all no shark fishing closures to MAPS
-
-
 # Header ---------------------------------------------------------
 rm(list=ls(all=TRUE))
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)
@@ -77,6 +70,7 @@ Closed.ASL=Closed.ASL%>%
                        block10=X10.NM.Block.ID)%>%
                 dplyr::select(BLOCKX,block10,Closed,Closure.type)
 Closures=rbind(Closed.commonwealth,Closed.Shark,Closed.ASL)
+
 
 
 # 3. Parameters section ---------------------------------------------------------
@@ -329,7 +323,8 @@ system.time({
 # 4.6 Calculate spatial overlap   
 #note:  calculate the number of grid cells within
 #       each IUCN categories I and II for each habitat category (low, suitable, high)
-fn.overlap=function(dd)
+
+fn.overlap=function(dd,scen)
 {
   Overlap=vector('list',length(dd))
   names(Overlap)=names(dd)
@@ -343,6 +338,7 @@ fn.overlap=function(dd)
       dd[[i]]=dd[[i]]%>%
                 left_join(Clsd,by=c("block10"))%>%
                 mutate(Closed=ifelse(is.na(Closed),"NO","YES"))
+      if(scen=="S2") dd[[i]]=dd[[i]]%>%mutate(Closed=ifelse(lat.corner>(-22),"YES",Closed))
     }else
     {
       Clsd=Closures%>%
@@ -351,14 +347,20 @@ fn.overlap=function(dd)
       dd[[i]]=dd[[i]]%>%
                 left_join(Clsd,by=c("BLOCKX"))%>%
                 mutate(Closed=ifelse(is.na(Closed),"NO","YES"))
+      if(scen=="S2") dd[[i]]=dd[[i]]%>%mutate(Closed=ifelse(lat.corner>(-22),"YES",Closed))
     }
     
     Overlap[[i]]=with(dd[[i]],table(Closed,Suitability,useNA = 'ifany'))
   }
   return(Overlap)
 }
-Overlap.monthly=fn.overlap(dd=All.pred.monthly)
-Overlap.daily=fn.overlap(dd=All.pred.daily)
+  #base case
+Overlap.monthly=fn.overlap(dd=All.pred.monthly,scen="BC")
+Overlap.daily=fn.overlap(dd=All.pred.daily,scen="BC")
+
+  #Scenario 2
+Overlap.monthly_scenario2=fn.overlap(dd=All.pred.monthly,scen="S2")
+Overlap.daily_scenario2=fn.overlap(dd=All.pred.daily,scen="S2")
 
 
 # 5. Outputs section ---------------------------------------------------------
@@ -588,10 +590,15 @@ fn.treemap=function(dd,Ncol,Nrow)
 {
   PP=vector('list',length(dd))
   names(PP)=names(dd)
+  THis.col=c("forestgreen", "brown")
+  names(THis.col)=c("YES","NO")
   for( i in 1:length(PP))
   {
-    ddd=as.data.frame(dd[[i]])%>%
-            mutate(Prop=paste(round(100*Freq/sum(Freq),1),"%",sep=""))
+    ddd=as.data.frame(dd[[i]])
+    le.col=THis.col[match(unique(ddd$Closed),names(THis.col))]
+    ddd=ddd%>%
+        arrange(Closed)%>%
+        mutate(Prop=paste(round(100*Freq/sum(Freq),1),"%",sep=""))
     NAMe=Tab.sp.name%>%filter(SPECIES==names(dd)[i])%>%pull(SNAME)
     p=ggplot(ddd, aes(area = Freq,fill = Closed, label = Prop,
                        subgroup = Suitability)) +
@@ -599,11 +606,11 @@ fn.treemap=function(dd,Ncol,Nrow)
       geom_treemap_subgroup_border(colour="white",size=5) +
       geom_treemap_subgroup_text(place = "centre", grow = T, alpha = 0.5,
                                  colour ="white", fontface = "italic")+
-      geom_treemap_text(colour = "black", place = "topleft",size=9, reflow = T)+ 
-      scale_fill_manual(values=c("grey75", "grey55")) +
+      geom_treemap_text(colour = "black", place = "topleft",size=12, reflow = T)+ 
+      scale_fill_manual(values=le.col) +
       theme(legend.position = "none") +
       ggtitle(NAMe) +
-      theme(plot.title = element_text(hjust = 0.5,size=10))
+      theme(plot.title = element_text(hjust = 0.5,size=11))
     PP[[i]]=p
   }
   do.call("grid.arrange", c(PP,ncol=Ncol, nrow=Nrow))
@@ -615,4 +622,13 @@ dev.off()
 
 tiff("Figure 5.overlap.daily.tiff",width=2000,height=2400,units="px",res=300,compression="lzw")
 fn.treemap(dd=Overlap.daily,Ncol=4,Nrow=6)
+dev.off()
+
+
+tiff("Appendix 1.overlap.monthly_scenario 2.tiff",width=2400,height=2400,units="px",res=300,compression="lzw")
+fn.treemap(dd=Overlap.monthly_scenario2,Ncol=4,Nrow=4)
+dev.off()
+
+tiff("Appendix 2.overlap.daily_scenario 2.tiff",width=2000,height=2400,units="px",res=300,compression="lzw")
+fn.treemap(dd=Overlap.daily_scenario2,Ncol=4,Nrow=6)
 dev.off()
