@@ -18,6 +18,7 @@ library(flextable)
 library(ggplot2)
 library(treemapify)
 library(gridExtra)
+library(rgdal)
 
 source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
 
@@ -37,22 +38,45 @@ Effort.monthly.NSF=read.csv("Effort.monthly.NSF.csv")
 Effort.daily.NSF=read.csv("Effort.daily.NSF.csv")
 
 
-  #Shape files. Spatial closures and marine parks       #MISSING
-######dummy
-Closed.Blks=c(20000:25000,31000:33000)
-BLKS=sort(c(unique(Data.monthly$BLOCKX),
-            unique(Data.monthly.NSF$BLOCKX),
-            unique(Data.daily$BLOCKX),
-            unique(Data.daily.NSF$BLOCKX)))
-Closures=rbind(Data.daily%>%dplyr::select(BLOCKX,block10),
-              Data.daily.NSF%>%dplyr::select(BLOCKX,block10))%>%
-                    distinct(block10,.keep_all = T)
-Misn.blk=data.frame(BLOCKX=BLKS[which(!BLKS%in%Closures$BLOCKX)])%>%
-  mutate(block10=BLOCKX*10)
-Closures=rbind(Closures,Misn.blk)%>%
-              mutate(Closed=ifelse(BLOCKX%in%Closed.Blks,"YES","NO"))
+  #Shape files. Spatial closures and marine parks   
+ASL_Closures=readOGR(paste(paz,"ASL_Closures/ASL_Closures.shp",sep=''),
+                     layer="ASL_Closures") 
+WA_Commonwealth_Marine_Parks=readOGR(paste(paz,"WA_Commonwealth_Marine_Parks/WA_Commonwealth_Marine_Parks.shp",sep=''),
+                                     layer="WA_Commonwealth_Marine_Parks") 
+Shark_Fishery_Closures=readOGR(paste(paz,"Shark_Fishery_Closures/Shark_Fishery_Closures.shp",sep=''),
+                               layer="Shark_Fishery_Closures") 
 
-###
+paz="C:/Matias/Data/Mapping/Closures/"
+Closed.commonwealth=read.csv(paste(paz,'Commonwealth_Marine_Parks_WA_Block_Intersection.csv',sep=""))
+Closed.Shark=read.csv(paste(paz,'Shark_Fishery_Closures_Block_Intersection.csv',sep=""))
+Closed.ASL=read.csv(paste(paz,'ASL_Closures_Block_Intersection.csv',sep=""))
+
+#note: manipulate Commonwealth, remove duplicates (Shark and ASL closures superceed Commonwealth),
+#      set as closed only categories I and II (Brikmanis et al 2019)
+Closed.commonwealth=Closed.commonwealth%>%
+                      filter(!X10NM.Block.ID%in%c(unique(Closed.Shark$X10.NM.Block.ID),
+                                                  unique(Closed.ASL$X10.NM.Block.ID)))%>%
+                    mutate(Closure.type="Commonwealth",
+                           Closed=ifelse(ZONEIUCN%in%c("Ia","II"),"Yes","No"))%>%
+                    filter(Closed=="YES")%>%
+                    rename(BLOCKX=CAES.Block.ID,
+                           block10=X10NM.Block.ID)%>%
+                    dplyr::select(BLOCKX,block10,Closed,Closure.type)
+
+Closed.Shark=Closed.Shark%>%
+                mutate(Closure.type="Shark",
+                       Closed='YES')%>%
+                rename(BLOCKX=CAES.Block.ID,
+                       block10=X10.NM.Block.ID)%>%
+                dplyr::select(BLOCKX,block10,Closed,Closure.type)
+
+Closed.ASL=Closed.ASL%>%
+                mutate(Closure.type="ASL",
+                       Closed='YES')%>%
+                rename(BLOCKX=CAES.Block.ID,
+                       block10=X10.NM.Block.ID)%>%
+                dplyr::select(BLOCKX,block10,Closed,Closure.type)
+Closures=rbind(Closed.commonwealth,Closed.Shark,Closed.ASL)
 
 
 # 3. Parameters section ---------------------------------------------------------
@@ -304,20 +328,29 @@ system.time({
 
 # 4.6 Calculate spatial overlap   
 #note:  calculate the number of grid cells within
-#       each IUCN zone for each habitat category (low, suitable, high)
+#       each IUCN categories I and II for each habitat category (low, suitable, high)
 fn.overlap=function(dd)
 {
   Overlap=vector('list',length(dd))
   names(Overlap)=names(dd)
   for( i in 1:length(dd))
   {
-    Clsd=Closures%>%filter(BLOCKX%in%unique(dd[[i]]$BLOCKX))
     if("block10" %in% colnames(dd[[i]])) 
     {
-      dd[[i]]=dd[[i]]%>%left_join(Clsd,by=c("block10"))
+      Clsd=Closures%>%
+        filter(block10%in%unique(dd[[i]]$block10))%>%
+        distinct(block10,.keep_all = T)
+      dd[[i]]=dd[[i]]%>%
+                left_join(Clsd,by=c("block10"))%>%
+                mutate(Closed=ifelse(is.na(Closed),"NO","YES"))
     }else
     {
-      dd[[i]]=dd[[i]]%>%left_join(Clsd,by=c("BLOCKX"))
+      Clsd=Closures%>%
+            filter(BLOCKX%in%unique(dd[[i]]$BLOCKX))%>%
+            distinct(BLOCKX,.keep_all = T)
+      dd[[i]]=dd[[i]]%>%
+                left_join(Clsd,by=c("BLOCKX"))%>%
+                mutate(Closed=ifelse(is.na(Closed),"NO","YES"))
     }
     
     Overlap[[i]]=with(dd[[i]],table(Closed,Suitability,useNA = 'ifany'))
@@ -330,6 +363,51 @@ Overlap.daily=fn.overlap(dd=All.pred.daily)
 
 # 5. Outputs section ---------------------------------------------------------
 setwd('C:\\Matias\\Analyses\\Catch and effort\\Outputs\\Spatial protection')
+
+#Closure map
+South.WA.long=c(109,129)
+South.WA.lat=c(-40,-9)
+Xlim=South.WA.long
+Ylim=South.WA.lat
+col.shark.closure='forestgreen'
+col.Marine.park.closure=rgb(1,.1,.1,alpha=.6)
+col.ASL.closure='steelblue'
+
+fn.plt.map=function()
+{
+  plot(1,xlim=c(Xlim[1]*0.9995,Xlim[2]*0.99),ylim=Ylim,xlab="",ylab="",axes=F,main="")
+  
+  #closures
+  plot(WA_Commonwealth_Marine_Parks,add=T,col=col.Marine.park.closure)
+  plot(Shark_Fishery_Closures,add=T,col=col.shark.closure)
+  plot(ASL_Closures,add=T,col=col.ASL.closure)
+  
+  #coast
+  polygon(WAcoast$Longitude,WAcoast$Latitude, col="grey80")
+  
+  box()
+  
+  legend('topleft',c("Shark closures","Marine parks","ASL closures"),
+         fill =c(col.shark.closure,col.Marine.park.closure,col.ASL.closure),
+         bty='n',cex=1.2)
+  
+}
+
+tiff("Figure 1.Map.tiff",width=1600,height=2400,units="px",res=300,compression="lzw")
+par(mar=c(1,1,.5,.5),oma=c(3,3,1,.3),las=1,mgp=c(.04,.6,0))
+fn.plt.map()
+#axes
+axis(side = 1, seq(South.WA.long[1],South.WA.long[2],2), labels =F, tck = -.02)
+axis(side = 2, seq(South.WA.lat[1],South.WA.lat[2],2), labels = F, tck = -.02)
+
+axis(2,seq(round(Ylim[1]),round(Ylim[2]),2),-seq(round(Ylim[1]),round(Ylim[2]),2),cex.axis=1.25)
+axis(1,seq(round(Xlim[1]),round(Xlim[2]),2),seq(round(Xlim[1]),round(Xlim[2]),2),cex.axis=1.25)
+
+mtext(expression(paste("Longitude (",degree,"E)",sep="")),side=1,line=1,font=1,las=0,cex=1.35,outer=T)
+mtext(expression(paste("Latitude (",degree,"S)",sep="")),side=2,line=1,font=1,las=0,cex=1.35,outer=T)
+dev.off()
+
+
 
 # 5.1 Summary of available data
 Tab.sp.name= Data.monthly%>%
@@ -393,8 +471,9 @@ write.csv(Total.records,'Table1_Total records.csv',row.names = F)
 # 5.2 Map spatial overlap table
 smart.par=function(n.plots,MAR,OMA,MGP) return(par(mfrow=n2mfrow(n.plots),mar=MAR,oma=OMA,las=1,mgp=MGP))
 
-WA.lat=c(-36,-10)
-WA.long=c(112,129)
+WA.lat=c(-40,-9)
+WA.long=c(109,129)
+
 data(worldLLhigh)
 a=WA.long[1]:WA.long[2]
 b=seq(WA.lat[1],WA.lat[2],length.out=length(a))
@@ -402,7 +481,7 @@ PLATE=c(.01,.9,.075,.9)
 All.long.10=unique(c(Data.daily$long.corner,Data.daily.NSF$long.corner))
 All.lat.10=unique(c(Data.daily$lat.corner,Data.daily.NSF$lat.corner))
 
-#Plot.cpue.spatial           MISSING: add polygons with all no-shark-fishing areas
+#Plot.cpue.spatial           
 Plot.spatial.occur=function(dd,Full.long,Full.lat,delta,var)
 {
   for(i in 1:length(dd))
@@ -470,10 +549,17 @@ Plot.spatial.occur=function(dd,Full.long,Full.lat,delta,var)
     mtext(NAME,3,cex=.8)
   }
 }
+fn.add.clsurs=function(Vec)
+{
+  DimS=n2mfrow(length(Vec))
+  layout(matrix(Vec,DimS[1],DimS[2],TRUE))
+  par(mar=c(1,2,1,.1),oma=c(2.5,1,.1,1),mgp=c(1.2,.5,0))
+  fn.plt.map()
+}
 
   #Monthly
-tiff("Figure 1.Spatial.monthly.tiff",width=2200,height=2400,units="px",res=300,compression="lzw")
-smart.par(length(All.pred.monthly),c(1,2,1.5,1),c(2.5,1,.1,1),c(1.2,.5,0))
+tiff("Figure 2.Spatial.monthly.tiff",width=1600,height=2400,units="px",res=300,compression="lzw")
+fn.add.clsurs(Vec=c(rep(1,2),2:3,rep(1,2),4:(length(All.pred.monthly)+1)))
 Plot.spatial.occur(dd=All.pred.monthly,
                    Full.long=WA.long[1]:WA.long[2],
                    Full.lat=WA.lat[1]:WA.lat[2],
@@ -484,15 +570,15 @@ mtext(expression(paste("Latitude (",degree,"S)",sep="")),side=2,line=-0.85,font=
 dev.off()
 
   #Daily
-tiff("Figure 2.Spatial.daily.tiff",width=2000,height=2400,units="px",res=300,compression="lzw")
-smart.par(length(All.pred.daily),c(1,1,1.5,.5),c(2,2,.1,.1),c(1.2,.5,0))
+tiff("Figure 3.Spatial.daily.tiff",width=2000,height=2400,units="px",res=300,compression="lzw")
+fn.add.clsurs(Vec=c(rep(1,2),2:4,rep(1,2),5:(length(All.pred.daily)+1)))
 Plot.spatial.occur(dd=All.pred.daily,
                    Full.long=WA.long[1]:WA.long[2],
                    Full.lat=WA.lat[1]:WA.lat[2],
                    delta=.16,
                    var=c('Long','Lat'))
 mtext(expression(paste("Longitude (",degree,"E)",sep="")),side=1,line=1,font=1,las=0,cex=1.2,outer=T)
-mtext(expression(paste("Latitude (",degree,"S)",sep="")),side=2,line=0,font=1,las=0,cex=1.2,outer=T)
+mtext(expression(paste("Latitude (",degree,"S)",sep="")),side=2,line=-.75,font=1,las=0,cex=1.2,outer=T)
 dev.off()
 
 
@@ -523,10 +609,10 @@ fn.treemap=function(dd,Ncol,Nrow)
   do.call("grid.arrange", c(PP,ncol=Ncol, nrow=Nrow))
 }
 
-tiff("Figure 3.overlap.monthly.tiff",width=2400,height=2400,units="px",res=300,compression="lzw")
+tiff("Figure 4.overlap.monthly.tiff",width=2400,height=2400,units="px",res=300,compression="lzw")
 fn.treemap(dd=Overlap.monthly,Ncol=4,Nrow=4)
 dev.off()
 
-tiff("Figure 4.overlap.daily.tiff",width=2000,height=2400,units="px",res=300,compression="lzw")
+tiff("Figure 5.overlap.daily.tiff",width=2000,height=2400,units="px",res=300,compression="lzw")
 fn.treemap(dd=Overlap.daily,Ncol=4,Nrow=6)
 dev.off()
