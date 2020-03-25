@@ -24,7 +24,7 @@ source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R")
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)
 
-Current.yr="2017-18"
+Current.yr="2018-19"
 
 Percent.fin.of.livewt=0.03
 TDGDLF.lat.range=c(-26,-40)

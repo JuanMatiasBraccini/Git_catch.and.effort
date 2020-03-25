@@ -94,7 +94,7 @@ setwd("C:/Matias/Data/Catch and Effort")  # working directory
 First.run="NO"    #turn to 'yes' when new year's data is included
 #First.run="YES"
 
-Current.yr="2017-18"    #Set current financial year 
+Current.yr="2018-19"    #Set current financial year 
 Current.yr.dat=paste(substr(Current.yr,1,4),substr(Current.yr,6,7),sep="_")
 
 
@@ -342,7 +342,7 @@ do.ASL.action.2018="NO"
 do.financial.ass="NO"
 do.Parks.Australia="NO"
 do.annual.TEPS.extraction="NO"
-
+do.Paul.Rogers_ASL="NO"
 
 #Spatial range TDGDLF
 TDGDLF.lat.range=c(-26,-40)
@@ -383,7 +383,6 @@ Dist.range=list(Dusky=Dusky.range,Sandbar=Sandbar.range,Whiskery=Whiskery.range,
 
 #Maximum possible weights for commercial species
 Wei.range=Wei.range%>%left_join(Wei.range.names,by=c("Sname"))
-#Wei.range=merge(Wei.range,Wei.range.names,by="Sname",all.x=T)
 Wei.range=subset(Wei.range,!(is.na(SPECIES)|is.na(TW.min)|is.na(TW.max)))
 max.w.whis=Wei.range[Wei.range$SPECIES==17003,]$TW.max   
 max.w.gum=Wei.range[Wei.range$SPECIES==17001,]$TW.max
@@ -399,7 +398,7 @@ Do.jpeg="YES"
 
 ##################--- DATA MANIPULATION SECTION ---##############
 
-#Non-commercial Fisheries             ACA: missing, replace a.recreational and b.Charter for source(recreational.)
+#Non-commercial Fisheries             
  #a. recreational
 Rec.fish.catch=Rec.fish.catch%>%
    mutate(FinYear=paste(2000+as.numeric(substr(Year,1,2)),substr(Year,3,4),sep="-"),
@@ -1069,7 +1068,7 @@ Data.daily=subset(Data.daily,finyear%in%FINYrs)
   # already in the record and range between 1.1 and 6 kg,
   # hence remove directly
 
-#Before removing records, check if any fisher reported just fins
+#Check if any fisher reported just fins
 if(Inspect.New.dat=="YES")
 {
   A=subset(Data.daily,species==22998 & finyear==Current.yr)
@@ -1366,7 +1365,7 @@ if(Inspect.New.dat=="YES")
   }
   write.csv(check.nfish.weight,file=paste(handle,"/Check.no_live.weight.csv",sep=""),row.names=F)
   
-  
+
     #calculate average weight for each species
   Current.data$Avg.wt=with(Current.data,livewt/nfish)
   Uniq.sp=Current.data[,match(c("species","sname1"),names(Current.data))]
@@ -1415,10 +1414,9 @@ if(Inspect.New.dat=="YES")
   Avg.wt.list=vector('list',length=length(Uniq.sp.with.weight))
   names(Avg.wt.list)=Uniq.sp.nam.with.weight
   for (i in 1:length(Uniq.sp.with.weight)) Avg.wt.list[[i]]=fn.avg.wt(Uniq.sp.with.weight[i],Uniq.sp.nam.with.weight[i])
-  Current.data=Current.data%>%left_join(Wei.range[,6:8],by=c("species"="SPECIES"))
-  # Current.data=merge(Current.data,Wei.range[,6:8],
-  #                    by.x="species",by.y="SPECIES",all.x=T)
-  
+  Current.data=Current.data%>%left_join(Wei.range%>%select(TW.min,TW.max,SPECIES),
+                                        by=c("species"="SPECIES"))
+
   Current.data$Chk.wt=with(Current.data,
             ifelse(Avg.wt<(TW.min*(1-tolerance)) | 
             Avg.wt>(TW.max*(1+tolerance)),"check","ok"))
@@ -1534,32 +1532,35 @@ Data.daily$Bioregion.old=Data.daily$Bioregion
 #   ifelse(Bioregion=="SC"& LatDeg>(-34) & LongDeg<115.91 ,"WC",Bioregion))
 
 
-#Fix weights with no or zero data but with nfish
-#note: replace by speciess average for the block or if not available, for the species
-Data.daily=Data.daily %>% 
-            group_by(species,block10) %>% 
-            mutate(livewt= ifelse((is.na(livewt)|livewt==0) & nfish>0, 
-                                  mean(livewt, na.rm=TRUE)/mean(nfish, na.rm=TRUE), livewt)) %>%
-            group_by(species) %>% 
-            mutate(livewt= ifelse((is.na(livewt)|livewt==0) & nfish>0, 
-                        mean(livewt, na.rm=TRUE)/mean(nfish, na.rm=TRUE), livewt)) %>%
-            as.data.frame()
-
-
 #Export weight and nfish data from TDGDLF for mean weight analysis
 #note: for this analysis, remove records with average weight > maximum weight
 #       of species as in some cases nfish is under-reported
 Mn.wght.dat=subset(Data.daily,method=="GN" & !(blockx%in%Estuaries) & netlen >100)
 Mn.wght.dat$Avrg.w=Mn.wght.dat$livewt/Mn.wght.dat$nfish
 Mn.wght.dat$Keep=with(Mn.wght.dat,
-      ifelse( Avrg.w>max.w.whis & species==17003,"NO",
-      ifelse( Avrg.w>max.w.gum & species==17001,"NO",
-      ifelse( Avrg.w>max.w.dus & species==18003,"NO",
-      ifelse( Avrg.w>max.w.san & species==18007,"NO","YES")))))                     
+                      ifelse( Avrg.w>max.w.whis & species==17003,"NO",
+                      ifelse( Avrg.w>max.w.gum & species==17001,"NO",
+                      ifelse( Avrg.w>max.w.dus & species==18003,"NO",
+                      ifelse( Avrg.w>max.w.san & species==18007,"NO",
+                      ifelse(is.na(livewt) | livewt<=0,"NO","YES"))))))                     
 Mn.wght.dat=subset(Mn.wght.dat,Keep=="YES")               
 Mn.wght.dat=Mn.wght.dat[,-match(c("Avrg.w","Keep"),names(Mn.wght.dat))]
 write.csv(Mn.wght.dat,file ="C:/Matias/Analyses/Catch and effort/Logbook.data.mean.weight.csv")
 
+
+#Fix weights with NA weight, zero weight or condition 'SC' (self consumed) but with nfish
+#note: replace by speciess average for the block or if not available, for the species
+Data.daily=Data.daily %>% 
+            group_by(species,block10) %>% 
+            mutate(livewt= ifelse((is.na(livewt)|livewt==0|conditn=="SC") & nfish>0, 
+                                  mean(livewt, na.rm=TRUE)/mean(nfish, na.rm=TRUE), livewt)) %>%
+            group_by(species) %>% 
+            mutate(livewt= ifelse((is.na(livewt)|livewt==0|conditn=="SC") & nfish>0, 
+                        mean(livewt, na.rm=TRUE)/mean(nfish, na.rm=TRUE), livewt)) %>%
+            as.data.frame()
+
+
+#Aggregate daily nfish
 Daily.nfish.agg=aggregate(nfish~finyear+year+month+vessel+method+blockx+blockxFC+species+
                     year.c+Same.return+zone+Estuary,data=Data.daily,sum,na.rm=T)
 names(Daily.nfish.agg)=c("FINYEAR","YEAR","MONTH","VESSEL","METHOD",
@@ -5432,7 +5433,12 @@ Effort.monthly$SHOTS.c=with(Effort.monthly,
       ifelse(METHOD=="GN" & VESSEL=="F 232" & SHOTS==10 & NETLEN<500,1,
       ifelse(METHOD=="GN" & VESSEL=="F 589" & SHOTS==10 & NETLEN<500,1,
       ifelse(METHOD=="GN" & VESSEL=="M 008" & SHOTS==10,1,
-      SHOTS.c)))))))))
+      ifelse(METHOD=="GN" & VESSEL=="F 471" & SHOTS==100,1,
+      ifelse(METHOD=="GN" & VESSEL=="F 520" & SHOTS==200,1,
+      ifelse(METHOD=="GN" & VESSEL=="M 141" & SHOTS==2100,1,
+      ifelse(METHOD=="GN" & VESSEL=="F 428" & SHOTS==40,1,
+      SHOTS.c)))))))))))))
+
 
 
         #if still NA default to 1
@@ -5455,7 +5461,8 @@ Effort.daily$shots.c=with(Effort.daily,ifelse(method=="GN"& (shots.c==0|is.na(sh
 table(Effort.daily$shots.c,Effort.daily$method,useNA='ifany')  #check correction (look for NAs at GN only)
 
     #correct some specific vessels for typos or splitting panels
-Effort.daily$shots.c=with(Effort.daily,ifelse(method=="GN" & vessel=="E 059" & shots==11| is.na(shots),1,shots.c))
+Effort.daily$shots.c=with(Effort.daily,
+                ifelse(method=="GN" & vessel%in%c("E 059",'E 067','F 517') & shots==11| is.na(shots),1,shots.c))
 
 
 #E.2.3.1 correct high shots                               #Rory's rule 2e            
@@ -10047,7 +10054,7 @@ if(do.Tim_ASL=="YES")
   names(Scalies)[match("LIVEWT.c",names(Scalies))]="Scalefish_tot_catch_kg"
   Tab=merge(Elas,Scalies,by=c("FisheryCode","day","MONTH","FINYEAR","block10"),all=T)
   rm(dummy)
-  write.csv(Tab,paste(hndl,"/ASL_catch_block.csv",sep=""),row.names=F)
+  write.csv(Tab,paste(hndl,"/ASL/ASL_catch_block.csv",sep=""),row.names=F)
 }
 
 #G 4.27 Bull shark catches for Adrian Gleiss
@@ -10178,7 +10185,7 @@ if(do.ASL.action.2018=="YES")
     arrange(finyear,month,blockx) %>%
     spread(key = "DataEntryName", value = "Number", fill = 0) %>%
     as.data.frame
-  write.csv(TAB,paste(hndl,"/ASL_action2_2018.csv",sep=""),row.names=F)
+  write.csv(TAB,paste(hndl,"/ASL/ASL_action2_2018.csv",sep=""),row.names=F)
   
 } 
 
@@ -10921,6 +10928,26 @@ if(do.annual.TEPS.extraction=="YES")
   
 }
 
+
+#G 4.26 Total shark and scalefish catch by year block for ASL closure for Tim Nicholas
+if(do.Paul.Rogers_ASL=="YES")
+{  
+  dummy=Data.daily%>%
+          filter(FisheryCode%in%c("SGL1","SGL2","WCGL") &
+                   METHOD%in%c("GN",'LL'))
+  
+  Elas=dummy%>%filter(SPECIES%in%Elasmo.species)%>%
+    group_by(FINYEAR,block10)%>%
+    summarise(Shark_ray_tot_catch_kg=sum(LIVEWT.c))
+  
+  Scalies=dummy%>%filter(SPECIES%in%Scalefish.species)%>%
+    group_by(FINYEAR,block10)%>%
+    summarise(Scalefish_tot_catch_kg=sum(LIVEWT.c))
+    
+  Tab=full_join(Elas,Scalies,by=c("FINYEAR","block10"))
+
+  write.csv(Tab,paste(hndl,"/ASL/ASL_catch_block_Peter.Roger.csv",sep=""),row.names=F)
+}
 
 ########### SECTION H. ----  EXPORT TOTAL CATCH FOR REFERENCE POINT ANALYSIS --- ###########
 if(do.Ref.Points=="YES")

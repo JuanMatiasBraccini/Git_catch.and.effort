@@ -2,7 +2,8 @@
 
 #NOTE:  This script standardises the catch and effort data for the 4 commercial shark species,
 
-# missing: Vessel Characteristics from annual survey and Questionnaires (see 'Vessel characteristics from DoF's annual survey')
+# missing:   SEPARATE BRONZY FROM DUSKY!!!!
+#           Vessel Characteristics from annual survey and Questionnaires (see 'Vessel characteristics from DoF's annual survey')
 
 #       To update SOI and Mean Freo Sealevel each year, run "Get.SOI.Freo.R" 
 #       To update Temperature, run "SST.r"
