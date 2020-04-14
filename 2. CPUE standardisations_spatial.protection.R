@@ -32,6 +32,7 @@ Effort.daily.NSF=read.csv("Effort.daily.NSF.csv")
 
 
   #Shape files. Spatial closures and marine parks   
+paz="C:/Matias/Data/Mapping/Closures/"
 ASL_Closures=readOGR(paste(paz,"ASL_Closures/ASL_Closures.shp",sep=''),
                      layer="ASL_Closures") 
 WA_Commonwealth_Marine_Parks=readOGR(paste(paz,"WA_Commonwealth_Marine_Parks/WA_Commonwealth_Marine_Parks.shp",sep=''),
@@ -462,12 +463,32 @@ doc <- body_add_flextable(doc, value = Tbl)
 print(doc, target = "Table1_Number of records per species.docx")
 
 
+N.tot=full_join(N.monthly,N.monthly.NSF,by="SPECIES")%>%
+  replace(is.na(.), 0)%>%
+  mutate(Number.of.occurrences=N.x+N.y,
+         SPECIES=as.numeric(SPECIES))%>%
+  dplyr::select(SPECIES,Number.of.occurrences)%>%
+  full_join(Tab.sp.name,by="SPECIES")%>%
+  select(SNAME,Number.of.occurrences)
+colnames(N.tot)=c("Common name","Number of records with catch")
+Tbl <- flextable(N.tot)
+Tbl = autofit(Tbl)
+doc <- read_docx()
+doc <- body_add_flextable(doc, value = Tbl)
+print(doc, target = "Table1_Number of records per species_monthly.only.docx")
+
+
+
 Total.records=length(unique(Data.monthly$Same.return))+
               length(unique(Data.daily$Same.return.SNo))+
               length(unique(Data.monthly.NSF$Same.return))+
               length(unique(Data.daily.NSF$Same.return.SNo))
-
 write.csv(Total.records,'Table1_Total records.csv',row.names = F)
+
+
+Total.records.monthly=length(unique(Data.monthly$Same.return))+
+    length(unique(Data.monthly.NSF$Same.return))
+write.csv(Total.records.monthly,'Table1_Total records_monthly.only.csv',row.names = F)
 
 
 # 5.2 Map spatial overlap table
