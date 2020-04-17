@@ -113,8 +113,9 @@ fn.nominal.delta.log=function(d)
 for(s in 1:length(Keep.sp))
 {
   this=Keep.sp[s]
-  Store.nominal.cpue[[s]]=fn.nominal.delta.log(d=Data.w[,-match(Keep.sp[-match(this,Keep.sp)],
-                                                                colnames(Data.w))]%>%rename(cpue=!!this))
+  Store.nominal.cpue[[s]]=fn.nominal.delta.log(
+            d=Data.w[,-match(Keep.sp[-match(this,Keep.sp)],
+                    colnames(Data.w))]%>%rename(cpue=!!this))
 }
 
 
@@ -123,19 +124,26 @@ fn.delta=function(d,Formula.bi.gam,Formula.gam)
 {
   Bi <- d %>%mutate(catch.pos=as.numeric(cpue>0))
   
-  #remove years, months, vessels, with low observations
+  #remove months, year-vessel with low observations
   Kip=Bi%>%filter(catch.pos>0)
-  Kip.yr=table(Kip$FINYEAR)
-  Kip.yr=names(Kip.yr[Kip.yr>=Min.yrs])
   Kip.mn=table(Kip$MONTH) 
   Kip.mn=as.integer(names(Kip.mn[Kip.mn>=Min.yrs]))
+  Kip.yr=table(Kip$FINYEAR)
+  Kip.yr=names(Kip.yr[Kip.yr>=Min.yrs])
   Kip.vs=table(Kip$VESSEL)
   Kip.vs=names(Kip.vs[Kip.vs>=Min.yrs])
   
   Bi <- Bi%>%
-      filter(FINYEAR%in%Kip.yr)%>%
-      filter(MONTH%in%Kip.mn)%>%
-      filter(VESSEL%in%Kip.vs)
+    filter(FINYEAR%in%Kip.yr)%>%
+    filter(MONTH%in%Kip.mn)%>%
+    filter(VESSEL%in%Kip.vs)
+  
+  Kip=Bi%>%filter(catch.pos>0)      #some years have only 1 vessel, so remove those
+  Kip.yr.vsl=table(Kip$FINYEAR,Kip$VESSEL)
+  Kip.yr.vsl[Kip.yr.vsl>0]=1
+  Kip.yr=names(which(rowSums(Kip.yr.vsl)>1))
+
+  Bi <- Bi%>%filter(FINYEAR%in%Kip.yr)
   
   #get pos data
   d <- Bi%>%
@@ -159,10 +167,10 @@ for(s in 1:length(Keep.sp))
 {
   this=Keep.sp[s]
   Form.gam=formula(ln.cpue~FINYEAR+MONTH+VESSEL+ s(LAT,LONG))
-  if(this%in%c("18003","18013")) Form.gam=formula(ln.cpue~FINYEAR+MONTH+VESSEL)
+  if(this%in%c("18003","18007","18013")) Form.gam=formula(ln.cpue~FINYEAR+MONTH+VESSEL)
   Stand.out[[s]]=fn.delta(
                     d=Data.w[,-match(Keep.sp[-match(this,Keep.sp)],colnames(Data.w))]%>%rename(cpue=!!this),
-                    Formula.bi.gam=formula(catch.pos~FINYEAR+MONTH+VESSEL+ s(LAT,LONG)),
+                    Formula.bi.gam=formula(catch.pos~FINYEAR+MONTH+VESSEL+log(hook.hours)+ s(LAT,LONG)),
                     Formula.gam=Form.gam)
 }
 
@@ -221,8 +229,7 @@ fn.MC.delta.cpue=function(BiMOD,MOD,BiData,PosData,niter,pred.term,ALL.terms)
   newdata.pos=cbind(pred.dat.pos,newdata.pos)
   
   newdata.bi=cbind(pred.dat.pos,newdata.bi)
-  #newdata.bi=cbind(newdata.bi,LNeffort=mean(BiData$LNeffort),LN.effort=mean(BiData$LNeffort))
-  
+
   set.seed(999)
   
   Bi.pars.rand=rmvnorm(niter,mean=coef(BiMOD),sigma=Covar.bi)
@@ -276,7 +283,7 @@ system.time({
                                PosData=Stand.out[[s]]$DATA,
                                niter=Niter,
                                pred.term='FINYEAR',
-                               ALL.terms=c(Categorical,"LAT","LONG"))
+                               ALL.terms=c(Categorical,"LAT","LONG","hook.hours"))
   }
 })
 
