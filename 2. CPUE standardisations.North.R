@@ -294,7 +294,13 @@ setwd("C:/Matias/Analyses/Data_outs")
 for (s in 1:length(Keep.sp))
 {
   NM=Species.names$Name[match(Keep.sp[s],Species.names$SPECIES)]
-  write.csv(Pred[[s]],paste(NM,".annual.abundance.NSF.csv",sep=""),row.names=F) 
+  cpue.stand=Pred[[s]]%>%
+    mutate(Mn=mean(Mean),
+           LOW.CI=LOW.CI/Mn,
+           UP.CI=UP.CI/Mn,
+           Mean=Mean/Mn)
+  
+  write.csv(cpue.stand,paste(NM,".annual.abundance.NSF_relative.csv",sep=""),row.names=F) 
 }
 
 
