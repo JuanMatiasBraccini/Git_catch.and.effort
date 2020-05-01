@@ -2,13 +2,6 @@
 
 #NOTE:  This script standardises the catch and effort data for the 4 commercial shark species,
 
-# missing: SEPARATE BRONZY FROM DUSKY!!!! Split dusky and bronzy catches (required by SAFS), which will 
-#             affect cpue standardisation…..but how to apply proportions to years with no proportion data??? The
-#             proportion data is from our observer programs and what the fishers report in daily logbooks… Some moving average? 
-#             Some smoothing spline as done for rec fishing reconstruction??
-#          Check this global review of effort creep: https://www.pnas.org/content/116/25/12238
-#          Vessel Characteristics from annual survey and Questionnaires (see 'Vessel characteristics from DoF's annual survey')
-
 #       To update SOI and Mean Freo Sealevel each year, run "Get.SOI.Freo.R" 
 #       To update Temperature, run "SST.r"
 
@@ -131,14 +124,14 @@ source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
 ##############--- 1. DATA SECTION ---###################
 
 setwd('C:/Matias/Analyses/Data_outs')
-Data.daily.original=read.csv("Data.daily.original.csv")
-Data.monthly.GN=read.csv("Data.monthly.GN.csv")
-Data.daily.GN=read.csv("Data.daily.GN.csv")
-Effort.daily=read.csv("Effort.daily.csv")
-Effort.monthly=read.csv("Effort.monthly.csv")
-Mesh.monthly=read.csv("Mesh.monthly.csv")
-Mesh.size=read.csv("Mesh.size.csv")
-Mangmnt.TDGDLF=read.csv("Mangmnt.TDGDLF.csv")
+Data.daily.original=fread("Data.daily.original.csv")
+Data.monthly.GN=fread("Data.monthly.GN.csv")
+Data.daily.GN=fread("Data.daily.GN.csv")
+Effort.daily=fread("Effort.daily.csv")
+Effort.monthly=fread("Effort.monthly.csv")
+Mesh.monthly=fread("Mesh.monthly.csv")
+Mesh.size=fread("Mesh.size.csv")
+Mangmnt.TDGDLF=fread("Mangmnt.TDGDLF.csv")
 
 
 lst <- strsplit(Data.daily.GN$Same.return.SNo, "\\s+")
@@ -148,43 +141,41 @@ Data.daily.GN$TSNo <- sapply(lst, '[', 3)
 rm(lst)
 
 #Block10 locations
-BlOCK_10=read.csv("C:/Matias/Data/Mapping/Blocks_10NM.csv")
+BlOCK_10=fread("C:/Matias/Data/Mapping/Blocks_10NM.csv")
 names(BlOCK_10)=c("block10","LAT","LONG")
 Metro_BlOCK_10=subset(BlOCK_10, LAT>(-33) & LAT<=(-31) & LONG<116)
 
 #Southern Oscillation Index
-SOI=read.csv("C:/Matias/Data/Oceanography/SOI.csv")
+SOI=fread("C:/Matias/Data/Oceanography/SOI.csv")
 
 #Mean Freo sea level
-Freo=read.csv("C:/Matias/Data/Oceanography/Freo_mean_sea_level.csv")  
+Freo=fread("C:/Matias/Data/Oceanography/Freo_mean_sea_level.csv")  
 
 #SST
-SST=read.csv("C:/Matias/Data/Oceanography/SST.csv") 
+SST=fread("C:/Matias/Data/Oceanography/SST.csv") 
 
 #Fishable areas       
 Depth.range="species_specific"
 #Depth.range=200
 if(Depth.range==200)
 {
-  Whis.fishArea=read.csv("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_whiskery_200.csv")
-  Gum.fishArea=read.csv("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_gummy_200.csv")
-  Dusky.fishArea=read.csv("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_dusky_200.csv")
-  Sand.fishArea=read.csv("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_sandbar_200.csv")  
+  Whis.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_whiskery_200.csv")
+  Gum.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_gummy_200.csv")
+  Dusky.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_dusky_200.csv")
+  Sand.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_sandbar_200.csv")  
 }
 if(Depth.range=="species_specific")
 {
   Grab.Area="C:/Matias/Data/Catch and Effort/FishableArea/"
-  Whis.fishArea=read.csv(paste(Grab.Area,"BLOCKX_whiskery_30_70.csv",sep=""))
-  Gum.fishArea=read.csv(paste(Grab.Area,"BLOCKX_gummy_les_70.csv",sep=""))
-  Dusky.fishArea=read.csv(paste(Grab.Area,"BLOCKX_dusky_less_60.csv",sep=""))
-  Sand.fishArea=read.csv(paste(Grab.Area,"BLOCKX_sandbar_30_120.csv",sep=""))  
+  Whis.fishArea=fread(paste(Grab.Area,"BLOCKX_whiskery_30_70.csv",sep=""))
+  Gum.fishArea=fread(paste(Grab.Area,"BLOCKX_gummy_les_70.csv",sep=""))
+  Dusky.fishArea=fread(paste(Grab.Area,"BLOCKX_dusky_less_60.csv",sep=""))
+  Sand.fishArea=fread(paste(Grab.Area,"BLOCKX_sandbar_30_120.csv",sep=""))  
   
-  Whis.fishArea_b10=read.csv(paste(Grab.Area,"block10.whiskery.csv",sep=""))
-  Gum.fishArea_b10=read.csv(paste(Grab.Area,"block10.gummy.csv",sep=""))
-  Dusky.fishArea_b10=read.csv(paste(Grab.Area,"block10.dusky.csv",sep=""))
-  Sand.fishArea_b10=read.csv(paste(Grab.Area,"block10.sandbar.csv",sep=""))  
-  
-  
+  Whis.fishArea_b10=fread(paste(Grab.Area,"block10.whiskery.csv",sep=""))
+  Gum.fishArea_b10=fread(paste(Grab.Area,"block10.gummy.csv",sep=""))
+  Dusky.fishArea_b10=fread(paste(Grab.Area,"block10.dusky.csv",sep=""))
+  Sand.fishArea_b10=fread(paste(Grab.Area,"block10.sandbar.csv",sep=""))  
 }
 
 
@@ -252,7 +243,7 @@ Stand.approach="Delta"
 #Control if doing cluster analysis of daily data
 do_cluster="NO"
 
-#Control if doing PCA analysis of daily data                    #MISSING: review/replace PCA. MDS takes too long, do cluster?
+#Control if doing PCA analysis of daily data                    
 #not applicable to biotic data (no-linear relation)
 do_pca="YES"
 
@@ -296,10 +287,10 @@ Min.kg=100   #in kg
 
 #Species definitions
 Shark.species=5001:24900
-Indicator.sp=c(17001,17003,18003,18001,18007)
+Indicator.sp=c(17001,17003,18003,18007)
 Greynurse.protection='1999-00'
 TARGETS.name=c("SHARK, WHISKERY","SHARK, GUMMY","SHARK, BRONZE WHALER","SHARK, THICKSKIN (SANDBAR)")
-TARGETS=list(17003,17001,c(18003,18001),18007)
+TARGETS=list(17003,17001,18003,18007)
 names(TARGETS)=TARGETS.name
 N.species=length(TARGETS)
 SPECIES.vec=c("Whiskery shark","Gummy shark","Dusky shark","Sandbar shark")
@@ -321,7 +312,7 @@ Threshold.n.yrs.sens=0  #sensitivity
 Threshold.n.vessls.per.yr=3  #keep years with a least 3 different vessels
 
 
-#qualification levels
+#qualification levels   #not used
 QL_expl_ktch_prop=.9   #proportion of explained annual catch for selected record
 PRP.MLCLM=0.1          #proportion of catch of target
 
@@ -353,7 +344,10 @@ awt.s=3.20688
 
 
 #Min observed FL in catch (observers data)
-Min.FL.w=88;Min.FL.g=43; Min.FL.d=55; Min.FL.s=47
+Min.FL.w=88
+Min.FL.g=43
+Min.FL.d=55
+Min.FL.s=47
 
 #Size at birth (FL,cm)
 Size.birth.w=25
@@ -2584,20 +2578,21 @@ Effort.daily$blockx=as.integer(substr(Effort.daily$blockx,1,4))
 #...Effort 
   # -- Daily                
 Effort.daily$LAT=-abs(Effort.daily$LAT)
-Block.lat.long=Effort.daily[!duplicated(Effort.daily$blockx),match(c("blockx","LAT","LONG"),names(Effort.daily))]
+Block.lat.long=Effort.daily%>%distinct(blockx,.keep_all = TRUE)%>%dplyr::select(blockx,LAT,LONG)
 
-#km gn days  
+  #km gn days  
 Eff.daily.c.daily=aggregate(Km.Gillnet.Days.c~Same.return.SNo+vessel+finyear+month+blockx+block10,
                             data=subset(Effort.daily,netlen.c>100 & method=="GN"),max,na.rm=T)    
 Eff.daily.daily=aggregate(Km.Gillnet.Days.inv~Same.return.SNo+vessel+finyear+month+blockx+block10,
                           data=subset(Effort.daily,netlen.c>100 & method=="GN"),max,na.rm=T)
-
+  
+  #km gn hours 
 Eff.daily.hour.c.daily=aggregate(Km.Gillnet.Hours.c~Same.return.SNo+vessel+finyear+month+blockx+block10,
                                  data=subset(Effort.daily,netlen.c>100 & method=="GN"),max,na.rm=T)    
 Eff.daily.hour.daily=aggregate(Km.Gillnet.Hours.inv~Same.return.SNo+vessel+finyear+month+blockx+block10,
                                data=subset(Effort.daily,netlen.c>100 & method=="GN"),max,na.rm=T)  
 
-#merge into single file
+  #merge into single file
 Eff.daily.c.daily=merge(Eff.daily.c.daily,Eff.daily.hour.c.daily,by=c("blockx","block10","finyear","month","vessel","Same.return.SNo"),all=T)
 Eff.daily.daily=merge(Eff.daily.daily,Eff.daily.hour.daily,by=c("blockx","block10","finyear","month","vessel","Same.return.SNo"),all=T)
 Eff.daily.c.daily=merge(Eff.daily.c.daily,Eff.daily.daily,by=c("blockx","block10","finyear","month","vessel","Same.return.SNo"),all.x=T)
@@ -2606,13 +2601,13 @@ Eff.daily.c.daily=merge(Eff.daily.c.daily,Block.lat.long,by=c("blockx"),all.x=T)
 
   # -- Monthly 
 Monthly=subset(Effort.monthly,NETLEN.c>100 & METHOD=="GN")
-Block.lat.long=Effort.monthly[!duplicated(Effort.monthly$BLOCKX),match(c("BLOCKX","LAT","LONG"),names(Effort.monthly))]
+Block.lat.long=Effort.monthly%>%distinct(BLOCKX,.keep_all = TRUE)%>%dplyr::select(BLOCKX,LAT,LONG)
 
-#km gn days     
+  #km gn days     
 Eff.monthly.c=aggregate(Km.Gillnet.Days.c~VESSEL+BLOCKX+FINYEAR+MONTH+YEAR.c,data=Monthly,max,na.rm=T)
 Eff.monthly=aggregate(Km.Gillnet.Days.inv~VESSEL+BLOCKX+FINYEAR+MONTH+YEAR.c,data=Monthly,max,na.rm=T)
 
-#km gn hours                     
+  #km gn hours                     
 Eff.monthly.hour.c=aggregate(Km.Gillnet.Hours.c~VESSEL+BLOCKX+FINYEAR+MONTH+YEAR.c,data=Monthly,max,na.rm=T)
 Eff.monthly.hour=aggregate(Km.Gillnet.Hours.inv~VESSEL+BLOCKX+FINYEAR+MONTH+YEAR.c,data=Monthly,max,na.rm=T)
 
@@ -2626,19 +2621,25 @@ Eff.monthly.c=merge(Eff.monthly.c,Block.lat.long,by=c("BLOCKX"),all.x=T)
 
 #put back effort reporter variable
 
-#daily
-a=Effort.daily[,match(c("blockx","block10","Same.return.SNo","vessel","Eff.Reporter"),names(Effort.daily))]
-a=a[!duplicated(paste(a$blockx,a$block10,a$Same.return.SNo,a$vessel)),]
-Eff.daily.c.daily=merge(Eff.daily.c.daily,a,by=c("blockx","block10","Same.return.SNo","vessel"),all.x=T)
+  #daily
+a=Effort.daily%>%
+      dplyr::select(blockx,block10,Same.return.SNo,vessel,Eff.Reporter)%>%
+      mutate(dupli=paste(blockx,block10,Same.return.SNo,vessel))%>%
+      distinct(dupli,.keep_all = TRUE)%>%
+      dplyr::select(-dupli)
+Eff.daily.c.daily=left_join(Eff.daily.c.daily,a,by=c("blockx","block10","Same.return.SNo","vessel"))
 
-#monthly
-a=Effort.monthly[,match(c("BLOCKX","FINYEAR","MONTH","VESSEL","Eff.Reporter"),names(Effort.monthly))]
-a=a[!duplicated(paste(a$BLOCKX,a$FINYEAR,a$MONTH,a$VESSEL)),]
-Eff.monthly.c=merge(Eff.monthly.c,a,by=c("BLOCKX","FINYEAR","MONTH","VESSEL"),all.x=T)
+  #monthly      
+a=Effort.monthly%>%
+  dplyr::select(BLOCKX,FINYEAR,MONTH,VESSEL,Eff.Reporter)%>%
+  mutate(dupli=paste(BLOCKX,FINYEAR,MONTH,VESSEL))%>%
+  distinct(dupli,.keep_all = TRUE)%>%
+  dplyr::select(-dupli)
+Eff.monthly.c=left_join(Eff.monthly.c,a,by=c("BLOCKX","FINYEAR","MONTH","VESSEL"))
 
 rm(a)
 
-
+#DEJE ACA
 #put back effort variables
 #monthly
 Eff.monthly.c$dummy=with(Eff.monthly.c,paste(BLOCKX,FINYEAR,MONTH,VESSEL,
@@ -6464,11 +6465,11 @@ for (s in 1:length(Tar.sp))
     #Standardised
     a=subset(Zone_preds.monthly[[s]][[z]]$Preds.creep,select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly.",Zn[z],".csv",sep=""),row.names=F) 
+    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly",Zn[z],".csv",sep=""),row.names=F) 
     
     a=subset(Zone_preds.daily[[s]][[z]]$Preds.creep,select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily.",Zn[z],".csv",sep=""),row.names=F) 
+    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily",Zn[z],".csv",sep=""),row.names=F) 
     
     rm(a)
   }

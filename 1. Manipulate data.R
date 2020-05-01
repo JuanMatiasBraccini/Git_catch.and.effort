@@ -10929,24 +10929,218 @@ if(do.annual.TEPS.extraction=="YES")
 }
 
 
-#G 4.26 Total shark and scalefish catch by year block for ASL closure for Tim Nicholas
-if(do.Paul.Rogers_ASL=="YES")
-{  
-  dummy=Data.daily%>%
-          filter(FisheryCode%in%c("SGL1","SGL2","WCGL") &
-                   METHOD%in%c("GN",'LL'))
+#G 4.26 Total shark and scalefish catch by year block for ASL closure for Paul Rogers
+if(do.Paul.Rogers_ASL=="YES")  
+{
+  Hndl.Rogr=paste(hndl,"/ASL/Peter Rogers/",sep='')
+  Yrs=c("2014-15","2015-16","2016-17","2017-18","2018-19")  
   
+  #Catch by year-block-gear of sharks and scalefish
+  dummy=Data.daily%>%
+    filter(FINYEAR%in%Yrs & FisheryCode%in%c("SGL1","SGL2","WCGL") &
+             METHOD%in%c("GN",'LL'))
   Elas=dummy%>%filter(SPECIES%in%Elasmo.species)%>%
-    group_by(FINYEAR,block10)%>%
+    group_by(FINYEAR,block10,METHOD)%>%
     summarise(Shark_ray_tot_catch_kg=sum(LIVEWT.c))
   
   Scalies=dummy%>%filter(SPECIES%in%Scalefish.species)%>%
-    group_by(FINYEAR,block10)%>%
+    group_by(FINYEAR,block10,METHOD)%>%
     summarise(Scalefish_tot_catch_kg=sum(LIVEWT.c))
+  
+  Tab=full_join(Elas,Scalies,by=c("FINYEAR","block10","METHOD"))
+  
+  write.csv(Tab,paste(Hndl.Rogr,"Table_catch_by.year_block_gear.csv",sep=""),row.names=F)
+  
+  
+  #Maps
+  South.WA.lat=c(-36,-25); South.WA.long=c(112,130)
+  PLATE=c(.01,.9,.075,.9)
+  aa= Data.daily.original%>%filter(FINYEAR%in%Yrs) %>%
+    mutate(LatDeg=as.numeric(substr(block10,1,2)),
+           LatMin=ifelse(is.na(LatMin),10*as.numeric(substr(block10,3,3)),LatMin),
+           Lat=-abs(LatDeg+(LatMin/60)),
+           LongDeg=ifelse(is.na(LongDeg),100+as.numeric(substr(block10,4,5)),LongDeg), 
+           LongMin=ifelse(is.na(LongMin),10*as.numeric(substr(block10,6,6)),LongMin),
+           Long=LongDeg+(LongMin/60))%>%
+    filter(Lat<=(-26) & Lat>(-36.5)& Long<=(129) & Long >(111.9))%>%
+    filter(METHOD%in%c('GN',"LL"))%>%
+    mutate(METHOD=ifelse(METHOD=="GN","Gillnet",ifelse(METHOD=="LL","Long line",NA)))
+  
+  numInt=20
+  couleurs=rev(heat.colors(numInt)) 
+  tcl.1=.5
+  tcl.2=.5
+  Long.seq=seq(South.WA.long[1]+1,South.WA.long[2]-1,by=3)
+  Lat.seq=c(-26,-28,-30,-32,-34)
+  numberLab=5
+  colLeg=(rep(c("black",rep("transparent",numberLab-1)),(numInt+1)/numberLab))
+  
+  #lodged returns
+  TAB2=aa %>% filter(FINYEAR%in%Yrs) %>%
+    group_by(FINYEAR,METHOD)%>%
+    summarise(Unique_TSNo=n_distinct(TSNo))%>%
+    data.frame%>%
+    rename(Lodged.returns=Unique_TSNo)
+  write.csv(TAB2,paste(Hndl.Rogr,"Table_lodged.returns.by.year.csv",sep=""),row.names = F)
+  
+  TAB3=aa%>%
+    group_by(METHOD,FINYEAR,VESSEL)%>%
+    summarise(Trips=n_distinct(TSNo))%>%
+    spread(METHOD, Trips)%>%
+    replace(is.na(.), "")%>%
+    data.frame%>%
+    left_join(aa%>%distinct(VESSEL,.keep_all = T)%>%select(VESSEL,BoatName),by="VESSEL")%>%
+    select(FINYEAR,VESSEL,BoatName,Gillnet,Long.line)%>%
+    rename(Gillnet.trips=Gillnet,
+           Long.line.trips=Long.line)
+  write.csv(TAB3,paste(Hndl.Rogr,"Table_trips_by_gear_fisher.csv",sep=""),row.names = F)
+  
+  
+  #effort
+  b=aa %>% filter(METHOD=="Gillnet") %>%
+    mutate(Km.Gillnet.Hours=HOURS*NETLEN/1000)%>%
+    filter(Km.Gillnet.Hours>0)%>%
+    group_by(Same.return.SNo,FINYEAR, block10) %>%
+    summarize(Km.Gillnet.Hours = max(Km.Gillnet.Hours, na.rm = TRUE))%>%
+    group_by(FINYEAR, block10) %>%
+    summarize(sum = sum(Km.Gillnet.Hours, na.rm = TRUE))%>%
+    mutate(LatDeg=as.numeric(substr(block10,1,2)),
+           LatMin=10*as.numeric(substr(block10,3,3)),
+           Lat=-abs(LatDeg+(LatMin/60)),
+           LongDeg=100+as.numeric(substr(block10,4,5)), 
+           LongMin=10*as.numeric(substr(block10,6,6)),
+           Long=LongDeg+(LongMin/60))%>%
+    data.frame
+  b=subset(b,select=c(FINYEAR,sum,Lat,Long))
+  BREAKS=quantile(b$sum,probs=seq(0,1,1/numInt),na.rm=T)
+  
+  for(y in 1:length(Yrs))
+  {
+    tiff(file=paste(Hndl.Rogr,"Gillnet effort_",Yrs[y],".tiff",sep=''),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+    par(mai = c(0.3, 0.4, 0.15, 0.2),oma = c(0.75, 0.75, 0.2, 0.1),mgp=c(.1, 0.15, 0))
     
-  Tab=full_join(Elas,Scalies,by=c("FINYEAR","block10"))
-
-  write.csv(Tab,paste(hndl,"/ASL/ASL_catch_block_Peter.Roger.csv",sep=""),row.names=F)
+    bb=subset(b,FINYEAR==Yrs[y],select=-FINYEAR)%>%
+      arrange(Lat,Long)
+    long=sort(unique(bb$Long))
+    lat=sort(unique(bb$Lat))      
+    Reshaped=as.matrix(reshape(bb,idvar="Long",timevar="Lat",v.names="sum", direction="wide"))	
+    Reshaped=Reshaped[order(Reshaped[,1]),]
+    Reshaped=Reshaped[,-1]	
+    
+    a=South.WA.long[1]:South.WA.long[2]
+    bx=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
+    plotmap(a,bx,PLATE,"transparent",South.WA.long,South.WA.lat)
+    image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=BREAKS,axes = FALSE,add=T)			
+    axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
+    axis(side = 2, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.1)
+    axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
+    axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
+    if(y==2)color.legend(129.5,South.WA.lat[2],South.WA.long[2],-33,round(BREAKS,0),
+                         rect.col=couleurs,gradient="y",col=colLeg,cex=0.85)
+    #nnn=with(TAB2%>%filter(FINYEAR==Yrs[y]),Yrs[y])
+    nnn=with(TAB2%>%filter(FINYEAR==Yrs[y]),paste(paste(Yrs[y]," (gillnet returns= ",Lodged.returns[1],
+                                                        "; longline returns= ",Lodged.returns[2],")",sep="")))
+    mtext(nnn,3,-2,cex=1.25)
+    mtext(expression(paste("Latitude (",degree,"S)",sep="")),side=2,line=-1,las=3,cex=1.25,outer=T)
+    mtext(expression(paste("Longitude (",degree,"E)",sep="")),side=1,line=0,cex=1.25,outer=T)
+    mtext("Effort (Km.gn.hours)",3,-0.75,outer=T)
+    dev.off()
+  }
+  
+  
+  # shark & ray catch
+  {
+    b=aa %>% filter(METHOD=="Gillnet" & species%in%Elasmo.species) %>%
+      group_by(FINYEAR, block10) %>%
+      summarize(sum = sum(livewt, na.rm = TRUE))%>%
+      mutate(LatDeg=as.numeric(substr(block10,1,2)),
+             LatMin=10*as.numeric(substr(block10,3,3)),
+             Lat=-abs(LatDeg+(LatMin/60)),
+             LongDeg=100+as.numeric(substr(block10,4,5)), 
+             LongMin=10*as.numeric(substr(block10,6,6)),
+             Long=LongDeg+(LongMin/60))%>%
+      data.frame
+    b=subset(b,select=c(FINYEAR,sum,Lat,Long))
+    BREAKS=quantile(b$sum,probs=seq(0,1,1/numInt),na.rm=T)
+    
+    for(y in 1:length(Yrs))
+    {
+      tiff(file=paste(Hndl.Rogr,"Catch_shark_ray_",Yrs[y],".tiff",sep=''),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+      par(mai = c(0.3, 0.4, 0.15, 0.2),oma = c(0.75, 0.75, 0.2, 0.1),mgp=c(.1, 0.15, 0))
+      
+      bb=subset(b,FINYEAR==Yrs[y],select=-FINYEAR)%>%
+        arrange(Lat,Long)
+      long=sort(unique(bb$Long))
+      lat=sort(unique(bb$Lat))      
+      Reshaped=as.matrix(reshape(bb,idvar="Long",timevar="Lat",v.names="sum", direction="wide"))	
+      Reshaped=Reshaped[order(Reshaped[,1]),]
+      Reshaped=Reshaped[,-1]	
+      
+      a=South.WA.long[1]:South.WA.long[2]
+      bx=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
+      plotmap(a,bx,PLATE,"transparent",South.WA.long,South.WA.lat)
+      image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=BREAKS,axes = FALSE,add=T)			
+      axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
+      axis(side = 2, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.1)
+      axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
+      axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
+      if(y==2)color.legend(129.5,South.WA.lat[2],South.WA.long[2],-33,round(BREAKS,0),
+                           rect.col=couleurs,gradient="y",col=colLeg,cex=0.85)
+      mtext(Yrs[y],3,-2,cex=1.25)
+      mtext(expression(paste("Latitude (",degree,"S)",sep="")),side=2,line=-1,las=3,cex=1.25,outer=T)
+      mtext(expression(paste("Longitude (",degree,"E)",sep="")),side=1,line=0,cex=1.25,outer=T)
+      mtext("Shark & ray catch (kg)",3,-0.75,outer=T)
+      dev.off()
+    }
+  }
+  
+  # scalefish catch
+  {
+    b=aa %>% filter(METHOD=="Gillnet" & species%in%Scalefish.species) %>%
+      group_by(FINYEAR, block10) %>%
+      summarize(sum = sum(livewt, na.rm = TRUE))%>%
+      mutate(LatDeg=as.numeric(substr(block10,1,2)),
+             LatMin=10*as.numeric(substr(block10,3,3)),
+             Lat=-abs(LatDeg+(LatMin/60)),
+             LongDeg=100+as.numeric(substr(block10,4,5)), 
+             LongMin=10*as.numeric(substr(block10,6,6)),
+             Long=LongDeg+(LongMin/60))%>%
+      data.frame
+    b=subset(b,select=c(FINYEAR,sum,Lat,Long))
+    BREAKS=quantile(b$sum,probs=seq(0,1,1/numInt),na.rm=T)
+    
+    par(mfrow=c(2,1),mai = c(0.3, 0.4, 0.15, 0.2),oma = c(0.5, 0.4, 0.2, 0.1),mgp=c(.1, 0.15, 0))
+    for(y in 1:length(Yrs))
+    {
+      tiff(file=paste(Hndl.Rogr,"Catch_scalefish_",Yrs[y],".tiff",sep=''),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+      par(mai = c(0.3, 0.4, 0.15, 0.2),oma = c(0.75, 0.75, 0.2, 0.1),mgp=c(.1, 0.15, 0))
+      
+      bb=subset(b,FINYEAR==Yrs[y],select=-FINYEAR)%>%
+        arrange(Lat,Long)
+      long=sort(unique(bb$Long))
+      lat=sort(unique(bb$Lat))      
+      Reshaped=as.matrix(reshape(bb,idvar="Long",timevar="Lat",v.names="sum", direction="wide"))	
+      Reshaped=Reshaped[order(Reshaped[,1]),]
+      Reshaped=Reshaped[,-1]	
+      
+      a=South.WA.long[1]:South.WA.long[2]
+      bx=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
+      plotmap(a,bx,PLATE,"transparent",South.WA.long,South.WA.lat)
+      image(long,lat,z=Reshaped,xlab="",ylab="",col =couleurs,breaks=BREAKS,axes = FALSE,add=T)			
+      axis(side = 1, at =South.WA.long[1]:South.WA.long[2], labels = F, tcl = tcl.1)
+      axis(side = 2, at = South.WA.lat[2]:South.WA.lat[1], labels = F,tcl =tcl.1)
+      axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-.15)
+      axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=1.1)
+      if(y==2)color.legend(129.5,South.WA.lat[2],South.WA.long[2],-33,round(BREAKS,0),
+                           rect.col=couleurs,gradient="y",col=colLeg,cex=0.85)
+      mtext(Yrs[y],3,-2,cex=1.25)
+      mtext(expression(paste("Latitude (",degree,"S)",sep="")),side=2,line=-1,las=3,cex=1.25,outer=T)
+      mtext(expression(paste("Longitude (",degree,"E)",sep="")),side=1,line=0,cex=1.25,outer=T)
+      mtext("Scalefish catch (kg)",3,-0.75,outer=T)
+      dev.off()
+    }
+  }
+  
 }
 
 ########### SECTION H. ----  EXPORT TOTAL CATCH FOR REFERENCE POINT ANALYSIS --- ###########
