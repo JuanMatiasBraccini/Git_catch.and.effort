@@ -2,9 +2,9 @@
 
 #NOTE:  This script standardises the catch and effort data for the 4 commercial shark species,
 
-#       To update SOI and Mean Freo Sealevel each year, run "Get.SOI.Freo.R" 
-#       To update Temperature, run "SST.r"
-
+#       To update SOI and Mean Freo Sealevel each year, run "Get.SOI.Freo.R"  in C:\Matias\Data\Oceanography
+#       To update Temperature, run "SST.r"   in C:\Matias\Data\Oceanography
+#       good GAM tutorial https://www.youtube.com/watch?v=q4_t8jXcQgc
 
 #Index:  #----1. DATA SECTION-----#  
 #           1.1 Import data
@@ -103,6 +103,7 @@ library(factoextra) #for plotting
 library(mgcv)
 library(data.table)
 library(PBSmapping)
+library(ggpubr)
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)   
 
@@ -124,14 +125,14 @@ source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
 ##############--- 1. DATA SECTION ---###################
 
 setwd('C:/Matias/Analyses/Data_outs')
-Data.daily.original=fread("Data.daily.original.csv")
-Data.monthly.GN=fread("Data.monthly.GN.csv")
-Data.daily.GN=fread("Data.daily.GN.csv")
-Effort.daily=fread("Effort.daily.csv")
-Effort.monthly=fread("Effort.monthly.csv")
-Mesh.monthly=fread("Mesh.monthly.csv")
-Mesh.size=fread("Mesh.size.csv")
-Mangmnt.TDGDLF=fread("Mangmnt.TDGDLF.csv")
+Data.daily.original=fread("Data.daily.original.csv",data.table=FALSE)
+Data.monthly.GN=fread("Data.monthly.GN.csv",data.table=FALSE)
+Data.daily.GN=fread("Data.daily.GN.csv",data.table=FALSE)
+Effort.daily=fread("Effort.daily.csv",data.table=FALSE)
+Effort.monthly=fread("Effort.monthly.csv",data.table=FALSE)
+Mesh.monthly=fread("Mesh.monthly.csv",data.table=FALSE)
+Mesh.size=fread("Mesh.size.csv",data.table=FALSE)
+Mangmnt.TDGDLF=fread("Mangmnt.TDGDLF.csv",data.table=FALSE)
 
 
 lst <- strsplit(Data.daily.GN$Same.return.SNo, "\\s+")
@@ -141,41 +142,41 @@ Data.daily.GN$TSNo <- sapply(lst, '[', 3)
 rm(lst)
 
 #Block10 locations
-BlOCK_10=fread("C:/Matias/Data/Mapping/Blocks_10NM.csv")
+BlOCK_10=fread("C:/Matias/Data/Mapping/Blocks_10NM.csv",data.table=FALSE)
 names(BlOCK_10)=c("block10","LAT","LONG")
 Metro_BlOCK_10=subset(BlOCK_10, LAT>(-33) & LAT<=(-31) & LONG<116)
 
 #Southern Oscillation Index
-SOI=fread("C:/Matias/Data/Oceanography/SOI.csv")
+SOI=fread("C:/Matias/Data/Oceanography/SOI.csv",data.table=FALSE)
 
 #Mean Freo sea level
-Freo=fread("C:/Matias/Data/Oceanography/Freo_mean_sea_level.csv")  
+Freo=fread("C:/Matias/Data/Oceanography/Freo_mean_sea_level.csv",data.table=FALSE)  
 
 #SST
-SST=fread("C:/Matias/Data/Oceanography/SST.csv") 
+SST=fread("C:/Matias/Data/Oceanography/SST.csv",data.table=FALSE) 
 
 #Fishable areas       
 Depth.range="species_specific"
 #Depth.range=200
 if(Depth.range==200)
 {
-  Whis.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_whiskery_200.csv")
-  Gum.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_gummy_200.csv")
-  Dusky.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_dusky_200.csv")
-  Sand.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_sandbar_200.csv")  
+  Whis.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_whiskery_200.csv",data.table=FALSE)
+  Gum.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_gummy_200.csv",data.table=FALSE)
+  Dusky.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_dusky_200.csv",data.table=FALSE)
+  Sand.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_sandbar_200.csv",data.table=FALSE)  
 }
 if(Depth.range=="species_specific")
 {
   Grab.Area="C:/Matias/Data/Catch and Effort/FishableArea/"
-  Whis.fishArea=fread(paste(Grab.Area,"BLOCKX_whiskery_30_70.csv",sep=""))
-  Gum.fishArea=fread(paste(Grab.Area,"BLOCKX_gummy_les_70.csv",sep=""))
-  Dusky.fishArea=fread(paste(Grab.Area,"BLOCKX_dusky_less_60.csv",sep=""))
-  Sand.fishArea=fread(paste(Grab.Area,"BLOCKX_sandbar_30_120.csv",sep=""))  
+  Whis.fishArea=fread(paste(Grab.Area,"BLOCKX_whiskery_30_70.csv",sep=""),data.table=FALSE)
+  Gum.fishArea=fread(paste(Grab.Area,"BLOCKX_gummy_les_70.csv",sep=""),data.table=FALSE)
+  Dusky.fishArea=fread(paste(Grab.Area,"BLOCKX_dusky_less_60.csv",sep=""),data.table=FALSE)
+  Sand.fishArea=fread(paste(Grab.Area,"BLOCKX_sandbar_30_120.csv",sep=""),data.table=FALSE)  
   
-  Whis.fishArea_b10=fread(paste(Grab.Area,"block10.whiskery.csv",sep=""))
-  Gum.fishArea_b10=fread(paste(Grab.Area,"block10.gummy.csv",sep=""))
-  Dusky.fishArea_b10=fread(paste(Grab.Area,"block10.dusky.csv",sep=""))
-  Sand.fishArea_b10=fread(paste(Grab.Area,"block10.sandbar.csv",sep=""))  
+  Whis.fishArea_b10=fread(paste(Grab.Area,"block10.whiskery.csv",sep=""),data.table=FALSE)
+  Gum.fishArea_b10=fread(paste(Grab.Area,"block10.gummy.csv",sep=""),data.table=FALSE)
+  Dusky.fishArea_b10=fread(paste(Grab.Area,"block10.dusky.csv",sep=""),data.table=FALSE)
+  Sand.fishArea_b10=fread(paste(Grab.Area,"block10.sandbar.csv",sep=""),data.table=FALSE)  
 }
 
 
@@ -223,8 +224,8 @@ BOUND.BLK="REALLOCATE"
 #1.2.2 Procedure controls 
 
 #Define if exporting figures as jpeg or tiff (creation of RAR requires jpeg)
-Do.jpeg="YES"
-Do.tiff="NO"
+Do.jpeg="NO"
+Do.tiff="YES"
 
 
 
@@ -322,7 +323,8 @@ Min.Vess.yr=5 #monthly
 Min.Vess.yr.d=5 #daily
 
 #Cpue correction for assumed increase in fishing power prior to 1995
-# Rory McAuley: 2% annual (i.e. 2%, 4%, 6%, etc) to 1995, then flat
+# Rory McAuley: 2% annual upto 1994-95, then constant...consistent with 2.4% reported by 
+#               Palomares & Pauly 2019
 Fish.Pow=.02
 
 
@@ -788,7 +790,8 @@ Effort.data.fun=function(DATA,target,ktch)
     Enviro=DATA%>%group_by(MONTH,FINYEAR,BLOCKX)%>%
       summarise(Temperature=mean(Temperature),
                 Temp.res=mean(Temp.res),
-                Freo=mean(Freo))
+                Freo=mean(Freo,na.rm=T),
+                SOI=mean(SOI,na.rm=T))
     TABLE=TABLE%>%left_join(Enviro,by=c("FINYEAR","MONTH","BLOCKX"))    %>%
       arrange(FINYEAR,MONTH,BLOCKX) %>%
       data.frame()
@@ -855,7 +858,7 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
     #catch targeted at other species
     DATA$Catch.Gummy=with(DATA,ifelse(SPECIES==17001,DATA[,ID],0))
     DATA$Catch.Whiskery=with(DATA,ifelse(SPECIES==17003,DATA[,ID],0))
-    DATA$Catch.Dusky=with(DATA,ifelse(SPECIES%in%c(18003,18001),DATA[,ID],0))
+    DATA$Catch.Dusky=with(DATA,ifelse(SPECIES%in%c(18003),DATA[,ID],0))
     DATA$Catch.Sandbar=with(DATA,ifelse(SPECIES==18007,DATA[,ID],0))
     DATA$Catch.Groper=with(DATA,ifelse(SPECIES%in%c(384002),DATA[,ID],0))
     DATA$Catch.Snapper=with(DATA,ifelse(SPECIES%in%c(353001),DATA[,ID],0))
@@ -880,7 +883,8 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
         Enviro=DATA%>%group_by(MONTH,FINYEAR,BLOCKX)%>%
           summarise(Temperature=mean(Temperature),
                     Temp.res=mean(Temp.res),
-                    Freo=mean(Freo))
+                    Freo=mean(Freo),
+                    SOI=mean(SOI,na.rm=T))
         TABLE=TABLE%>%left_join(Enviro,by=c("FINYEAR","MONTH","BLOCKX"))    %>%
           arrange(Same.return.SNo,FINYEAR,MONTH,BLOCKX) %>%
           data.frame()
@@ -1583,9 +1587,9 @@ fn.expl.cede=function(d,PREDS,kg,Do.ggplts)    #function for exploratory analysi
   #cpue distribution by year and by month
   d$cpue=d$catch.target/d$km.gillnet.hours.c
   d$LnCE=log(d$cpue)
-  cc=histyear(d,Lbound=min(d$LnCE)*1.1,Rbound=max(d$LnCE)*1.1,inc=0.2,pickvar="LnCE",
+  cc=histyear(d,Lbound=min(d$LnCE)*1.25,Rbound=max(d$LnCE)*1.25,inc=0.2,pickvar="LnCE",
               years="year.c",varlabel="log(CPUE)",plots=n2mfrow(Yrs))
-  cc=histyear(d,Lbound=min(d$LnCE)*1.1,Rbound=max(d$LnCE)*1.1,inc=0.2,pickvar="LnCE",
+  cc=histyear(d,Lbound=min(d$LnCE)*1.25,Rbound=max(d$LnCE)*1.25,inc=0.2,pickvar="LnCE",
               years="month",varlabel="log(CPUE)",plots=n2mfrow(12))
   
   #cpue boxplots
@@ -2580,7 +2584,7 @@ Effort.daily$blockx=as.integer(substr(Effort.daily$blockx,1,4))
 Effort.daily$LAT=-abs(Effort.daily$LAT)
 Block.lat.long=Effort.daily%>%distinct(blockx,.keep_all = TRUE)%>%dplyr::select(blockx,LAT,LONG)
 
-  #km gn days  
+  #km gn days
 Eff.daily.c.daily=aggregate(Km.Gillnet.Days.c~Same.return.SNo+vessel+finyear+month+blockx+block10,
                             data=subset(Effort.daily,netlen.c>100 & method=="GN"),max,na.rm=T)    
 Eff.daily.daily=aggregate(Km.Gillnet.Days.inv~Same.return.SNo+vessel+finyear+month+blockx+block10,
@@ -2639,9 +2643,9 @@ Eff.monthly.c=left_join(Eff.monthly.c,a,by=c("BLOCKX","FINYEAR","MONTH","VESSEL"
 
 rm(a)
 
-#DEJE ACA
+
 #put back effort variables
-#monthly
+  #monthly
 Eff.monthly.c$dummy=with(Eff.monthly.c,paste(BLOCKX,FINYEAR,MONTH,VESSEL,
                                              Km.Gillnet.Hours.c,Km.Gillnet.Days.c))
 a=Effort.monthly[,match(c("BLOCKX","FINYEAR","MONTH","VESSEL",
@@ -2653,7 +2657,7 @@ a=subset(a,dummy%in%Eff.monthly.c$dummy,select=c(dummy,SHOTS.c,NETLEN.c,BDAYS.c,
 Eff.monthly.c=merge(Eff.monthly.c,a,by="dummy",all.x=T)
 Eff.monthly.c=Eff.monthly.c[,-match("dummy",names(Eff.monthly.c))]
 
-#daily
+  #daily
 a=Effort.daily[,match(c("blockx","block10","Same.return.SNo","vessel",
                         "netlen.c","hours.c","bdays.c","shots.c","nlines.c"),names(Effort.daily))]
 a$dummy=paste(a$blockx,a$block10,a$Same.return.SNo,a$vessel)
@@ -2680,13 +2684,9 @@ Eff.daily$Eff.Reporter=with(Eff.daily,ifelse(is.na(Eff.Reporter),"good",Eff.Repo
 rm(Eff.daily.c.daily)
 
 #Add mesh size    
-#note:only use meshes of 6.5 inch (165 mm) and 7 inch (178 mm) in cpue standardisation
-#Monthly
+  #Monthly
 Mesh.monthly$mesh=Mesh.monthly$MSHIGH
 Mesh.monthly$mesh=with(Mesh.monthly,ifelse(mesh==0,NA,mesh))
-#a=subset(Mesh.monthly,mesh%in%c("165","178"))
-#A=with(a,table(VESSEL,mesh))  #vessels fishing with a unique mesh so extrapolate to all records for same vessel
-#a=a[!duplicated(a$VESSEL),match(c("VESSEL","mesh"),names(a))]
 a=subset(Mesh.monthly,select=c(VESSEL,FINYEAR,MONTH,BLOCKX,METHOD,mesh))
 a$dummy=with(a,paste(VESSEL,FINYEAR,MONTH,BLOCKX))
 Eff$dummy=with(Eff,paste(VESSEL,FINYEAR,MONTH,BLOCKX))
@@ -2696,7 +2696,7 @@ a=a[,-match(c("dummy",'METHOD'),names(a))]
 Eff=Eff[,-match("dummy",names(Eff))]
 Eff=merge(Eff,a,by=c("VESSEL","FINYEAR","MONTH","BLOCKX"),all.x=T)
 
-#Daily
+  #Daily
 Mesh.size$mesh=Mesh.size$mshigh
 a=subset(Mesh.size,select=c(SNo,DSNo,TSNo,mesh))
 a$Same.return.SNo=with(a,paste(SNo,DSNo,TSNo))
@@ -2704,6 +2704,7 @@ a=a[!duplicated(a$Same.return.SNo),]
 a=subset(a,Same.return.SNo%in%unique(Eff.daily$Same.return.SNo),select=c(Same.return.SNo,mesh))
 Eff.daily=merge(Eff.daily,a,by="Same.return.SNo",all.x=T)  
 rm(Mesh.size)
+
 
 #Add depth to daily
 a=subset(Data.daily.original,select=c(SNo,DSNo,TSNo,depthMin,depthMax))
@@ -2714,12 +2715,28 @@ a=subset(a,Same.return.SNo%in%unique(Eff.daily$Same.return.SNo),select=c(Same.re
 Eff.daily=merge(Eff.daily,a,by="Same.return.SNo",all.x=T)
 rm(Data.daily.original)
 
-#Put data into species list (keep species with at least N.keep years of catches>Min.kg)
+
+# Define 'smooth hammerhead' records as south-east of Geographe Bay
+Data.daily.GN=Data.daily.GN%>%
+              mutate(SPECIES=ifelse(LAT<=(-33.65) & SPECIES==19000,19004,SPECIES),
+                     SPECIES=ifelse(LONG>116 & SPECIES==19000,19004,SPECIES),
+                     SNAME=ifelse(SPECIES==19004,"SHARK, SMOOTH HAMMERHEAD",SNAME),
+                     RSCommonName=ifelse(SPECIES==19004,"Smooth Hammerhead Shark",RSCommonName))
+  
+  
+Data.monthly.GN=Data.monthly.GN%>%
+              mutate(SPECIES=ifelse(LAT<=(-33.65) & SPECIES==19000,19004,SPECIES),
+                     SPECIES=ifelse(LONG>116 & SPECIES==19000,19004,SPECIES),
+                     SNAME=ifelse(SPECIES==19004,"SHARK, SMOOTH HAMMERHEAD",SNAME),
+                     RSCommonName=ifelse(SPECIES==19004,"Smooth Hammerhead Shark",RSCommonName))
+
+
+#Put data into species list (keep species with at least 'N.keep' years of catches of at least 'Min.kg')
 A=Data.monthly.GN%>%filter(SPECIES%in%Shark.species) %>%
-  group_by(SPECIES,FINYEAR) %>%
-  summarise(Weight=round(sum(LIVEWT.c))) %>%
-  spread(FINYEAR, Weight)%>%
-  data.frame()
+        group_by(SPECIES,FINYEAR) %>%
+        summarise(Weight=round(sum(LIVEWT.c))) %>%
+        spread(FINYEAR, Weight)%>%
+        data.frame()
 A=A %>% mutate_at(.vars = names(A)[-match("SPECIES",names(A))], function(x)(ifelse(x>=Min.kg, 1, 0)))
 Anm=A$SPECIES
 A=rowSums(A[,-1],na.rm=T)
@@ -2735,24 +2752,24 @@ names(SpiSis)=nms
 SpiSis=SpiSis[-match(c(22999),SpiSis)]
 SP.list=as.list(SpiSis)
 
-#remove these species; not enough positive record data to estimate glm coefficients
-SP.list=SP.list[-match(c("Thresher Shark","Angel Shark"
-                         ,"Gulper sharks, Sleeper Sharks & Dogfishes"),names(SP.list))]
+#remove these species; not enough positive record data to estimate glm coefficients    
+SP.list=SP.list[-match(c("Thresher Shark",
+                         "Angel Shark",
+                         "Gulper sharks, Sleeper Sharks & Dogfishes"),names(SP.list))]
 
-#remove wobbies as too many species mixed up
-SP.list=SP.list[-match(c("Wobbegong"),names(SP.list))]
+#remove wobbies as too many different species mixed up
+#SP.list=SP.list[-match(c("Wobbegong"),names(SP.list))]
 
-#remove blacktips because only a few years of daily data available
+#remove "Blacktip Shark" because only a few years of daily data available and could be spinner
 SP.list=SP.list[-match(c("Blacktip Shark"),names(SP.list))]
 
-#combine dusky and bronzy (Rory request due to species id) and sawsharks general with common saw
-SP.list=SP.list[-match(c("Common Sawshark","SawShark",'Dusky Whaler','Bronze Whaler'),names(SP.list))]  
+#remove "SawShark"  as it could be different species and only very few records
+SP.list=SP.list[-match("SawShark",names(SP.list))]  
 
-SP.list$'Dusky Whaler Bronze Whaler'=c(18003,18001)
-SP.list$'Sawsharks'=c(23900,23002)
-# SP.list$All.Non.indicators=Shark.species[-match(Indicator.sp,Shark.species)]    #no point in grouping all species together
+#remove "Hammerhead Sharks" because it can be a mixed of species
+SP.list=SP.list[-match("Hammerhead Sharks",names(SP.list))] 
+
 nnn=1:length(SP.list)
-
 
 #get Effective area (90% of catch) and raster
 core.per=90
@@ -2760,6 +2777,8 @@ Core=SP.list
 pdf('C:/Matias/Analyses/Catch and effort/species core areas/cores.pdf')
 for(s in nnn)
 {
+  Kr=core.per
+  if(SP.list[[s]]%in%c(8001,10001,13000,17006,18001)) Kr=80
   d=Data.monthly.GN%>%filter(SPECIES%in%SP.list[[s]])%>%
                       mutate(LAT=round(LAT),LONG=round(LONG))
   Nm=unique(d$SPECIES)
@@ -2770,7 +2789,7 @@ for(s in nnn)
   d$CumSum=100*d$CumSum/max(d$CumSum)
   plot(d$LONG,d$LAT,cex=fn.scale(d$LIVEWT.c,4),pch=19,col="steelblue",
        ylab="Lat",xlab="Long",xlim=c(112,129),ylim=c(-36,-26),main=paste(Nm,names(SP.list)[s]))
-  d=subset(d,CumSum<=core.per)
+  d=subset(d,CumSum<=Kr)
   Rnglat=range(d$LAT)
   Rnglon=range(d$LONG)
   polygon(c(Rnglon[1],Rnglon[2],Rnglon[2],Rnglon[1]),
@@ -2780,22 +2799,35 @@ for(s in nnn)
 dev.off()
 if(Model.run=="First")
 {
+  Tab.d=Data.monthly.GN%>%filter(SPECIES%in%unlist(SP.list))%>%
+    mutate(LAT=round(LAT),LONG=round(LONG))%>%
+    group_by(Same.return,LAT,LONG,SPECIES)%>%
+    summarise(Catch=sum(LIVEWT.c))%>%
+    spread(SPECIES,Catch)
+
+  theme_set(theme_pubr())
+  nnn.i=2*nnn
+  plot_list=vector('list',length(nnn)*2)
   for(s in nnn)
   {
-    pdf(paste('C:/Matias/Analyses/Catch and effort/species core areas/Raster/',
-              names(SP.list)[s],'.pdf',sep=""))
-    d=Data.monthly.GN%>%filter(SPECIES%in%SP.list[[s]])%>%
-      mutate(LAT=round(LAT),LONG=round(LONG))
-    Nm=unique(d$SPECIES)
-    Nm=ifelse(length(Nm)>3,'others',Nm)
-    d=aggregate(LIVEWT.c~LAT+LONG,d,sum)
-    ggplot(d, aes(LONG, LAT)) +
-      geom_raster(aes(fill = log(LIVEWT.c)), interpolate = F)+
-      geom_contour(aes(z = log(LIVEWT.c)),linetype=1,col='black')+
-      scale_fill_gradient2(low="cadetblue1", high="dodgerblue4", guide="colorbar")+
-      labs(title = names(SP.list)[s])
-    dev.off()
+    d=Tab.d[,match(c("LAT","LONG",SP.list[[s]]),names(Tab.d))]
+    colnames(d)[3]="Catch"
+    
+    p1=ggplot(d, aes(LONG, LAT)) +
+      geom_raster(aes(fill = log(Catch+1e-5)), interpolate = F)+
+      #geom_contour(aes(z = log(Catch+1e-5)),linetype=1,col='black')+
+      scale_fill_gradient2(low="white", high="dodgerblue4", guide="colorbar")+
+      labs(title = paste(names(SP.list)[s],"   Density using zero and non zero catch"),
+           fill = "log catch")
+    
+    dd=d%>%group_by(LAT,LONG)%>%summarise(Catch=sum(Catch,na.rm=T)/1000)%>%mutate(Catch=ifelse(Catch==0,NA,Catch))
+    p2=ggplot(dd, aes(x=LONG, y=LAT,size =Catch)) + geom_point(alpha=0.7) +labs(title ="Positive catch (tonnes)") 
+    
+    plot_list[[nnn.i[s]-1]]=p1
+    plot_list[[nnn.i[s]]]=p2
   }
+  multi.page <-ggarrange(plotlist=plot_list, nrow = 2, ncol = 1)
+  ggexport(multi.page, filename = "C:/Matias/Analyses/Catch and effort/species core areas/raster.pdf")
 }
 
 
@@ -2843,25 +2875,25 @@ if(Model.run=="First")
 }
 
 #adjust core areas following McAuley and Simpfendorfer
-Dusky.range=c(-28,120)
-Core$"Dusky Whaler Bronze Whaler"$Lat[2]=Dusky.range[1]
-Core$"Dusky Whaler Bronze Whaler"$Long[2]=Dusky.range[2]
-Sandbar.range=c(-26,118)
-Core$"Sandbar Shark"$Long[2]=Sandbar.range[2]
-Whiskery.range=c(-28,129)
-Core$"Whiskery Shark"$Lat[2]=Whiskery.range[1]
-Core$"Whiskery Shark"$Long[2]=Whiskery.range[2]
-Gummy.range=c(116,129)
-Core$"Gummy Shark"$Long=Gummy.range
+# Dusky.range=c(-28,120)
+# Core$"Dusky Whaler Bronze Whaler"$Lat[2]=Dusky.range[1]
+# Core$"Dusky Whaler Bronze Whaler"$Long[2]=Dusky.range[2]
+# Sandbar.range=c(-26,118)
+# Core$"Sandbar Shark"$Long[2]=Sandbar.range[2]
+# Whiskery.range=c(-28,129)
+# Core$"Whiskery Shark"$Lat[2]=Whiskery.range[1]
+# Core$"Whiskery Shark"$Long[2]=Whiskery.range[2]
+# Gummy.range=c(116,129)
+# Core$"Gummy Shark"$Long=Gummy.range
 
-#adjust hammerheads to remove potential scalloped or great hammerheads
-Core$`Hammerhead Sharks`$Lat=c(-35,-33)
 
 #put date back in Daily data set
 get.dates=subset(Effort.daily,Same.return.SNo%in%unique(Data.daily.GN$Same.return.SNo),select=c(Same.return.SNo,date))
 get.dates=get.dates[!duplicated(get.dates$Same.return.SNo),]
-Data.daily.GN=merge(Data.daily.GN,get.dates,"Same.return.SNo",all.x=T)
-Data.daily.GN$date=as.Date(Data.daily.GN$date)
+Data.daily.GN=Data.daily.GN%>%
+                left_join(get.dates,by="Same.return.SNo")%>%
+                mutate(date=as.Date(date))
+
 
 #create some useful vars
 Post.yrs=max(unique(sort(Data.monthly.GN$YEAR.c)))
@@ -2954,39 +2986,37 @@ Freo=Freo%>%rename(Freo=MeanSeaLevel)%>%
 Data.monthly.GN=Data.monthly.GN%>%left_join(SOI,by=c("YEAR.c"="Year","MONTH"="Month"))%>%
                                    left_join(Freo,by=c("YEAR.c"="Year","MONTH"="Month")) 
   
-
-
   #Daily
 Data.daily.GN=Data.daily.GN%>%left_join(SOI,by=c("YEAR.c"="Year","MONTH"="Month"))%>%
                               left_join(Freo,by=c("YEAR.c"="Year","MONTH"="Month")) %>%
-                              mutate(Lunar=lunar.phase(date,name=T))
+                              mutate(Lunar=lunar.illumination(date),
+                                     Lunar.phase=lunar.phase(date,name=T))
 
 
 
 
-#Create species data sets  
+#Create species data sets                
 
   #Monthly
 #note: select species range, and add effort by Same return
+#      #remove Bronze Whaler due to few records and uncertain species ID prior to Daily logbooks
 cl <- makeCluster(detectCores()-1)
 registerDoParallel(cl)
 #getDoParWorkers()
 system.time({Species.list=foreach(s=nnn,.packages=c('dplyr','doParallel')) %dopar%
   {
-    return(fn.cpue.data(Dat=Data.monthly.GN %>% filter(LAT>=Core[[s]]$Lat[1] & LAT<=Core[[s]]$Lat[2] &
+    if(!SP.list[[s]]==18001) return(fn.cpue.data(Dat=Data.monthly.GN %>% filter(LAT>=Core[[s]]$Lat[1] & LAT<=Core[[s]]$Lat[2] &
                                                          LONG>=Core[[s]]$Long[1]& LONG<=Core[[s]]$Long[2]),
-                        EffrrT=Eff%>% filter(LAT>=Core[[s]]$Lat[1] & LAT<=Core[[s]]$Lat[2] &
-                                               LONG>=Core[[s]]$Long[1]& LONG<=Core[[s]]$Long[2]),
-                        sp=SP.list[[s]]))
+                                                EffrrT=Eff%>% filter(LAT>=Core[[s]]$Lat[1] & LAT<=Core[[s]]$Lat[2] &
+                                                LONG>=Core[[s]]$Long[1]& LONG<=Core[[s]]$Long[2]),
+                                                sp=SP.list[[s]]))
   }
 })
 names(Species.list)=names(SP.list) 
-stopCluster(cl)
 
   #Daily 
 #note: select species range and add effort by date or ID (==Same.return.SNo). Note that for catch aggregating by date
 #       or by ID makes no difference but it's needed for merging with effort
-cl <- makeCluster(detectCores()-1)
 registerDoParallel(cl)
 system.time({Species.list.daily=foreach(s=nnn,.packages=c('dplyr','doParallel')) %dopar%
   {
@@ -3004,11 +3034,11 @@ stopCluster(cl)
 for(s in nnn)
 {
   if(!is.null(Species.list[[s]])) Species.list[[s]] = Species.list[[s]] %>%  select(-c(LIVEWT,Boundary.blk,Km.Gillnet.Hours_shot.c,
-                              TYPE.DATA,Sch.or.DogS,SOI,Freo_lag6,Freo_lag12,mesh,
+                              TYPE.DATA,Sch.or.DogS,Freo_lag6,Freo_lag12,mesh,
                               NETLEN.c, BDAYS.c,HOURS.c))
   if(!is.null(Species.list.daily[[s]])) Species.list.daily[[s]] = Species.list.daily[[s]] %>%  select(-c(LIVEWT,Km.Gillnet.Days.inv,
                                 Km.Gillnet.Hours.inv,Km.Gillnet.Hours_shot.c,netlen.c,hours.c,
-                                bdays.c,TYPE.DATA,LIVEWT,nfish,SOI,Freo_lag6,Freo_lag12))
+                                bdays.c,TYPE.DATA,LIVEWT,nfish,Freo_lag6,Freo_lag12))
 }
 
 #Keep vessel characteristics from vessel survey for vessels that have fished      
@@ -3031,7 +3061,7 @@ hndl=paste(getwd(),"/Outputs/Paper/",sep="")
 write.csv(N.VES,paste(hndl,"All.Vessels.by.species.csv",sep=""),row.names=T)
 
 
-#4.2.1 Extract number of blocks where shark has been caught within effective area
+#4.2.1 Extract number of blocks where sharks have been caught within core (effective) area
 Tol.blks=SP.list
 for(i in nnn)
 {
@@ -3107,30 +3137,35 @@ N.yrs.ALL=length(FINYEAR.ALL)
 
 
 #4.6 Proportion of dusky and copper shark
-fn.fig("proportion of dusky and copper shark_TDGLDF",2000,2400)
-par(mfcol=c(2,1),las=1,mai=c(.8,.85,.1,.1),mgp=c(2.5,.8,0))
+Combine.dusky.copper="NO"
+if(Combine.dusky.copper=="YES")
+{
+  fn.fig("proportion of dusky and copper shark_TDGLDF",2000,2400)
+  par(mfcol=c(2,1),las=1,mai=c(.8,.85,.1,.1),mgp=c(2.5,.8,0))
   #monthly
-All.dusky=aggregate(LIVEWT.c~FINYEAR,subset(Species.list[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18003),sum)
-All.copper=aggregate(LIVEWT.c~FINYEAR,subset(Species.list[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18001),sum)
-All.dusky=All.dusky[match(All.copper$FINYEAR,All.dusky$FINYEAR),]
-Prop.copper_dusky=data.frame(FINYEAR=All.dusky$FINYEAR,proportion=All.copper$LIVEWT.c/All.dusky$LIVEWT.c)
-plot(1:nrow(Prop.copper_dusky),Prop.copper_dusky$proportion,xaxt='n',
-     ylab="",xlab="",pch=19,col=2,cex=1.75,cex.lab=1.5,ylim=c(0,.25))
-axis(1,1:nrow(Prop.copper_dusky),Prop.copper_dusky$FINYEAR)
-legend("topright","Monthly returns",bty='n',cex=1.5)
-
+  All.dusky=aggregate(LIVEWT.c~FINYEAR,subset(Species.list[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18003),sum)
+  All.copper=aggregate(LIVEWT.c~FINYEAR,subset(Species.list[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18001),sum)
+  All.dusky=All.dusky[match(All.copper$FINYEAR,All.dusky$FINYEAR),]
+  Prop.copper_dusky=data.frame(FINYEAR=All.dusky$FINYEAR,proportion=All.copper$LIVEWT.c/All.dusky$LIVEWT.c)
+  plot(1:nrow(Prop.copper_dusky),Prop.copper_dusky$proportion,xaxt='n',
+       ylab="",xlab="",pch=19,col=2,cex=1.75,cex.lab=1.5,ylim=c(0,.25))
+  axis(1,1:nrow(Prop.copper_dusky),Prop.copper_dusky$FINYEAR)
+  legend("topright","Monthly returns",bty='n',cex=1.5)
+  
   #daily
-All.dusky=aggregate(LIVEWT.c~FINYEAR,subset(Species.list.daily[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18003),sum)
-All.copper=aggregate(LIVEWT.c~FINYEAR,subset(Species.list.daily[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18001),sum)
-All.dusky=All.dusky[match(All.copper$FINYEAR,All.dusky$FINYEAR),]
-Prop.copper_dusky=data.frame(FINYEAR=All.dusky$FINYEAR,proportion=All.copper$LIVEWT.c/All.dusky$LIVEWT.c)
-plot(1:nrow(Prop.copper_dusky),Prop.copper_dusky$proportion,xaxt='n',
-     ylab="",xlab="Financial year",pch=19,col=2,cex=1.75,cex.lab=1.5,ylim=c(0,.25))
-axis(1,1:nrow(Prop.copper_dusky),Prop.copper_dusky$FINYEAR)
-legend("topright","Daily logbooks",bty='n',cex=1.5)
-
-mtext("Bronze whaler shark catch / Dusky shark catch",2,-1.5,las=3,outer=T,cex=1.75)
-dev.off()
+  All.dusky=aggregate(LIVEWT.c~FINYEAR,subset(Species.list.daily[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18003),sum)
+  All.copper=aggregate(LIVEWT.c~FINYEAR,subset(Species.list.daily[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18001),sum)
+  All.dusky=All.dusky[match(All.copper$FINYEAR,All.dusky$FINYEAR),]
+  Prop.copper_dusky=data.frame(FINYEAR=All.dusky$FINYEAR,proportion=All.copper$LIVEWT.c/All.dusky$LIVEWT.c)
+  plot(1:nrow(Prop.copper_dusky),Prop.copper_dusky$proportion,xaxt='n',
+       ylab="",xlab="Financial year",pch=19,col=2,cex=1.75,cex.lab=1.5,ylim=c(0,.25))
+  axis(1,1:nrow(Prop.copper_dusky),Prop.copper_dusky$FINYEAR)
+  legend("topright","Daily logbooks",bty='n',cex=1.5)
+  
+  mtext("Bronze whaler shark catch / Dusky shark catch",2,-1.5,las=3,outer=T,cex=1.75)
+  dev.off()
+  
+}
 
 
 #4.7 Determine indicative vessels and blocks        
@@ -3370,7 +3405,7 @@ if(Show.variability.cpue.eg=="YES")
 #   1. select "Good" records (the variable "Reporter" includes good/bad catch and effort reporters)
 #   2. Construct a single row for each record (i.e. 'year-month-vessel-block-gear' for monthly
 #      returns and 'year-Session-vessel-block10-gear' for daily logbooks), with catch of target
-#      and other species as separate columns, giving a 0 catch for column "target" if no catch
+#      and other species as separate columns, giving a 0 catch if no catch
 
 DATA.list.LIVEWT.c=vector('list',length(SP.list)) 
 names(DATA.list.LIVEWT.c)=names(SP.list)
@@ -3384,7 +3419,7 @@ These.efforts=c("FINYEAR","Same.return","Km.Gillnet.Hours.c","Km.Gillnet.Days.c"
                 "zone","MONTH","BLOCKX","SHOTS.c")
 for(i in nnn)
 {
-  if(!(is.null(Species.list[[i]])|names(SP.list)[i]=="Sawsharks"))
+  if(!(is.null(Species.list[[i]])))
   {
     dummy=Effort.data.fun(subset(Species.list[[i]],Reporter=="good"),SP.list[[i]],"LIVEWT.c")  
     DATA.list.LIVEWT.c[[i]]=dummy$dat
@@ -3412,6 +3447,7 @@ for(i in nnn)
     Prop.Catch.daily[i]=dummy$prop.with.catch   
   }
 }
+
 
 #Export proportions with Catch
 write.csv(Prop.Catch,paste(hndl,"Prop.records.with.catch.monthly.csv",sep=""),row.names=T)
@@ -3441,8 +3477,49 @@ rm(DD)
 DATA.list.LIVEWT.c$"Sandbar Shark"=subset(DATA.list.LIVEWT.c$"Sandbar Shark",FINYEAR%in%San.Yrs)
 
 
-#4.14  Identify targeting behaviour   (more in 2.CPUE standardisations_delta.R)
+#4.14  Identify targeting behaviour   (FYI: more code in 2.CPUE standardisations_delta.R)
+#note: this uses all species accounting for 95% of catch
 HndL.Species_targeting="C:/Matias/Analyses/Catch and effort/Outputs/Paper/Species_targeting/"
+if(Model.run="First")
+{
+  theme_set(theme_pubr())
+  nnn.i=4*nnn
+  plot_list=vector('list',length(nnn)*4)
+  for(s in nnn)
+  {
+    if(!is.null(DATA.list.LIVEWT.c.daily[[s]]))
+    {
+      d=DATA.list.LIVEWT.c.daily[[s]]
+      with(d,plot(Catch.Target,Catch.Gummy))
+      
+      p1=ggplot(d, aes(x=Catch.Target, y=Catch.Gummy) ) +
+        geom_bin2d(bins = 50) +
+        theme_bw()+labs(title =names(DATA.list.LIVEWT.c.daily)[s])
+      
+      p2=ggplot(d, aes(x=Catch.Target, y=Catch.Whiskery) ) +
+        geom_bin2d(bins = 50) +
+        theme_bw()
+      
+      p3=ggplot(d, aes(x=Catch.Target, y=Catch.Dusky) ) +
+        geom_bin2d(bins = 50) +
+        theme_bw()
+      
+      
+      p4=ggplot(d, aes(x=Catch.Target, y=Catch.Sandbar) ) +
+        geom_bin2d(bins = 50) +
+        theme_bw()
+      
+      plot_list[[nnn.i[s]-3]]=p1
+      plot_list[[nnn.i[s]-2]]=p2
+      plot_list[[nnn.i[s]-1]]=p3
+      plot_list[[nnn.i[s]]]=p4
+      
+    }
+  }
+  multi.page <-ggarrange(plotlist=plot_list, nrow = 2, ncol = 2)
+  ggexport(multi.page, filename = paste(HndL.Species_targeting,"Density.pdf",sep=''))
+}
+
 if(do_cluster=="YES")
 {
   #clustering analysis
@@ -3543,13 +3620,14 @@ if(do_cluster=="YES")
     dev.off()
   }
 }
+
 if(do_pca=="YES")
 {
   #Winker et al 2014
   PercentExpl=90
   for(i in 1:length(Tar.sp))
   {
-    target=paste("Proportion.nfish.",names(SP.list)[Tar.sp[i]],sep="")
+    target=paste("Proportion.",names(SP.list)[Tar.sp[i]],sep="")
     
     a=Species.list.daily[[Tar.sp[i]]]%>%
       filter(Same.return.SNo%in%unique(DATA.list.LIVEWT.c.daily[[Tar.sp[i]]]$Same.return.SNo))
@@ -3586,7 +3664,7 @@ if(do_pca=="YES")
     }
     
     #run pca
-    res.pca <- prcomp(a,center = F, scale. = F)
+    res.pca <- prcomp(a,center = T, scale. = F)    #it's already scaled
     
     #Visualize all eigenvalues, from most to least contribution
     if(Model.run=="First")
@@ -3598,8 +3676,8 @@ if(do_pca=="YES")
     
     
     #Graph of each species proportion.
-    # Positive correlated variables point to the same side of the plot.
-    # Negative correlated variables point to opposite sides of the grap
+    #note: positive correlated variables point to the same side of the plot.
+    #      negative correlated variables point to opposite sides of the grap
     if(Model.run=="First")
     {
       fn.fig(paste(HndL.Species_targeting,"PCA/PCA_species_",target,sep=""),2400,2400)
@@ -3807,7 +3885,6 @@ dev.off()
 setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper")
 
 
-
 #4.18 Show gummy monthly cpue effect of using km gn d or km g h
 if(Model.run=="First")
 {
@@ -3895,7 +3972,7 @@ Export.tbl(WD=getwd(),Tbl=Table.nsamp,Doc.nm="Sample_sizes",caption=NA,paragph=N
            Zebra='NO',Zebra.col='grey60',Grid.col='black',
            Fnt.hdr= "Times New Roman",Fnt.body= "Times New Roman",
            HDR.names=c('Year', 'Record','Total number of records within eff. area',
-                       'Number of reliable records','Number of records used in stand.'),
+                       'Proportion reliable','Proportion used in standardisation'),
            HDR.span=c(1,1,N.species,N.species,N.species),
            HDR.2nd=c("","",rep(c("Dusky","Gummy","Sandbar","Whiskery"),3)))
 
@@ -3903,14 +3980,16 @@ Export.tbl(WD=getwd(),Tbl=Table.nsamp,Doc.nm="Sample_sizes",caption=NA,paragph=N
 #4.22 Construct index of abundance     
 ZONES=c("West","Zone1","Zone2")
 Eff.vars=c("km.gillnet.hours.c")
-Covariates=c("mean.depth","temp.res","freo","freo_lag6","freo_lag12","dim.1","dim.2","dim.3")
+Covariates=c("mean.depth","temp.res",'Temperature',"freo",
+             "dim.1","dim.2","dim.3",
+             "lunar","month","mesh",
+             'LAT10.corner','LONG10.corner')
 Predictors_monthly=c("finyear","vessel","month","blockx","temp.res","freo") 
 Predictors_daily=c("finyear","vessel","month","block10","shots.c","lunar",
                    "nlines.c","mesh",Covariates)
 Response="catch.target"    #note that cpue is calculated inside stand function
 
-Categorical=c("finyear","vessel","month","blockx","block10","shots.c",
-              "lunar","nlines.c","mesh")
+Categorical=c("finyear","vessel","blockx","block10","shots.c","nlines.c")
 
 
 #   4.22.1 Explore data used for standardisation
@@ -3918,11 +3997,11 @@ Categorical=c("finyear","vessel","month","blockx","block10","shots.c",
 #      max monthly ktch, effort (~ 40 tonnes, ~ 5800 km gn h (@ 30 days X 24 h X 8000 m), respectively) 
 #      max trip (daily kg) ktch, effort (~ 15 tonnes, ~ 1900 km gn h (@ 10 days X 24 h X 8000 m), respectively) 
 
-  #check potential effect of predictors
+  #check potential effect of predictors    
 if(do.Exploratory=="YES")
 {
   hndl.expl="C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/"
-  for(s in nnn)
+  for(s in Tar.sp)
   {
       #monthly
     pdf(paste(hndl.expl,names(SP.list)[s],"_monthly.pdf",sep="")) 
@@ -3998,90 +4077,93 @@ if(Model.run=="First")
 }
 Eff.creep=data.frame(finyear=FINYEAR.ALL,effort.creep=Fish.pow.inc)
 
-#ACA. explore GAM issues
-fn.explr.gam.rel=function(d)
+#ACA
+#explore GAM issues  Do proper exploration of each possible term, with ggplots, etc...
+if(do.Exploratory=="YES")
 {
-  colnames(d)=tolower(colnames(d))
-  d=d%>%mutate(month.cat=factor(month),
-               moon=factor(as.character(lunar),ordered = T,
-                           levels=c("New","Waxing","Full","Waning")))
-  
-  
-  #To do GAM term selection:
-  #gam(y~s(x1)+s(x2)+...s(xn),select=T)
-  
-  #BAM: for big data gam (much faster...)
-  
-  #Tweedie vs normal
-  a=d%>%mutate(finyear=factor(finyear,ordered = T,levels=sort(unique(finyear))),
-               ln.cpue=log(catch.target+1e-5/km.gillnet.hours.c))
-  #Mod=gam(ln.cpue~finyear,dat=a,family=tw,method="REML")  
-  #Mod1=gam(ln.cpue~finyear,dat=a,method="REML")
-  #par(mfcol=c(2,1))
-  #plot(coef(Mod),main="Mod")
-  #lines(coef(Mod1),main="Mod default")
-  
-  
-  
-  
-  #binomial part
-  d.bi=d%>%mutate(catch.target=ifelse(catch.target>0,1,0))
-  d.bi$LN.effort=log(d.bi[,match(efrt,names(d.bi))])
-  
-  #pos part
-  d=d%>%filter(catch.target>0)
-  d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
-  
-  
-  ggplot(d) +
-    aes(x = lunar, y = LNcpue) +
-    geom_boxplot() + facet_wrap(~zone)
-  
-  
-  ggplot(d) +
-    aes(x = mesh, y = LNcpue)+geom_point()+ facet_wrap(~zone)
-  
-  
-  qplot(x = year.c, y = temperature, data = d, color = month.cat) +
-    geom_smooth(method = "lm") + facet_wrap(~zone)
-  
-  #Model year as an autocorrelated continuous variable
-  par(mfcol=c(2,1))
-  Mod=gam(LNcpue~s(year.c,bs='gp'),dat=d)  #specify a gaussian process
-  Mod1=gam(LNcpue~s(year.c),dat=d)
-  plot(Mod,main="Mod")
-  plot(Mod1,main="Mod default")
-  
-  #Model year as ordered factor
-  d$finyear.ordered=factor(d$finyear,ordered = T,levels=sort(unique(d$finyear)))
-  d$finyear=factor(d$finyear)
-  Mod=gam(LNcpue~finyear.ordered,dat=d) 
-  Mod1=gam(LNcpue~finyear,dat=d)
-  plot(coef(Mod),main="Mod")
-  lines(coef(Mod1),main="Mod default")
-  
-  #Model month as smoothing term
-  Mod=gam(LNcpue~s(month,k=2,bs='cc'),dat=d)  #specify a cyclical smoother
-  Mod1=gam(LNcpue~s(month,k=2),dat=d)
-  plot(Mod,main="Mod")
-  plot(Mod1,main="Mod default")
-  anova(Mod)
-  anova(Mod1)
-  
-  #Model vessel as random effect
-  d$vessel=factor(d$vessel)
-  Mod=gam(LNcpue~s(vessel,bs='re'),dat=d,method="REML")  
-  Mod1=gam(LNcpue~s(vessel),dat=d,method="REML")
-  plot(Mod,main="Mod")
-  plot(Mod1,main="Mod default")
-  
-  #model lat and long as a sphere
-  Mod=gam(LNcpue~s(long10.corner,lat10.corner,bs='sos'),dat=d,method="REML")  
-  Mod1=gam(LNcpue~s(long10.corner,lat10.corner),dat=d,method="REML")
-  plot(Mod,main="Mod")
-  plot(Mod1,main="Mod default")
+  fn.explr.gam.rel=function(d)
+  {
+    colnames(d)=tolower(colnames(d))
+    d=d%>%mutate(month.cat=factor(month),
+                 moon=factor(as.character(lunar),ordered = T,
+                             levels=c("New","Waxing","Full","Waning")))
+    
+    
+    #To do GAM term selection:
+    #gam(y~s(x1)+s(x2)+...s(xn),select=T)
+    
+    #BAM: for big data gam (much faster...)
+    
+    #Tweedie vs normal
+    a=d%>%mutate(finyear=factor(finyear,ordered = T,levels=sort(unique(finyear))),
+                 ln.cpue=log(catch.target+1e-5/km.gillnet.hours.c))
+    #Mod=gam(ln.cpue~finyear,dat=a,family=tw,method="REML")  
+    #Mod1=gam(ln.cpue~finyear,dat=a,method="REML")
+    #par(mfcol=c(2,1))
+    #plot(coef(Mod),main="Mod")
+    #lines(coef(Mod1),main="Mod default")
+    
+    
+    #binomial part
+    d.bi=d%>%mutate(catch.target=ifelse(catch.target>0,1,0))
+    d.bi$LN.effort=log(d.bi[,match(efrt,names(d.bi))])
+    
+    #pos part
+    d=d%>%filter(catch.target>0)
+    d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
+    
+    
+    ggplot(d) +
+      aes(x = lunar, y = LNcpue) +
+      geom_boxplot() + facet_wrap(~zone)
+    
+    
+    ggplot(d) +
+      aes(x = mesh, y = LNcpue)+geom_point()+ facet_wrap(~zone)
+    
+    
+    qplot(x = year.c, y = temperature, data = d, color = month.cat) +
+      geom_smooth(method = "lm") + facet_wrap(~zone)
+    
+    #Model year as an autocorrelated continuous variable
+    par(mfcol=c(2,1))
+    Mod=gam(LNcpue~s(year.c,bs='gp'),dat=d)  #specify a gaussian process
+    Mod1=gam(LNcpue~s(year.c),dat=d)
+    plot(Mod,main="Mod")
+    plot(Mod1,main="Mod default")
+    
+    #Model year as ordered factor
+    d$finyear.ordered=factor(d$finyear,ordered = T,levels=sort(unique(d$finyear)))
+    d$finyear=factor(d$finyear)
+    Mod=gam(LNcpue~finyear.ordered,dat=d) 
+    Mod1=gam(LNcpue~finyear,dat=d)
+    plot(coef(Mod),main="Mod")
+    lines(coef(Mod1),main="Mod default")
+    
+    #Model month as smoothing term
+    Mod=gam(LNcpue~s(month,k=12,bs='cc'),dat=d)  #specify a cyclical smoother
+    Mod1=gam(LNcpue~s(month,k=12),dat=d)
+    plot(Mod,main="Mod")
+    plot(Mod1,main="Mod default")
+    anova(Mod)
+    anova(Mod1)
+    
+    #Model vessel as random effect
+    d$vessel=factor(d$vessel)
+    Mod=gam(LNcpue~s(vessel,bs='re'),dat=d,method="REML")  
+    Mod1=gam(LNcpue~s(vessel),dat=d,method="REML")
+    plot(Mod,main="Mod")
+    plot(Mod1,main="Mod default")
+    
+    #model lat and long as a sphere
+    Mod=gam(LNcpue~s(long10.corner,lat10.corner,bs='sos'),dat=d,method="REML")  
+    Mod1=gam(LNcpue~s(long10.corner,lat10.corner),dat=d,method="REML")
+    plot(Mod,main="Mod")
+    plot(Mod1,main="Mod default")
+  }
+  fn.explr.gam.rel(d=DATA.list.LIVEWT.c.daily$`Sandbar Shark`)
 }
-#fn.explr.gam.rel(d=DATA.list.LIVEWT.c.daily[[3]])
+
 
 
 #   4.22.3 Select model structure  
@@ -6762,7 +6844,7 @@ if (plot.cpue.paper.figures=="YES")
     #catch targeted at other species
     DATA$Catch.Gummy=with(DATA,ifelse(SPECIES==17001,DATA[,ID],0))
     DATA$Catch.Whiskery=with(DATA,ifelse(SPECIES==17003,DATA[,ID],0))
-    DATA$Catch.Dusky=with(DATA,ifelse(SPECIES%in%c(18003,18001),DATA[,ID],0))
+    DATA$Catch.Dusky=with(DATA,ifelse(SPECIES%in%c(18003),DATA[,ID],0))
     DATA$Catch.Sandbar=with(DATA,ifelse(SPECIES==18007,DATA[,ID],0))
     DATA$Catch.Scalefish=with(DATA,ifelse(SPECIES%in%188000:599001,DATA[,ID],0))
     DATA$Catch.Total=with(DATA,ifelse(SPECIES%in%c(5001:24900,25000:31000,188000:599001),DATA[,ID],0))
@@ -6784,7 +6866,7 @@ if (plot.cpue.paper.figures=="YES")
     dat$Catch.other.shk=NA
     if(target[1]==17003)dat$Catch.other.shk=dat$Catch.Dusky+dat$Catch.Sandbar
     if(target[1]==17001)dat$Catch.other.shk=dat$Catch.Whiskery
-    if(target[1]%in%c(18003,18001))dat$Catch.other.shk=dat$Catch.Whiskery+dat$Catch.Sandbar
+    if(target[1]%in%c(18003))dat$Catch.other.shk=dat$Catch.Whiskery+dat$Catch.Sandbar
     if(target[1]==18007)dat$Catch.other.shk=dat$Catch.Dusky+dat$Catch.Whiskery
     
     #recalculate 60 by 60 blocks
