@@ -4,7 +4,7 @@
 
 #       To update SOI and Mean Freo Sealevel each year, run "Get.SOI.Freo.R"  in C:\Matias\Data\Oceanography
 #       To update Temperature, run "SST.r"   in C:\Matias\Data\Oceanography
-#       good GAM tutorial https://www.youtube.com/watch?v=q4_t8jXcQgc
+
 
 #Index:  #----1. DATA SECTION-----#  
 #           1.1 Import data
@@ -104,6 +104,7 @@ library(mgcv)
 library(data.table)
 library(PBSmapping)
 library(ggpubr)
+library(broom)  #nice display of model fit
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)   
 
@@ -3993,14 +3994,16 @@ Categorical=c("finyear","vessel","blockx","block10","shots.c","nlines.c")
 
 
 #   4.22.1 Explore data used for standardisation
-#note: this applies cede() exploration, and checks for outliers in catch and effort
-#      max monthly ktch, effort (~ 40 tonnes, ~ 5800 km gn h (@ 30 days X 24 h X 8000 m), respectively) 
-#      max trip (daily kg) ktch, effort (~ 15 tonnes, ~ 1900 km gn h (@ 10 days X 24 h X 8000 m), respectively) 
+#note: This applies cede() exploration, and checks for outliers in catch and effort
+#         max monthly ktch, effort (~ 40 tonnes, ~ 5800 km gn h (@ 30 days X 24 h X 8000 m), respectively) 
+#         max trip (daily kg) ktch, effort (~ 15 tonnes, ~ 1900 km gn h (@ 10 days X 24 h X 8000 m), respectively) 
+#      Also does GAM exploratory stuff
 
-  #check potential effect of predictors    
 if(do.Exploratory=="YES")
 {
   hndl.expl="C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/"
+  
+  # Standard exploratory analyses
   for(s in Tar.sp)
   {
       #monthly
@@ -4029,6 +4032,224 @@ if(do.Exploratory=="YES")
     if(names(SP.list)[s]=="Whiskery Shark") fn.pred.effect(DATA=DATA.list.LIVEWT.c.daily[[s]],PREDS=Predictors_daily)
     dev.off()
   }
+  
+  #ACA
+  #GAM exploratory analyses 
+  # notes on GAM:  
+  #       Test significance for smooth terms: if you can not draw a horizontal 
+  #           line through the 95% confidence interval the smooth term is significant.
+  #       Good GAM tutorial https://www.youtube.com/watch?v=q4_t8jXcQgc
+  #                         https://noamross.github.io/gams-in-r-course/
+  
+  # gam.check() for checking model fit
+  #   Q-Q plot, which compares the model residuals to a normal distribution. 
+  #   A well-fit model's residuals will be close to a straight line. 
+  # 
+  #   On bottom left is a histogram of residuals. We would expect this to have a symmetrical bell shape. 
+  # 
+  #   On top-right is a plot of residual values. These should be evenly distributed around zero. 
+  # 
+  #   Finally, on the bottom-right is plot of response against fitted values. 
+  #   A perfect model would form a straight line. 
+  #   We don't expect a perfect model, but we do expect the pattern to cluster around the 1-to-1 line.
+  
+  
+  # concurvity() for checking colinearity among terms
+  #   Two modes:
+  #   The first mode, full = TRUE, reports overall concurvity for each smooth. 
+  #   Specifically, it shows how much each smooth is predetermined by all the other smooths.
+  #   Since concurvity is complex, the function reports three different ways of measuring concurvity. 
+  #   Each is better in some situations. 
+  #   What is important is that you should always look at the worst case, 
+  #   and if the value is high (say, over 0.8), inspect your model more carefully.
+  # 
+  #   If any of these values from the full = TRUE mode is high, we will want to also use 
+  #   the second mode, setting full = FALSE. With full = FALSE
+  #   These show the degree to which each variable is predetermined by each other variable, 
+  #   rather than all the other variables. This can be used to pinpoint which variables have a close relationship.
+  
+  fn.explr.gam.rel=function(d,Fktrs,Covars,OUT)
+  {
+    colnames(d)=tolower(colnames(d))
+    Fktrs=tolower(Fktrs)
+    Covars=tolower(Covars)
+    
+    d=d%>%mutate(ln.effort=log(km.gillnet.hours.c),
+                 month.as.factor=factor(month,ordered = T))
+    
+    d.bi=d%>%
+      mutate(catch.target=ifelse(catch.target>0,1,0),
+             finyear=factor(finyear,ordered = T),
+             vessel=factor(vessel),
+             shots.c=factor(shots.c,ordered = T))
+    
+    d.pos=d%>%
+      filter(catch.target>0)%>%
+      mutate(cpue=catch.target/km.gillnet.hours.c,
+             ln.cpue=log(cpue))%>%
+      mutate(finyear=factor(finyear,ordered = T),
+             vessel=factor(vessel),
+             shots.c=factor(shots.c,ordered = T))
+    #mutate_if(is.character,as.factor)
+    
+    #Exploratory graphs
+    NN=1:(length(Covars)+length(Fktrs))
+    nnn.i=4*NN
+    plot_list=vector('list',length(NN)*4)
+    
+    for(x in 1:length(Covars))
+    {
+      plot_list[[nnn.i[x]-3]]=ggplot(d.pos) + aes_string(x = Covars[x], y = 'cpue')+
+        geom_bin2d(bins = 100,binwidth = c(0.25, .5))+
+        labs(y="Positive cpue",fill ="density") +geom_smooth(method = "lm")
+      plot_list[[nnn.i[x]-2]]=ggplot(d.bi) + aes_string(x = Covars[x], y = 'catch.target')+
+        geom_bin2d(bins = 100,binwidth = c(0.1, .1))+
+        labs(y='Presence /absence',fill ="density")
+    }
+    
+    for(x in 1:length(Fktrs))
+    {
+      plot_list[[nnn.i[x]-1]]=ggplot(d.pos) + aes_string(x = Fktrs[x], y = 'cpue') + 
+        geom_boxplot() + labs(y="Positive cpue")+
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+      
+      TAB=as.data.frame(table(d.bi[,Fktrs[x]],d.bi$catch.target))
+      plot_list[[nnn.i[x]]]=ggplot(TAB) + aes(x = Var1, y = Freq,fill=factor(Var2)) +
+        geom_bar(stat='identity',position="stack")+
+        labs( x = Fktrs[x],fill ="")+ 
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+    }
+    
+    #Interaction
+    # qplot(x = year.c, y = cpue, data = d.pos, color = factor(blockx)) +
+    #    geom_smooth(method = "lm")
+    
+    plot_list <- plot_list[which(!sapply(plot_list, is.null))]
+    multi.page <-ggarrange(plotlist=plot_list, nrow = 2, ncol = 1)
+    ggexport(multi.page, filename = paste(hndl.expl,OUT,"_GAM.pdf",sep=''))
+    
+    
+    #Model year as an autocorrelated continuous variable
+    Mod=gam(ln.cpue~s(year.c,bs='gp'),dat=d.pos)  #specify a gaussian process
+    Mod1=gam(ln.cpue~s(year.c),dat=d.pos)
+    Mod2=gam(ln.cpue~finyear,dat=d.pos)
+    
+    pdf(paste(hndl.expl,OUT,"_GAM_year.as.autorrelated.pdf",sep=''))
+    par(mfcol=c(3,2),mar=c(3,4,1,1))
+    plot(Mod,main="Mod_s(year,bs='gp')", shade = TRUE,shade.col = "pink", shift = coef(Mod)[1],
+         ylab="cpue")  #to see data as well and 95 CI
+    plot(Mod1,main="Mod1_s(year)", shade = TRUE,shade.col = "pink", shift = coef(Mod)[1][1],
+         ylab="cpue")
+    plot(Mod2, all.terms = TRUE,shift = coef(Mod)[1][1])
+    legend('top',"Mod2_finyear",bty='n')
+    New.d=data.frame(finyear=factor(levels(d.pos$finyear)))%>%
+      mutate(year.c=as.numeric(substr(finyear,1,4)))
+    
+    fn.pred.plt=function(mod,newD)
+    {
+      Mod.pred=predict(mod,newdata=New.d,type='response',se.fit=T)
+      plot(newD$year.c,Mod.pred$fit,pch=19,type='o')
+      segments(newD$year.c,Mod.pred$fit+1.96*Mod.pred$se.fit,
+               newD$year.c,Mod.pred$fit-1.96*Mod.pred$se.fit)
+    }
+    
+    fn.pred.plt(mod=Mod,newD=New.d)
+    fn.pred.plt(mod=Mod1,newD=New.d)
+    fn.pred.plt(mod=Mod2,newD=New.d)
+    
+    #tidy(Mod)
+    #glance(Mod)
+    AIC.tab=AICtab(Mod,Mod1,Mod2)
+    class(AIC.tab) <- "data.frame"
+    plot.new()
+    grid.table(AIC.tab)
+    dev.off()
+    
+    #plot(Mod, rug = TRUE, residuals = TRUE, pch = 1, cex = 1) # see residuals
+    #plot(Mod, seWithMean = TRUE, shift = coef(Mod)[1])  #shows the partial effect and intercept uncertainty (better approach) in an interpretable scale
+    #plot(Mod,main="Mod", page=1, all.terms = TRUE, rug = TRUE, shade = TRUE,shade.col = "pink")
+    
+    #To do GAM term selection: (add all possible variables with its corresponding splines and basis function)
+    #gam(y~s(x1)+s(x2)+...s(xn),select=TRUE)
+    
+    #BAM: for big data gam (much faster...)
+    
+    #Tweedie vs normal
+    a=d%>%mutate(finyear=factor(finyear,ordered = T,levels=sort(unique(finyear))),
+                 ln.cpue=log(catch.target+1e-5/km.gillnet.hours.c))
+    #Mod=gam(ln.cpue~finyear,dat=a,family=tw,method="REML")  
+    #Mod1=gam(ln.cpue~finyear,dat=a,method="REML")
+    #par(mfcol=c(2,1))
+    #plot(coef(Mod),main="Mod")
+    #lines(coef(Mod1),main="Mod default")
+    
+    
+    #binomial part
+    
+    #plot(binom_mod, pages = 1, trans = plogis)   #visualise binomial model in probability scale
+    #plot(binom_mod, pages = 1, trans = plogis, shift = coef(binom_mod)[1])  #in absolute scale (with intercept)
+    
+    
+    
+    mod <-gam(LIVEWT.c~s(VESSEL, bs="re")+s(MONTH,bs='cc', k = 12)+s(long.corner,lat.corner)+offset(log.effort),
+              data=d.bi,family=binomial,method="REML")
+    
+    
+    #Model year as ordered factor
+    d$finyear.ordered=factor(d$finyear,ordered = T,levels=sort(unique(d$finyear)))
+    d$finyear=factor(d$finyear)
+    Mod=gam(LNcpue~finyear.ordered,dat=d) 
+    Mod1=gam(LNcpue~finyear,dat=d)
+    plot(coef(Mod),main="Mod")
+    lines(coef(Mod1),main="Mod default")
+    
+    #Model month as smoothing term
+    Mod=gam(LNcpue~s(month,k=12,bs='cc'),dat=d)  #specify a cyclical smoother
+    Mod1=gam(LNcpue~s(month,k=12),dat=d)
+    plot(Mod,main="Mod")
+    plot(Mod1,main="Mod default")
+    anova(Mod)
+    anova(Mod1)
+    
+    #Model vessel as random effect
+    d$vessel=factor(d$vessel)
+    Mod=gam(LNcpue~s(vessel,bs='re'),dat=d,method="REML")  
+    Mod1=gam(LNcpue~s(vessel),dat=d,method="REML")
+    plot(Mod,main="Mod")
+    plot(Mod1,main="Mod default")
+    
+    #model lat and long as a sphere
+    Mod=gam(LNcpue~s(long10.corner,lat10.corner,bs='sos'),dat=d,method="REML")  
+    Mod1=gam(LNcpue~s(long10.corner,lat10.corner),dat=d,method="REML")
+    plot(Mod,main="Mod")
+    plot(Mod1,main="Mod default")
+    
+    
+    #doing more with gams
+    
+    
+    augment(gam_model)
+    
+  }
+  for(s in Tar.sp)
+  {
+    #Daily
+    fn.explr.gam.rel(d=DATA.list.LIVEWT.c.daily[[s]],
+                     Fktrs=c('FINYEAR','VESSEL','month.as.factor','shots.c'),
+                     Covars=c('YEAR.c','MONTH','LAT10.corner','LONG10.corner',
+                              'Lunar','Temperature','Temp.res','Freo','SOI','nlines.c',
+                              'mesh','Mean.depth','Dim.1','Dim.2','Dim.3'),
+                     OUT=paste(names(DATA.list.LIVEWT.c.daily)[s],'_daily',sep=''))
+    
+    #Monthly
+    fn.explr.gam.rel(d=DATA.list.LIVEWT.c[[s]],
+                     Fktrs=c('FINYEAR','VESSEL','month.as.factor','shots.c'),
+                     Covars=c('YEAR.c','MONTH','LAT10.corner','LONG10.corner',
+                              'Temperature','Temp.res','Freo','SOI'),
+                     OUT=paste(names(DATA.list.LIVEWT.c)[s],'_monthly',sep=''))
+    
+  }
+
 }
 
   #check data properties and degrees of freedom   
@@ -4076,93 +4297,6 @@ if(Model.run=="First")
   dev.off()
 }
 Eff.creep=data.frame(finyear=FINYEAR.ALL,effort.creep=Fish.pow.inc)
-
-#ACA
-#explore GAM issues  Do proper exploration of each possible term, with ggplots, etc...
-if(do.Exploratory=="YES")
-{
-  fn.explr.gam.rel=function(d)
-  {
-    colnames(d)=tolower(colnames(d))
-    d=d%>%mutate(month.cat=factor(month),
-                 moon=factor(as.character(lunar),ordered = T,
-                             levels=c("New","Waxing","Full","Waning")))
-    
-    
-    #To do GAM term selection:
-    #gam(y~s(x1)+s(x2)+...s(xn),select=T)
-    
-    #BAM: for big data gam (much faster...)
-    
-    #Tweedie vs normal
-    a=d%>%mutate(finyear=factor(finyear,ordered = T,levels=sort(unique(finyear))),
-                 ln.cpue=log(catch.target+1e-5/km.gillnet.hours.c))
-    #Mod=gam(ln.cpue~finyear,dat=a,family=tw,method="REML")  
-    #Mod1=gam(ln.cpue~finyear,dat=a,method="REML")
-    #par(mfcol=c(2,1))
-    #plot(coef(Mod),main="Mod")
-    #lines(coef(Mod1),main="Mod default")
-    
-    
-    #binomial part
-    d.bi=d%>%mutate(catch.target=ifelse(catch.target>0,1,0))
-    d.bi$LN.effort=log(d.bi[,match(efrt,names(d.bi))])
-    
-    #pos part
-    d=d%>%filter(catch.target>0)
-    d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
-    
-    
-    ggplot(d) +
-      aes(x = lunar, y = LNcpue) +
-      geom_boxplot() + facet_wrap(~zone)
-    
-    
-    ggplot(d) +
-      aes(x = mesh, y = LNcpue)+geom_point()+ facet_wrap(~zone)
-    
-    
-    qplot(x = year.c, y = temperature, data = d, color = month.cat) +
-      geom_smooth(method = "lm") + facet_wrap(~zone)
-    
-    #Model year as an autocorrelated continuous variable
-    par(mfcol=c(2,1))
-    Mod=gam(LNcpue~s(year.c,bs='gp'),dat=d)  #specify a gaussian process
-    Mod1=gam(LNcpue~s(year.c),dat=d)
-    plot(Mod,main="Mod")
-    plot(Mod1,main="Mod default")
-    
-    #Model year as ordered factor
-    d$finyear.ordered=factor(d$finyear,ordered = T,levels=sort(unique(d$finyear)))
-    d$finyear=factor(d$finyear)
-    Mod=gam(LNcpue~finyear.ordered,dat=d) 
-    Mod1=gam(LNcpue~finyear,dat=d)
-    plot(coef(Mod),main="Mod")
-    lines(coef(Mod1),main="Mod default")
-    
-    #Model month as smoothing term
-    Mod=gam(LNcpue~s(month,k=12,bs='cc'),dat=d)  #specify a cyclical smoother
-    Mod1=gam(LNcpue~s(month,k=12),dat=d)
-    plot(Mod,main="Mod")
-    plot(Mod1,main="Mod default")
-    anova(Mod)
-    anova(Mod1)
-    
-    #Model vessel as random effect
-    d$vessel=factor(d$vessel)
-    Mod=gam(LNcpue~s(vessel,bs='re'),dat=d,method="REML")  
-    Mod1=gam(LNcpue~s(vessel),dat=d,method="REML")
-    plot(Mod,main="Mod")
-    plot(Mod1,main="Mod default")
-    
-    #model lat and long as a sphere
-    Mod=gam(LNcpue~s(long10.corner,lat10.corner,bs='sos'),dat=d,method="REML")  
-    Mod1=gam(LNcpue~s(long10.corner,lat10.corner),dat=d,method="REML")
-    plot(Mod,main="Mod")
-    plot(Mod1,main="Mod default")
-  }
-  fn.explr.gam.rel(d=DATA.list.LIVEWT.c.daily$`Sandbar Shark`)
-}
 
 
 
