@@ -694,7 +694,7 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
 #function for converting continuous var to factor
 cfac=function(x,breaks=NULL)  
 {
-  if(is.null(breaks)) breaks=unique(quantile(x,probs = seq(0, 1, 0.1)))
+  if(is.null(breaks)) breaks=unique(quantile(x,probs = seq(0, 1, 0.1),na.rm = T))
   x=cut(x,breaks,include.lowest=T,right=F)
   levels(x)=paste(breaks[-length(breaks)],ifelse(diff(breaks)>1,
            c(paste('-',breaks[-c(1,length(breaks))]-1,sep=''),'+'),''),sep='')
@@ -719,6 +719,8 @@ panel.cor <- function(x, y, digits=2, prefix="", cex.cor, ...)
 fn.pred.effect <- function(DATA,PREDS) 
 {
   colnames(DATA)=tolower(colnames(DATA))
+  PREDS=tolower(PREDS)
+  Categorical=tolower(Categorical)
   PREDS=PREDS[which(PREDS%in%colnames(DATA))]
   DATA=DATA %>% mutate_each_(funs(factor(.)),PREDS[which(PREDS%in%Categorical)])%>%
     mutate(cpue=catch.target/km.gillnet.hours.c)
@@ -752,7 +754,13 @@ fn.pred.effect <- function(DATA,PREDS)
   #Covariate correlations.
   Covars=DATA%>%mutate(month=as.numeric(as.character(month)))%>%
     select(month,PREDS[which(!PREDS%in%Categorical)])
-  pairs(Covars, lower.panel=panel.smooth, upper.panel=panel.cor)
+  if(ncol(Covars)>1)
+  {
+    pairs(Covars, lower.panel=panel.smooth, upper.panel=panel.cor)
+    par(mfcol=c(1,1))
+    corrplot(cor(Covars), order = "AOE", addCoef.col = "grey70")
+  }
+
 }
 
 #functions for reshaping data
@@ -1622,7 +1630,7 @@ fn.expl.cede=function(d,PREDS,kg,Do.ggplts)    #function for exploratory analysi
     ggplot(dd, aes(x = vessel, y = year.c)) +  geom_jitter()
     ggplot(dd, aes(x = year.c, y = cpue)) + geom_jitter(alpha = 0.6) + facet_wrap( ~ vessel) + coord_flip()
     ggplot(dd, aes(x = cpue, fill = vessel)) +geom_histogram(bins = 25)
-    ggplot(dd, aes(x = month, y = cpue, color = cluster_clara)) +   geom_boxplot()
+    ggplot(dd, aes(x = dim.1,y=dim.2, color = log(cpue)))+geom_point()
   }
   
 }
@@ -3980,17 +3988,17 @@ Export.tbl(WD=getwd(),Tbl=Table.nsamp,Doc.nm="Sample_sizes",caption=NA,paragph=N
 
 #4.22 Construct index of abundance     
 ZONES=c("West","Zone1","Zone2")
+Response="catch.target"    #cpue and positive catch are calculated inside functions
 Eff.vars=c("km.gillnet.hours.c")
-Covariates=c("mean.depth","temp.res",'Temperature',"freo",
-             "dim.1","dim.2","dim.3",
-             "lunar","month","mesh",
-             'LAT10.corner','LONG10.corner')
-Predictors_monthly=c("finyear","vessel","month","blockx","temp.res","freo") 
-Predictors_daily=c("finyear","vessel","month","block10","shots.c","lunar",
-                   "nlines.c","mesh",Covariates)
-Response="catch.target"    #note that cpue is calculated inside stand function
 
-Categorical=c("finyear","vessel","blockx","block10","shots.c","nlines.c")
+Categorical=c("finyear","vessel","blockx","block10","shots.c")
+
+Covariates.monthly=c("MONTH","LONG10.corner","LAT10.corner","Freo","Temperature","SOI")
+Covariates.daily=c(Covariates.monthly,"Mean.depth","Dim.1","Dim.2","Dim.3","Lunar","mesh","nlines.c")
+
+Predictors_monthly=c(Categorical,Covariates.monthly)
+Predictors_daily=c(Categorical,Covariates.daily)
+
 
 
 #   4.22.1 Explore data used for standardisation
@@ -4004,8 +4012,9 @@ if(do.Exploratory=="YES")
   hndl.expl="C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/"
   
   # Standard exploratory analyses
-  for(s in Tar.sp)
-  {
+  system.time({
+    for(s in Tar.sp)
+    {
       #monthly
     pdf(paste(hndl.expl,names(SP.list)[s],"_monthly.pdf",sep="")) 
     if(!is.null(Store_nom_cpues_monthly[[s]]))
@@ -4029,44 +4038,62 @@ if(do.Exploratory=="YES")
     }
     if(!is.null(DATA.list.LIVEWT.c.daily[[s]])) fn.box.plt.year(d=subset(DATA.list.LIVEWT.c.daily[[s]],Catch.Target>0))
     if(!is.null(Store_nom_cpues_daily[[s]])) check.cpue(Store_nom_cpues_daily[[s]]$QL_dat,paste("daily",names(DATA.list.LIVEWT.c)[s]),4) 
-    if(names(SP.list)[s]=="Whiskery Shark") fn.pred.effect(DATA=DATA.list.LIVEWT.c.daily[[s]],PREDS=Predictors_daily)
+    if(names(SP.list)[s]=="Whiskery Shark") fn.pred.effect(DATA=DATA.list.LIVEWT.c.daily[[s]],PREDS=subset(Predictors_daily,!Predictors_daily%in%c('mesh','nlines.c')))
     dev.off()
   }
-  
-  #ACA
+  })
   #GAM exploratory analyses 
   # notes on GAM:  
-  #       Test significance for smooth terms: if you can not draw a horizontal 
+  #       Test significance for smooth terms: if you cannot draw a horizontal 
   #           line through the 95% confidence interval the smooth term is significant.
   #       Good GAM tutorial https://www.youtube.com/watch?v=q4_t8jXcQgc
   #                         https://noamross.github.io/gams-in-r-course/
   
-  # gam.check() for checking model fit
-  #   Q-Q plot, which compares the model residuals to a normal distribution. 
+  # gam.check() for checking model fit:
+  #   . Q-Q plot, which compares the model residuals to a normal distribution. 
   #   A well-fit model's residuals will be close to a straight line. 
   # 
-  #   On bottom left is a histogram of residuals. We would expect this to have a symmetrical bell shape. 
+  #   . On bottom left is a histogram of residuals. We would expect this to have a symmetrical bell shape. 
   # 
-  #   On top-right is a plot of residual values. These should be evenly distributed around zero. 
+  #   . On top-right is a plot of residual values. These should be evenly distributed around zero. 
   # 
-  #   Finally, on the bottom-right is plot of response against fitted values. 
+  #   . Finally, on the bottom-right is plot of response against fitted values. 
   #   A perfect model would form a straight line. 
   #   We don't expect a perfect model, but we do expect the pattern to cluster around the 1-to-1 line.
   
   
-  # concurvity() for checking colinearity among terms
-  #   Two modes:
-  #   The first mode, full = TRUE, reports overall concurvity for each smooth. 
+  # concurvity() for checking colinearity among terms:
+  #   . The first mode, full = TRUE, reports overall concurvity for each smooth. 
   #   Specifically, it shows how much each smooth is predetermined by all the other smooths.
   #   Since concurvity is complex, the function reports three different ways of measuring concurvity. 
   #   Each is better in some situations. 
   #   What is important is that you should always look at the worst case, 
   #   and if the value is high (say, over 0.8), inspect your model more carefully.
   # 
-  #   If any of these values from the full = TRUE mode is high, we will want to also use 
+  #   . If any of these values from the full = TRUE mode is high, we will want to also use 
   #   the second mode, setting full = FALSE. With full = FALSE
   #   These show the degree to which each variable is predetermined by each other variable, 
-  #   rather than all the other variables. This can be used to pinpoint which variables have a close relationship.
+  #   rather than all the other variables. This can be used to pinpoint which variables 
+  #   have a close relationship.
+  fn.pred.plt=function(mod,newD,Y)
+  {
+    Mod.pred=predict(mod,newdata=newD,type='response',se.fit=T)
+    plot(Y,Mod.pred$fit,pch=19,type='o',main='prediction')
+    segments(Y,Mod.pred$fit+1.96*Mod.pred$se.fit,
+             Y,Mod.pred$fit-1.96*Mod.pred$se.fit)
+  }
+  fn.mod.plt=function(MOD,MAIN,YLAB,ALL.T,DD)
+  {
+    if(DD=='bi')
+    {
+      plot(MOD,main=MAIN, trans = plogis,all.terms = ALL.T, shade = TRUE,shade.col = "pink",
+           shift = coef(MOD)[1],ylab=YLAB)
+    }else
+    {
+      plot(MOD,main=MAIN, all.terms = ALL.T, shade = TRUE,shade.col = "pink",
+           shift = coef(MOD)[1],ylab=YLAB)  #to see data in absolute scale (shift) and 95 CI
+    }
+  }
   
   fn.explr.gam.rel=function(d,Fktrs,Covars,OUT)
   {
@@ -4096,7 +4123,6 @@ if(do.Exploratory=="YES")
     NN=1:(length(Covars)+length(Fktrs))
     nnn.i=4*NN
     plot_list=vector('list',length(NN)*4)
-    
     for(x in 1:length(Covars))
     {
       plot_list[[nnn.i[x]-3]]=ggplot(d.pos) + aes_string(x = Covars[x], y = 'cpue')+
@@ -4106,7 +4132,6 @@ if(do.Exploratory=="YES")
         geom_bin2d(bins = 100,binwidth = c(0.1, .1))+
         labs(y='Presence /absence',fill ="density")
     }
-    
     for(x in 1:length(Fktrs))
     {
       plot_list[[nnn.i[x]-1]]=ggplot(d.pos) + aes_string(x = Fktrs[x], y = 'cpue') + 
@@ -4129,126 +4154,203 @@ if(do.Exploratory=="YES")
     ggexport(multi.page, filename = paste(hndl.expl,OUT,"_GAM.pdf",sep=''))
     
     
-    #Model year as an autocorrelated continuous variable
-    Mod=gam(ln.cpue~s(year.c,bs='gp'),dat=d.pos)  #specify a gaussian process
-    Mod1=gam(ln.cpue~s(year.c),dat=d.pos)
-    Mod2=gam(ln.cpue~finyear,dat=d.pos)
+    pdf(paste(hndl.expl,OUT,"_GAM_explore_year.month.vessel.pdf",sep=''))
     
-    pdf(paste(hndl.expl,OUT,"_GAM_year.as.autorrelated.pdf",sep=''))
+    #Model year as an autocorrelated continuous variable
+      #pos part
+    Mod1=gam(ln.cpue~s(year.c,bs='gp'),dat=d.pos,method="REML")  #specify a gaussian process
+    Mod2=gam(ln.cpue~s(year.c),dat=d.pos,method="REML")
+    Mod3=gam(ln.cpue~finyear,dat=d.pos,method="REML")
+    
+      #bi part
+    Mod1.bi=gam(catch.target~s(year.c,bs='gp')+offset(ln.effort),dat=d.bi,family=binomial,method="REML")  #specify a gaussian process
+    Mod2.bi=gam(catch.target~s(year.c)+offset(ln.effort),dat=d.bi,family=binomial,method="REML")
+    Mod3.bi=gam(catch.target~finyear+offset(ln.effort),dat=d.bi,family=binomial,method="REML")
+    
+    
     par(mfcol=c(3,2),mar=c(3,4,1,1))
-    plot(Mod,main="Mod_s(year,bs='gp')", shade = TRUE,shade.col = "pink", shift = coef(Mod)[1],
-         ylab="cpue")  #to see data as well and 95 CI
-    plot(Mod1,main="Mod1_s(year)", shade = TRUE,shade.col = "pink", shift = coef(Mod)[1][1],
-         ylab="cpue")
-    plot(Mod2, all.terms = TRUE,shift = coef(Mod)[1][1])
-    legend('top',"Mod2_finyear",bty='n')
+      #pos part
+    fn.mod.plt(Mod1,"Mod1 s(year,bs='gp')","cpue",FALSE,'pos')
+    fn.mod.plt(Mod2,"Mod2 s(year)","cpue",FALSE,'pos')
+    fn.mod.plt(Mod3,"Mod2 s(year)","cpue",TRUE,'pos')
+    legend('top',"Mod3 finyear",bty='n',cex=1.5)
+    
     New.d=data.frame(finyear=factor(levels(d.pos$finyear)))%>%
       mutate(year.c=as.numeric(substr(finyear,1,4)))
+    fn.pred.plt(mod=Mod1,newD=New.d,Y=New.d$year.c)
+    fn.pred.plt(mod=Mod2,newD=New.d,Y=New.d$year.c)
+    fn.pred.plt(mod=Mod3,newD=New.d,Y=New.d$year.c)
     
-    fn.pred.plt=function(mod,newD)
-    {
-      Mod.pred=predict(mod,newdata=New.d,type='response',se.fit=T)
-      plot(newD$year.c,Mod.pred$fit,pch=19,type='o')
-      segments(newD$year.c,Mod.pred$fit+1.96*Mod.pred$se.fit,
-               newD$year.c,Mod.pred$fit-1.96*Mod.pred$se.fit)
-    }
+    grid.newpage()
+    mod.sumery=rbind(tidy(Mod1),tidy(Mod2),tidy(Mod3))
+    class(mod.sumery) <- "data.frame"
+    rownames(mod.sumery)=paste('Mod',1:nrow(mod.sumery),sep='')
+    grid.table(mod.sumery)
     
-    fn.pred.plt(mod=Mod,newD=New.d)
-    fn.pred.plt(mod=Mod1,newD=New.d)
-    fn.pred.plt(mod=Mod2,newD=New.d)
-    
-    #tidy(Mod)
-    #glance(Mod)
-    AIC.tab=AICtab(Mod,Mod1,Mod2)
+    AIC.tab=AICtab(Mod1,Mod2,Mod3)
     class(AIC.tab) <- "data.frame"
-    plot.new()
+    grid.newpage()
     grid.table(AIC.tab)
+    
+      #bi part
+    par(mfcol=c(3,2),mar=c(3,4,1,1))
+    fn.mod.plt(Mod1.bi,"Mod1.bi s(year,bs='gp')","catch",FALSE,'bi')
+    fn.mod.plt(Mod2.bi,"Mod2.bi s(year)","catch",FALSE,'bi')
+    fn.mod.plt(Mod3.bi,"Mod2.bi s(year)","catch",TRUE,'bi')
+    legend('top',"Mod3.bi finyear",bty='n',cex=1.5)
+ 
+    New.d=data.frame(finyear=factor(levels(d.bi$finyear)))%>%
+      mutate(year.c=as.numeric(substr(finyear,1,4)),
+             ln.effort=mean(d.bi$ln.effort))
+    fn.pred.plt(mod=Mod1.bi,newD=New.d,Y=New.d$year.c)
+    fn.pred.plt(mod=Mod2.bi,newD=New.d,Y=New.d$year.c)
+    fn.pred.plt(mod=Mod3.bi,newD=New.d,Y=New.d$year.c)
+    
+    grid.newpage()
+    mod.sumery=rbind(tidy(Mod1.bi),tidy(Mod2.bi),tidy(Mod3.bi))
+    class(mod.sumery) <- "data.frame"
+    rownames(mod.sumery)=paste('Mod',1:nrow(mod.sumery),sep='')
+    grid.table(mod.sumery)
+    
+    AIC.tab=AICtab(Mod1.bi,Mod2.bi,Mod3.bi)
+    class(AIC.tab) <- "data.frame"
+    grid.newpage()
+    grid.table(AIC.tab)
+    
+    
+    #Model month as smoothing term
+      #pos part
+    Mod1=gam(ln.cpue~s(month,k=12,bs='cc'),dat=d.pos,method="REML")  
+    Mod2=gam(ln.cpue~s(month,k=12),dat=d.pos,method="REML")
+    Mod3=gam(ln.cpue~month.as.factor,dat=d.pos,method="REML")
+    
+      #bi part
+    Mod1.bi=gam(catch.target~s(month,k=12,bs='cc')+offset(ln.effort),dat=d.bi,family=binomial,method="REML")
+    Mod2.bi=gam(catch.target~s(month,k=12)+offset(ln.effort),dat=d.bi,family=binomial,method="REML")
+    Mod3.bi=gam(catch.target~month.as.factor+offset(ln.effort),dat=d.bi,family=binomial,method="REML")
+    
+    
+    par(mfcol=c(3,2),mar=c(3,4,1,1))
+    #pos part
+    fn.mod.plt(Mod1,"Mod1 s(month,k=12,bs='cc')","cpue",FALSE,'pos')
+    fn.mod.plt(Mod2,"Mod2 s(month,k=12)","cpue",FALSE,'pos')
+    fn.mod.plt(Mod3,"month.as.factor","cpue",TRUE,'pos')
+    legend('top',"Mod3_month.as.factor",bty='n',cex=1.5)
+    
+    New.d=data.frame(month.as.factor=factor(levels(d.pos$month.as.factor)))%>%
+      mutate(month=as.numeric(as.character(month.as.factor)))
+    fn.pred.plt(mod=Mod1,newD=New.d,Y=New.d$month)
+    fn.pred.plt(mod=Mod2,newD=New.d,Y=New.d$month)
+    fn.pred.plt(mod=Mod3,newD=New.d,Y=New.d$month)
+    
+    grid.newpage()
+    mod.sumery=rbind(tidy(Mod1),tidy(Mod2),tidy(Mod3))
+    class(mod.sumery) <- "data.frame"
+    rownames(mod.sumery)=paste('Mod',1:nrow(mod.sumery),sep='')
+    grid.table(mod.sumery)
+    
+    AIC.tab=AICtab(Mod1,Mod2,Mod3)
+    class(AIC.tab) <- "data.frame"
+    grid.newpage()
+    grid.table(AIC.tab)
+    
+    #bi part
+    par(mfcol=c(3,2),mar=c(3,4,1,1))
+    fn.mod.plt(Mod1.bi,"Mod1.bi s(month,k=12,bs='cc')","catch",FALSE,'bi')
+    fn.mod.plt(Mod2.bi,"Mod2.bi s(month,k=12)","catch",FALSE,'bi')
+    fn.mod.plt(Mod3.bi,"month.as.factor","catch",TRUE,'bi')
+    legend('top',"Mod3.bi month.as.factor",bty='n',cex=1.5)
+    
+    New.d=data.frame(month.as.factor=factor(levels(d.bi$month.as.factor)))%>%
+      mutate(month=as.numeric(as.character(month.as.factor)),
+             ln.effort=mean(d.bi$ln.effort))
+    fn.pred.plt(mod=Mod1.bi,newD=New.d,Y=New.d$month)
+    fn.pred.plt(mod=Mod2.bi,newD=New.d,Y=New.d$month)
+    fn.pred.plt(mod=Mod3.bi,newD=New.d,Y=New.d$month)
+    
+    grid.newpage()
+    mod.sumery=rbind(tidy(Mod1.bi),tidy(Mod2.bi),tidy(Mod3.bi))
+    class(mod.sumery) <- "data.frame"
+    rownames(mod.sumery)=paste('Mod',1:nrow(mod.sumery),sep='')
+    grid.table(mod.sumery)
+    
+    AIC.tab=AICtab(Mod1.bi,Mod2.bi,Mod3.bi)
+    class(AIC.tab) <- "data.frame"
+    grid.newpage()
+    grid.table(AIC.tab)
+ 
+
+    #Model vessel as random effect
+
+      #pos part
+    Mod1=gam(ln.cpue~finyear+s(vessel,bs='re'),dat=d.pos,method="REML")  
+    Mod2=gam(ln.cpue~finyear+vessel,dat=d.pos,method="REML")
+
+      #bi part
+    Mod1.bi=bam(catch.target~finyear+s(vessel,bs='re')+offset(ln.effort),dat=d.bi,family=binomial,method="REML")
+    Mod2.bi=bam(catch.target~finyear+vessel+offset(ln.effort),dat=d.bi,family=binomial,method="REML")
+ 
+    par(mfcol=c(2,1),mar=c(3,4,1,1))
+    New.d=data.frame(finyear=factor(levels(d.pos$finyear)))%>%
+      mutate(vessel=factor(names(sort(-table(d.pos$vessel)))[1],levels=levels(d.pos$vessel)))
+    fn.pred.plt(mod=Mod1,newD=New.d,Y=as.numeric(substr(New.d$finyear,1,4)))
+    fn.pred.plt(mod=Mod2,newD=New.d,Y=as.numeric(substr(New.d$finyear,1,4)))
+
+    AIC.tab=AICtab(Mod1,Mod2)
+    class(AIC.tab) <- "data.frame"
+    grid.newpage()
+    grid.table(AIC.tab)
+    
+    #bi part
+    par(mfcol=c(2,1),mar=c(3,4,1,1))
+    New.d=data.frame(finyear=factor(levels(d.bi$finyear)))%>%
+      mutate(vessel=factor(names(sort(-table(d.bi$vessel)))[1],levels=levels(d.bi$vessel)),
+             ln.effort=mean(d.bi$ln.effort))
+    fn.pred.plt(mod=Mod1.bi,newD=New.d,Y=as.numeric(substr(New.d$finyear,1,4)))
+    fn.pred.plt(mod=Mod2.bi,newD=New.d,Y=as.numeric(substr(New.d$finyear,1,4)))
+   
+    AIC.tab=AICtab(Mod1.bi,Mod2.bi)
+    class(AIC.tab) <- "data.frame"
+    grid.newpage()
+    grid.table(AIC.tab)
+    
     dev.off()
     
+    
+      #plotting stuff
     #plot(Mod, rug = TRUE, residuals = TRUE, pch = 1, cex = 1) # see residuals
     #plot(Mod, seWithMean = TRUE, shift = coef(Mod)[1])  #shows the partial effect and intercept uncertainty (better approach) in an interpretable scale
     #plot(Mod,main="Mod", page=1, all.terms = TRUE, rug = TRUE, shade = TRUE,shade.col = "pink")
     
-    #To do GAM term selection: (add all possible variables with its corresponding splines and basis function)
-    #gam(y~s(x1)+s(x2)+...s(xn),select=TRUE)
-    
-    #BAM: for big data gam (much faster...)
-    
-    #Tweedie vs normal
-    a=d%>%mutate(finyear=factor(finyear,ordered = T,levels=sort(unique(finyear))),
-                 ln.cpue=log(catch.target+1e-5/km.gillnet.hours.c))
-    #Mod=gam(ln.cpue~finyear,dat=a,family=tw,method="REML")  
-    #Mod1=gam(ln.cpue~finyear,dat=a,method="REML")
-    #par(mfcol=c(2,1))
-    #plot(coef(Mod),main="Mod")
-    #lines(coef(Mod1),main="Mod default")
-    
-    
-    #binomial part
-    
-    #plot(binom_mod, pages = 1, trans = plogis)   #visualise binomial model in probability scale
-    #plot(binom_mod, pages = 1, trans = plogis, shift = coef(binom_mod)[1])  #in absolute scale (with intercept)
-    
-    
-    
-    mod <-gam(LIVEWT.c~s(VESSEL, bs="re")+s(MONTH,bs='cc', k = 12)+s(long.corner,lat.corner)+offset(log.effort),
-              data=d.bi,family=binomial,method="REML")
-    
-    
-    #Model year as ordered factor
-    d$finyear.ordered=factor(d$finyear,ordered = T,levels=sort(unique(d$finyear)))
-    d$finyear=factor(d$finyear)
-    Mod=gam(LNcpue~finyear.ordered,dat=d) 
-    Mod1=gam(LNcpue~finyear,dat=d)
-    plot(coef(Mod),main="Mod")
-    lines(coef(Mod1),main="Mod default")
-    
-    #Model month as smoothing term
-    Mod=gam(LNcpue~s(month,k=12,bs='cc'),dat=d)  #specify a cyclical smoother
-    Mod1=gam(LNcpue~s(month,k=12),dat=d)
-    plot(Mod,main="Mod")
-    plot(Mod1,main="Mod default")
-    anova(Mod)
-    anova(Mod1)
-    
-    #Model vessel as random effect
-    d$vessel=factor(d$vessel)
-    Mod=gam(LNcpue~s(vessel,bs='re'),dat=d,method="REML")  
-    Mod1=gam(LNcpue~s(vessel),dat=d,method="REML")
-    plot(Mod,main="Mod")
-    plot(Mod1,main="Mod default")
-    
-    #model lat and long as a sphere
-    Mod=gam(LNcpue~s(long10.corner,lat10.corner,bs='sos'),dat=d,method="REML")  
-    Mod1=gam(LNcpue~s(long10.corner,lat10.corner),dat=d,method="REML")
-    plot(Mod,main="Mod")
-    plot(Mod1,main="Mod default")
-    
-    
-    #doing more with gams
-    
-    
-    augment(gam_model)
-    
+      #better summary tables
+    #tidy(Mod)
+    #glance(Mod)
+    #augment(Mod)
   }
-  for(s in Tar.sp)
-  {
+  
+  system.time({
+    for(s in Tar.sp)
+    {
+    NM=names(DATA.list.LIVEWT.c.daily)[s]
+    
     #Daily
+    print(paste("------",NM,"-daily"))
     fn.explr.gam.rel(d=DATA.list.LIVEWT.c.daily[[s]],
-                     Fktrs=c('FINYEAR','VESSEL','month.as.factor','shots.c'),
+                     Fktrs=c('FINYEAR','month.as.factor','VESSEL','shots.c'),
                      Covars=c('YEAR.c','MONTH','LAT10.corner','LONG10.corner',
-                              'Lunar','Temperature','Temp.res','Freo','SOI','nlines.c',
+                              'Temperature','Temp.res','Freo','SOI','Lunar','nlines.c',
                               'mesh','Mean.depth','Dim.1','Dim.2','Dim.3'),
                      OUT=paste(names(DATA.list.LIVEWT.c.daily)[s],'_daily',sep=''))
     
     #Monthly
+    print(paste("------",NM,"-monthly"))
     fn.explr.gam.rel(d=DATA.list.LIVEWT.c[[s]],
-                     Fktrs=c('FINYEAR','VESSEL','month.as.factor','shots.c'),
+                     Fktrs=c('FINYEAR','month.as.factor','VESSEL','shots.c'),
                      Covars=c('YEAR.c','MONTH','LAT10.corner','LONG10.corner',
                               'Temperature','Temp.res','Freo','SOI'),
                      OUT=paste(names(DATA.list.LIVEWT.c)[s],'_monthly',sep=''))
-    
   }
+  })    #takes 9 mins
 
 }
 
@@ -4299,8 +4401,21 @@ if(Model.run=="First")
 Eff.creep=data.frame(finyear=FINYEAR.ALL,effort.creep=Fish.pow.inc)
 
 
-
+#ACA
 #   4.22.3 Select model structure  
+
+#To do GAM term selection: (add all possible variables with its corresponding splines and basis function)
+#gam(y~s(x1)+s(x2)+...s(xn),select=TRUE)
+
+#BAM: for big data gam (much faster...)
+
+
+#Tweedie vs normal
+#a=d%>%mutate(finyear=factor(finyear,ordered = T,levels=sort(unique(finyear))),
+#      ln.cpue=log(catch.target+1e-5/km.gillnet.hours.c))
+#Mod=gam(ln.cpue~finyear,dat=a,family=tw,method="REML")  
+#Mod1=gam(ln.cpue~finyear,dat=a,method="REML")
+
 
     #remove predictors identified as highly correlated
 Predictors_monthly=Predictors_monthly[-match(c("temp.res","freo"),Predictors_monthly)]
