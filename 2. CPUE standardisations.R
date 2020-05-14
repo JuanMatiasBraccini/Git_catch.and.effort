@@ -287,6 +287,11 @@ use.blok.area='NO'
 N.keep=5      #in years
 Min.kg=100   #in kg
 
+#Maximum possible effort
+Net.max=8500    #Rory pers comm
+Max.km.gn.h.monthly=24*20*Net.max/1000
+Max.km.gn.h.daily=24*Net.max/1000
+
 #Species definitions
 Shark.species=5001:24900
 Indicator.sp=c(17001,17003,18003,18007)
@@ -3001,6 +3006,19 @@ Data.daily.GN=Data.daily.GN%>%left_join(SOI,by=c("YEAR.c"="Year","MONTH"="Month"
                               mutate(Lunar=lunar.illumination(date),
                                      Lunar.phase=lunar.phase(date,name=T))
 
+#replace 0 depth with mean of block10
+Eff.daily=Eff.daily %>% 
+  group_by(block10) %>%
+  mutate(Mean.depth= replace(Mean.depth, Mean.depth<2, mean(Mean.depth, na.rm=TRUE)),
+         Mean.depth=ifelse(Mean.depth==0,NA,Mean.depth))
+
+  #Set records with km.gn.hours > Max possible to 'bad' reporter  
+Eff=Eff%>%
+  mutate(Eff.Reporter=ifelse(Km.Gillnet.Hours.c>Max.km.gn.h.monthly,'bad',Eff.Reporter))   
+Eff.daily=Eff.daily%>%
+  mutate(Eff.Reporter=ifelse(Km.Gillnet.Hours.c>Max.km.gn.h.daily,'bad',Eff.Reporter),
+         Eff.Reporter=ifelse(Mean.depth>120,'bad',Eff.Reporter))  
+
 
 
 
@@ -4078,9 +4096,10 @@ if(do.Exploratory=="YES")
   fn.pred.plt=function(mod,newD,Y)
   {
     Mod.pred=predict(mod,newdata=newD,type='response',se.fit=T)
-    plot(Y,Mod.pred$fit,pch=19,type='o',main='prediction')
-    segments(Y,Mod.pred$fit+1.96*Mod.pred$se.fit,
-             Y,Mod.pred$fit-1.96*Mod.pred$se.fit)
+    Mn=mean(Mod.pred$fit)
+    plot(Y,Mod.pred$fit/Mn,pch=19,type='o',main='prediction',ylab='relative cpue')
+    segments(Y,(Mod.pred$fit+1.96*Mod.pred$se.fit)/Mn,
+             Y,(Mod.pred$fit-1.96*Mod.pred$se.fit)/Mn)
   }
   fn.mod.plt=function(MOD,MAIN,YLAB,ALL.T,DD)
   {
@@ -4156,6 +4175,26 @@ if(do.Exploratory=="YES")
     
     pdf(paste(hndl.expl,OUT,"_GAM_explore_year.month.vessel.pdf",sep=''))
     
+    #Tweedie vs normal
+    a=d%>%mutate(finyear=factor(finyear,ordered = T,levels=sort(unique(finyear))),
+                 cpue=catch.target/km.gillnet.hours.c)
+    Mod1=gam(cpue~finyear,dat=a,family=tw,method="REML")  
+    Mod2=gam(cpue~finyear,dat=a,method="REML")
+    
+    par(mfcol=c(2,3),mar=c(3,4,1,1),mgp=c(2,.9,0))
+    
+    fn.mod.plt(Mod1,"","cpue",TRUE,'pos');legend('top',"Mod1 Tweedie",bty='n',cex=1.5)
+    fn.mod.plt(Mod2,"","cpue",TRUE,'pos');legend('top',"Mod2 Normal",bty='n',cex=1.5)
+    
+    New.d=data.frame(finyear=factor(levels(a$finyear)))%>%
+      mutate(year.c=as.numeric(substr(finyear,1,4)))
+    fn.pred.plt(mod=Mod1,newD=New.d,Y=New.d$year.c)
+    fn.pred.plt(mod=Mod2,newD=New.d,Y=New.d$year.c)
+    
+    plot(coef(Mod1)[-1],coef(Mod2)[-1],pch=19,cex=2,xlab="coef mod1",ylab="coef mod2")
+    lines(coef(Mod1)[-1],coef(Mod1)[-1],lwd=2,col=2)
+    
+
     #Model year as an autocorrelated continuous variable
       #pos part
     Mod1=gam(ln.cpue~s(year.c,bs='gp'),dat=d.pos,method="REML")  #specify a gaussian process
@@ -4401,28 +4440,18 @@ if(Model.run=="First")
 Eff.creep=data.frame(finyear=FINYEAR.ALL,effort.creep=Fish.pow.inc)
 
 
-#ACA
 #   4.22.3 Select model structure  
 
 #To do GAM term selection: (add all possible variables with its corresponding splines and basis function)
-#gam(y~s(x1)+s(x2)+...s(xn),select=TRUE)
-
-#BAM: for big data gam (much faster...)
-
-
-#Tweedie vs normal
-#a=d%>%mutate(finyear=factor(finyear,ordered = T,levels=sort(unique(finyear))),
-#      ln.cpue=log(catch.target+1e-5/km.gillnet.hours.c))
-#Mod=gam(ln.cpue~finyear,dat=a,family=tw,method="REML")  
-#Mod1=gam(ln.cpue~finyear,dat=a,method="REML")
+#mod=gam(y~s(x1)+s(x2)+...s(xn),select=TRUE,method="REML")
+#summary(mod)
+#plot(mod,pages=1)
 
 
     #remove predictors identified as highly correlated
-Predictors_monthly=Predictors_monthly[-match(c("temp.res","freo"),Predictors_monthly)]
-Predictors_daily=Predictors_daily[-match(c("temp.res","freo","freo_lag6","freo_lag12"),Predictors_daily)]
-cNSTNT=c('finyear','vessel','month','blockx')
-cNSTNT.daily=c('finyear','vessel','month','block10')
-
+cNSTNT=Categorical[!Categorical=="block10"] 
+cNSTNT.daily=Categorical[!Categorical=="blockx"]
+#ACA
       #4.22.3.1 extract best model   
 Best.Model=vector('list',length(SP.list)) 
 names(Best.Model)=names(SP.list)
@@ -4667,6 +4696,9 @@ if(Def.mod.Str=="NO")
                   s(dim.1,k=6)+s(dim.2,k=6)))
   
 }
+
+#par(mfrow = c(2,2))
+#gam.check(gam_y)  #to see gam fit
 
 #Export table of term levels
 if(Model.run=="First")
