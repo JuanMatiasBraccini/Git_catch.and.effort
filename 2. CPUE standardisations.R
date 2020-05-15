@@ -2976,7 +2976,7 @@ Data.monthly.GN=Data.monthly.GN %>%
                   left_join(SST,by=c("YEAR.c"="year","MONTH"="month","LONG"="Long","LAT"="Lat"))%>% 
                   arrange(YEAR.c,MONTH,LAT,LONG)%>%
                   mutate(Temperature=ifelse(is.na(Temperature),na.approx(Temperature),Temperature))%>%
-                  group_by(MONTH,YEAR.c)%>%
+                  group_by(MONTH)%>%
                   mutate(Temp.res=Temperature/mean(Temperature,na.rm=T))
 
 #Daily
@@ -2985,7 +2985,7 @@ Data.daily.GN=Data.daily.GN %>%
                   left_join(SST,by=c("YEAR.c"="year","MONTH"="month","LONG.round"="Long","LAT.round"="Lat"))%>% 
                   arrange(YEAR.c,MONTH,LAT.round,LONG.round)%>%
                   mutate(Temperature=ifelse(is.na(Temperature),na.approx(Temperature),Temperature))%>%
-                  group_by(MONTH,YEAR.c)%>%
+                  group_by(MONTH)%>%
                   mutate(Temp.res=Temperature/mean(Temperature,na.rm=T))%>%
                   select(-c(LONG.round,LAT.round))
   
@@ -4011,7 +4011,7 @@ Eff.vars=c("km.gillnet.hours.c")
 
 Categorical=c("finyear","vessel","blockx","block10","shots.c")
 
-Covariates.monthly=c("MONTH","LONG10.corner","LAT10.corner","Freo","Temperature","SOI")
+Covariates.monthly=c("MONTH","LONG10.corner","LAT10.corner","Freo","Temp.res","SOI")
 Covariates.daily=c(Covariates.monthly,"Mean.depth","Dim.1","Dim.2","Dim.3","Lunar","mesh","nlines.c")
 
 Predictors_monthly=c(Categorical,Covariates.monthly)
@@ -4460,162 +4460,399 @@ Store.Best.Model=Store.Best.Model.daily=Best.Model
 if(Def.mod.Str=="YES")     #takes 16 minutes
 {
   hndl.modl.sel="C:/Matias/Analyses/Catch and effort/Outputs/Model Selection/"
-  select.best.method="dev.exp"
-  if(select.best.method=="dev.exp")     #takes  8 mins
+  
+  Use.Tweedie=TRUE
+  Use.Delta=FALSE
+  
+  if(Use.Tweedie)
   {
-    fn.modl.sel.delta=function(K,RESPNS,dat,Family,MOD.type)   #function for delta model structure selection
-    {
-      PREDS.test=c(1,PREDS[-match(K,PREDS)])
-      mod=vector('list',length(PREDS.test))
-      names(mod)=PREDS.test
-      if(MOD.type=="GAM") K=c('finyear+vessel+s(long10.corner,lat10.corner)+month')
-      for(p in 1:length(PREDS.test))
-      {
-        if(MOD.type=="GLM")
-        {
-          if(RESPNS=="LNcpue")Formula=formula(paste("LNcpue",paste(c(K,PREDS.test[1:p]),collapse="+"),sep="~"))
-          if(RESPNS=="catch.target")Formula=formula(paste(Response,paste(paste(c(K,PREDS.test[1:p]),collapse="+"),
-                                                                         paste("offset(","LN.effort)",sep=""),sep="+"),sep="~"))
-          mod[[p]]=glm(Formula,data=dat,family = Family, maxit=500)
-        }
-        if(MOD.type=="GAM")
-        {
-          add.this=PREDS.test[1:p]
-          if(add.this[p]%in%Covariates) add.this[p]=paste("s(",add.this[p],",k=6)",sep='')
-          if(RESPNS=="LNcpue")Formula=formula(paste("LNcpue",paste(c(K,add.this),collapse="+"),sep="~"))
-          if(RESPNS=="catch.target")Formula=formula(paste(Response,paste(paste(c(K,add.this),collapse="+"),
-                                                                         paste("offset(","LN.effort)",sep=""),sep="+"),sep="~"))
-          mod[[p]]=gam(Formula,data=dat,family = Family,method="REML")
-        }
-      }
-      return(mod)
-    }
-    efrt="km.gillnet.hours.c"
     cl <- makeCluster(detectCores()-1)
     registerDoParallel(cl)
-    system.time({Model.structure=foreach(s=Tar.sp,.packages=c('cede','dplyr','mgcv')) %dopar%
-      {
-          #need for only daily 
-        d=DATA.list.LIVEWT.c.daily[[s]]%>%filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]])
-        colnames(d)=tolower(colnames(d))
-        PREDS=Predictors_daily[which(Predictors_daily%in%names(d))]
-        d=d%>%filter(vessel%in%VES.used.daily[[s]] & blockx%in%BLKS.used.daily[[s]])
-        d=d %>% mutate(nlines.c=ifelse(nlines.c>2,'>2',nlines.c),
-                       mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
-        id.cov=which(PREDS%in%Covariates)
-        #binomial part
-        d.bi=d%>%mutate(catch.target=ifelse(catch.target>0,1,0))
-        d.bi=makecategorical(PREDS[which(PREDS%in%Categorical)],d.bi)
-        d.bi$LN.effort=log(d.bi[,match(efrt,names(d.bi))])
-        daily.mods.bi=fn.modl.sel.delta(K=cNSTNT.daily,RESPNS='catch.target',dat=d.bi,
-                                        Family="binomial",MOD.type="GAM")
-        #pos part
-        d=d%>%filter(catch.target>0)
-        d=makecategorical(PREDS[which(PREDS%in%Categorical)],d)
-        d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
-        daily.mods.pos=fn.modl.sel.delta(K=cNSTNT.daily,RESPNS='LNcpue',dat=d,
-                                         Family="gaussian",MOD.type="GAM")
-        
-        return(list(daily.mods.bi=daily.mods.bi,daily.mods.pos=daily.mods.pos))
-        
-      }
-    })
-    stopCluster(cl)
-    names(Model.structure)=names(SP.list)[Tar.sp]
     
-    #calculate AIC and deviance explained per term
-    Tab.monthly=vector('list',length(Tar.sp))
-    Tab.daily=Tab.monthly
-    for(i in 1:length(Tar.sp))
+      #target species
+    system.time({foreach(s=Tar.sp,.packages=c('cede','dplyr','mgcv','doParallel')) %do%
+        {
+          #Monthly
+          d=DATA.list.LIVEWT.c[[s]]%>%
+            filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]])
+          if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
+          Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
+          Continuous=Covariates.monthly
+          Fmula=list(Year.block="cpue~finyear+blockx",
+                     Shots="cpue~finyear+blockx+shots.c",
+                     Month="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')",
+                     Temp.res="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')+s(temp.res)",
+                     Vessel="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(vessel,bs='re')")
+          Family='tw'
+          FILE=paste(names(DATA.list.LIVEWT.c.daily)[s],"_GAM_monthly",sep="")
+          colnames(d)=tolower(colnames(d))
+          Terms=tolower(Terms)
+          Continuous=tolower(Continuous)
+          Factors=Terms[!Terms%in%Continuous]
+          d=d%>%
+            dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+            mutate(cpue=catch.target/km.gillnet.hours.c)
+          d <- makecategorical(Factors,d)
+          MODS=foreach(i=1:length(Fmula),.packages=c('cede','dplyr','mgcv','doParallel')) %dopar%
+            {
+              mod<-gam(formula(Fmula[[i]]),data=d,family=Family,select=TRUE,method="REML")
+              return(mod)
+            }
+          names(MODS)=names(Fmula)
+          pdf(paste(hndl.modl.sel,FILE,".pdf",sep=''))
+          mod.sumery=vector('list',length(MODS))
+          Explained.dev=mod.sumery
+          for(x in 1:length(MODS))
+          {
+            plot(MODS[[x]],all.terms = TRUE, shade = TRUE,shade.col = "orange",scale=0,pages=1)
+            mod.sumery[[x]]=tidy(MODS[[x]])
+            if(length(mod.sumery[[x]])>0)
+            {
+              grid.newpage()
+              class(mod.sumery[[x]]) <- "data.frame"
+              grid.table(mod.sumery[[x]])
+            }
+            Explained.dev[[x]]=summary(MODS[[x]])$dev.expl*100  
+          }
+          Explained.dev=data.frame(Model=names(Fmula),
+                                   Percent.deviance.explained.by.model=do.call(rbind,Explained.dev))%>%
+            mutate(Percent.explained.by.term=Percent.deviance.explained.by.model-lag(Percent.deviance.explained.by.model,1))
+          grid.newpage()
+          class(Explained.dev) <- "data.frame"
+          grid.table(Explained.dev)
+          dev.off()
+          
+          
+          #Daily
+          d=DATA.list.LIVEWT.c.daily[[s]]%>%
+            filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]])
+          Terms=Predictors_daily
+          Continuous=Covariates.daily
+          Fmula=list(Year=    "cpue~finyear",
+                     Shots=   "cpue~finyear+shots.c",
+                     Month=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')",
+                     Temp.res="cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)",
+                     Depth=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)",
+                     Lunar=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)",
+                     PCA.1=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)",
+                     PCA.2=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)+s(dim.2)",
+                     PCA.3=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)+s(dim.2)+s(dim.3)",
+                     Lat.long="cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)+s(dim.2)+s(dim.3)+s(long10.corner,lat10.corner)",
+                     Vessel=  "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)+s(dim.2)+s(dim.3)+s(long10.corner,lat10.corner)+s(vessel,bs='re')")
+          Family='tw'
+          FILE=paste(names(DATA.list.LIVEWT.c.daily)[s],"_GAM_daily",sep="")
+          colnames(d)=tolower(colnames(d))
+          Terms=tolower(Terms)
+          Continuous=tolower(Continuous)
+          Factors=Terms[!Terms%in%Continuous]
+          d=d%>%
+            dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+            mutate(cpue=catch.target/km.gillnet.hours.c)
+          d <- makecategorical(Factors,d)
+          MODS=foreach(i=1:length(Fmula),.packages=c('cede','dplyr','mgcv')) %dopar%
+            {
+              mod<-gam(formula(Fmula[[i]]),data=d,family=Family,select=TRUE,method="REML")
+              return(mod)
+            }
+          names(MODS)=names(Fmula)
+          pdf(paste(hndl.modl.sel,FILE,".pdf",sep=''))
+          mod.sumery=vector('list',length(MODS))
+          Explained.dev=mod.sumery
+          for(x in 1:length(MODS))
+          {
+            plot(MODS[[x]],all.terms = TRUE, shade = TRUE,shade.col = "orange",scale=0,pages=1)
+            mod.sumery[[x]]=tidy(MODS[[x]])
+            if(length(mod.sumery[[x]])>0)
+            {
+              grid.newpage()
+              class(mod.sumery[[x]]) <- "data.frame"
+              grid.table(mod.sumery[[x]])
+            }
+            Explained.dev[[x]]=summary(MODS[[x]])$dev.expl*100  
+          }
+          Explained.dev=data.frame(Model=names(Fmula),
+                                   Percent.deviance.explained.by.model=do.call(rbind,Explained.dev))%>%
+            mutate(Percent.explained.by.term=Percent.deviance.explained.by.model-lag(Percent.deviance.explained.by.model,1))
+          grid.newpage()
+          class(Explained.dev) <- "data.frame"
+          grid.table(Explained.dev)
+          dev.off()
+        }
+    })
+    
+      #other species
+    system.time({foreach(s=nnn[-sort(Tar.sp)],.packages=c('cede','dplyr','mgcv','doParallel')) %do%
+        {
+          #Monthly
+          if(!is.null(BLKS.used[[s]]))
+          {
+            d=DATA.list.LIVEWT.c[[s]]%>%
+              filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]])
+            if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
+            Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
+            Continuous=Covariates.monthly
+            Fmula=list(Year.block="cpue~finyear+blockx",
+                       Month="cpue~finyear+blockx+s(month,k=12,bs='cc')",
+                       Vessel="cpue~finyear+blockx+s(month,k=12,bs='cc')+s(vessel,bs='re')")
+            Family='tw'
+            FILE=paste(names(DATA.list.LIVEWT.c.daily)[s],"_GAM_monthly",sep="")
+            colnames(d)=tolower(colnames(d))
+            Terms=tolower(Terms)
+            Continuous=tolower(Continuous)
+            Factors=Terms[!Terms%in%Continuous]
+            d=d%>%
+              dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+              mutate(cpue=catch.target/km.gillnet.hours.c)
+            d <- makecategorical(Factors,d)
+            
+            MODS=foreach(i=1:length(Fmula),.packages=c('cede','dplyr','mgcv','doParallel')) %dopar%
+              {
+                mod<-gam(formula(Fmula[[i]]),data=d,family=Family,select=TRUE,method="REML")
+                return(mod)
+              }
+            names(MODS)=names(Fmula)
+            pdf(paste(hndl.modl.sel,FILE,".pdf",sep=''))
+            mod.sumery=vector('list',length(MODS))
+            Explained.dev=mod.sumery
+            for(x in 1:length(MODS))
+            {
+              plot(MODS[[x]],all.terms = TRUE, shade = TRUE,shade.col = "orange",scale=0,pages=1)
+              mod.sumery[[x]]=tidy(MODS[[x]])
+              if(length(mod.sumery[[x]])>0)
+              {
+                grid.newpage()
+                class(mod.sumery[[x]]) <- "data.frame"
+                grid.table(mod.sumery[[x]])
+              }
+              Explained.dev[[x]]=summary(MODS[[x]])$dev.expl*100
+            }
+            Explained.dev=data.frame(Model=names(Fmula),
+                                     Percent.deviance.explained.by.model=do.call(rbind,Explained.dev))%>%
+              mutate(Percent.explained.by.term=Percent.deviance.explained.by.model-lag(Percent.deviance.explained.by.model,1))
+            grid.newpage()
+            class(Explained.dev) <- "data.frame"
+            grid.table(Explained.dev)
+            dev.off()
+          }
+          
+          #Daily
+          if(!is.null(BLKS.used.daily[[s]]))
+          {
+            d=DATA.list.LIVEWT.c.daily[[s]]%>%
+              filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]])
+            Terms=Predictors_daily[!Predictors_daily%in%c("Dim.1","Dim.2","Dim.3")]
+            Continuous=Covariates.daily[!Covariates.daily%in%c("Dim.1","Dim.2","Dim.3")]
+            Fmula=list(Year=    "cpue~finyear",
+                       Month=   "cpue~finyear+s(month,k=12,bs='cc')",
+                       Depth=   "cpue~finyear+s(month,k=12,bs='cc')+s(mean.depth)",
+                       Lat.long="cpue~finyear+s(month,k=12,bs='cc')+s(mean.depth)+s(long10.corner,lat10.corner)",
+                       Vessel=  "cpue~finyear+s(month,k=12,bs='cc')+s(mean.depth)+s(long10.corner,lat10.corner)+s(vessel,bs='re')")
+            Family='tw'
+            FILE=paste(names(DATA.list.LIVEWT.c.daily)[s],"_GAM_daily",sep="")
+            colnames(d)=tolower(colnames(d))
+            Terms=tolower(Terms)
+            Continuous=tolower(Continuous)
+            Factors=Terms[!Terms%in%Continuous]
+            d=d%>%
+              dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+              mutate(cpue=catch.target/km.gillnet.hours.c)
+            d <- makecategorical(Factors,d)
+            MODS=foreach(i=1:length(Fmula),.packages=c('cede','dplyr','mgcv')) %dopar%
+              {
+                mod<-gam(formula(Fmula[[i]]),data=d,family=Family,select=TRUE,method="REML")
+                return(mod)
+              }
+            names(MODS)=names(Fmula)
+            pdf(paste(hndl.modl.sel,FILE,".pdf",sep=''))
+            mod.sumery=vector('list',length(MODS))
+            Explained.dev=mod.sumery
+            for(x in 1:length(MODS))
+            {
+              plot(MODS[[x]],all.terms = TRUE, shade = TRUE,shade.col = "orange",scale=0,pages=1)
+              mod.sumery[[x]]=tidy(MODS[[x]])
+              if(length(mod.sumery[[x]])>0)
+              {
+                grid.newpage()
+                class(mod.sumery[[x]]) <- "data.frame"
+                grid.table(mod.sumery[[x]])
+              }
+              Explained.dev[[x]]=summary(MODS[[x]])$dev.expl*100
+            }
+            Explained.dev=data.frame(Model=names(Fmula),
+                                     Percent.deviance.explained.by.model=do.call(rbind,Explained.dev))%>%
+              mutate(Percent.explained.by.term=Percent.deviance.explained.by.model-lag(Percent.deviance.explained.by.model,1))
+            grid.newpage()
+            class(Explained.dev) <- "data.frame"
+            grid.table(Explained.dev)
+            dev.off()
+          }
+        }
+    })
+    
+    stopCluster(cl)
+  }
+  
+  if(Use.Delta)
+  {
+    select.best.method="dev.exp"
+    if(select.best.method=="dev.exp")     #takes  8 mins
     {
-     #Daily bi
-      n=length(Model.structure[[i]]$daily.mods.bi)
-      Aic.daily.bi=rep(NA,n)
-      names(Aic.daily.bi)=names(Model.structure[[i]]$daily.mods.bi)
-      Res.DEv.daily.bi=Aic.daily.bi
-      for( l in 1:n)
+      fn.modl.sel.delta=function(K,RESPNS,dat,Family,MOD.type)   #function for delta model structure selection
       {
-        Aic.daily.bi[l]=aicc(Model.structure[[i]]$daily.mods.bi[[l]])
-        Res.DEv.daily.bi[l]=Model.structure[[i]]$daily.mods.bi[[l]]$deviance
+        PREDS.test=c(1,PREDS[-match(K,PREDS)])
+        mod=vector('list',length(PREDS.test))
+        names(mod)=PREDS.test
+        if(MOD.type=="GAM") K=c('finyear+vessel+s(long10.corner,lat10.corner)+month')
+        for(p in 1:length(PREDS.test))
+        {
+          if(MOD.type=="GLM")
+          {
+            if(RESPNS=="LNcpue")Formula=formula(paste("LNcpue",paste(c(K,PREDS.test[1:p]),collapse="+"),sep="~"))
+            if(RESPNS=="catch.target")Formula=formula(paste(Response,paste(paste(c(K,PREDS.test[1:p]),collapse="+"),
+                                                                           paste("offset(","LN.effort)",sep=""),sep="+"),sep="~"))
+            mod[[p]]=glm(Formula,data=dat,family = Family, maxit=500)
+          }
+          if(MOD.type=="GAM")
+          {
+            add.this=PREDS.test[1:p]
+            if(add.this[p]%in%Covariates) add.this[p]=paste("s(",add.this[p],",k=6)",sep='')
+            if(RESPNS=="LNcpue")Formula=formula(paste("LNcpue",paste(c(K,add.this),collapse="+"),sep="~"))
+            if(RESPNS=="catch.target")Formula=formula(paste(Response,paste(paste(c(K,add.this),collapse="+"),
+                                                                           paste("offset(","LN.effort)",sep=""),sep="+"),sep="~"))
+            mod[[p]]=gam(Formula,data=dat,family = Family,method="REML")
+          }
+        }
+        return(mod)
       }
+      efrt="km.gillnet.hours.c"
+      cl <- makeCluster(detectCores()-1)
+      registerDoParallel(cl)
+      system.time({Model.structure=foreach(s=Tar.sp,.packages=c('cede','dplyr','mgcv')) %dopar%
+        {
+          #need for only daily 
+          d=DATA.list.LIVEWT.c.daily[[s]]%>%filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]])
+          colnames(d)=tolower(colnames(d))
+          PREDS=Predictors_daily[which(Predictors_daily%in%names(d))]
+          d=d%>%filter(vessel%in%VES.used.daily[[s]] & blockx%in%BLKS.used.daily[[s]])
+          d=d %>% mutate(nlines.c=ifelse(nlines.c>2,'>2',nlines.c),
+                         mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
+          id.cov=which(PREDS%in%Covariates)
+          #binomial part
+          d.bi=d%>%mutate(catch.target=ifelse(catch.target>0,1,0))
+          d.bi=makecategorical(PREDS[which(PREDS%in%Categorical)],d.bi)
+          d.bi$LN.effort=log(d.bi[,match(efrt,names(d.bi))])
+          daily.mods.bi=fn.modl.sel.delta(K=cNSTNT.daily,RESPNS='catch.target',dat=d.bi,
+                                          Family="binomial",MOD.type="GAM")
+          #pos part
+          d=d%>%filter(catch.target>0)
+          d=makecategorical(PREDS[which(PREDS%in%Categorical)],d)
+          d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
+          daily.mods.pos=fn.modl.sel.delta(K=cNSTNT.daily,RESPNS='LNcpue',dat=d,
+                                           Family="gaussian",MOD.type="GAM")
+          
+          return(list(daily.mods.bi=daily.mods.bi,daily.mods.pos=daily.mods.pos))
+          
+        }
+      })
+      stopCluster(cl)
+      names(Model.structure)=names(SP.list)[Tar.sp]
       
-      #Daily pos
-      n=length(Model.structure[[i]]$daily.mods.pos)
-      Aic.daily.pos=rep(NA,n)
-      names(Aic.daily.pos)=names(Model.structure[[i]]$daily.mods.pos)
-      Res.DEv.daily.pos=Aic.daily.pos
-      for( l in 1:n)
+      #calculate AIC and deviance explained per term
+      Tab.monthly=vector('list',length(Tar.sp))
+      Tab.daily=Tab.monthly
+      for(i in 1:length(Tar.sp))
       {
-        Aic.daily.pos[l]=aicc(Model.structure[[i]]$daily.mods.pos[[l]])
-        Res.DEv.daily.pos[l]=Model.structure[[i]]$daily.mods.pos[[l]]$deviance
+        #Daily bi
+        n=length(Model.structure[[i]]$daily.mods.bi)
+        Aic.daily.bi=rep(NA,n)
+        names(Aic.daily.bi)=names(Model.structure[[i]]$daily.mods.bi)
+        Res.DEv.daily.bi=Aic.daily.bi
+        for( l in 1:n)
+        {
+          Aic.daily.bi[l]=aicc(Model.structure[[i]]$daily.mods.bi[[l]])
+          Res.DEv.daily.bi[l]=Model.structure[[i]]$daily.mods.bi[[l]]$deviance
+        }
+        
+        #Daily pos
+        n=length(Model.structure[[i]]$daily.mods.pos)
+        Aic.daily.pos=rep(NA,n)
+        names(Aic.daily.pos)=names(Model.structure[[i]]$daily.mods.pos)
+        Res.DEv.daily.pos=Aic.daily.pos
+        for( l in 1:n)
+        {
+          Aic.daily.pos[l]=aicc(Model.structure[[i]]$daily.mods.pos[[l]])
+          Res.DEv.daily.pos[l]=Model.structure[[i]]$daily.mods.pos[[l]]$deviance
+        }
+        PerExp.daily.bi=round(100*(1-Res.DEv.daily.bi[-1]/Res.DEv.daily.bi[i]),1)
+        PerExp.daily.pos=round(100*(1-Res.DEv.daily.pos[-1]/Res.DEv.daily.pos[i]),1)
+        Tab.daily[[i]]=cbind(data.frame(Species=names(Model.structure)[i],
+                                        Model=c('Daily_bi','Daily_pos')),
+                             rbind(PerExp.daily.bi,PerExp.daily.pos))
+        write.csv(Tab.daily[[i]],paste(hndl.modl.sel,"Dev.expl_",names(SP.list)[Tar.sp[i]],"_daily.csv",sep=""),row.names = F)
       }
-      PerExp.daily.bi=round(100*(1-Res.DEv.daily.bi[-1]/Res.DEv.daily.bi[i]),1)
-      PerExp.daily.pos=round(100*(1-Res.DEv.daily.pos[-1]/Res.DEv.daily.pos[i]),1)
-      Tab.daily[[i]]=cbind(data.frame(Species=names(Model.structure)[i],
-                                      Model=c('Daily_bi','Daily_pos')),
-                           rbind(PerExp.daily.bi,PerExp.daily.pos))
-      write.csv(Tab.daily[[i]],paste(hndl.modl.sel,"Dev.expl_",names(SP.list)[Tar.sp[i]],"_daily.csv",sep=""),row.names = F)
+    }
+    if(select.best.method=="glmmulti")
+    {
+      fitFun= function(formula, data,always="", ...) 
+      {
+        glm(as.formula(paste(deparse(formula), always)), data=data, ...)
+      }
+      efrt="km.gillnet.hours.c"
+      Inter="MainTerm"
+      system.time({
+        for(s in Tar.sp)
+        {
+          #monthly
+          PREDS=Predictors_monthly
+          d=Store_nom_cpues_monthly[[s]]$QL_dat%>%filter(vessel%in%VES.used[[s]] & blockx%in%BLKS.used[[s]])
+          d=makecategorical(PREDS[which(PREDS%in%Categorical)],d)
+          d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
+          id.cov=which(PREDS%in%Covariates)
+          d=mutate_at(d, setNames(c(PREDS[id.cov],efrt), paste0("LN", c(PREDS[id.cov],efrt),sep="")), log)
+          always=cNSTNT
+          Store.Best.Model[[s]]=fn.modl.sel(RESPNS="LNcpue")
+          best.fm=Store.Best.Model[[s]]$BEST    
+          best.fm=all.vars(best.fm)
+          best.fm=as.formula(paste(best.fm[1],'~',paste(c(always,best.fm[-1]),collapse='+')))
+          Best.Model[[s]]=best.fm
+          rm(d,id.cov,PREDS)
+          
+          #daily
+          d=Store_nom_cpues_daily[[s]]$QL_dat%>%filter(vessel%in%VES.used.daily[[s]] & blockx%in%BLKS.used.daily[[s]])
+          PREDS=Predictors_daily
+          d=d %>% mutate(mean.depth=10*round(mean.depth/10),
+                         nlines.c=ifelse(nlines.c>2,'>2',nlines.c),
+                         mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
+          d=makecategorical(PREDS[which(PREDS%in%Categorical)],d)
+          d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
+          id.cov=which(PREDS%in%Covariates)
+          d=mutate_at(d, setNames(c(PREDS[id.cov],efrt), paste0("LN", c(PREDS[id.cov],efrt),sep="")), log)
+          always=cNSTNT.daily
+          Store.Best.Model.daily[[s]]=fn.modl.sel(RESPNS="LNcpue")
+          best.fm=Store.Best.Model.daily[[s]]$BEST    
+          best.fm=all.vars(best.fm)
+          best.fm=as.formula(paste(best.fm[1],'~',paste(c(always,best.fm[-1]),collapse='+')))
+          Best.Model.daily[[s]]=best.fm
+          rm(d,id.cov,PREDS)
+        }
+        
+        #4.22.3.3. show selection outcomes
+        hndl.modl.sel="C:/Matias/Analyses/Catch and effort/Outputs/Model Selection/"
+        for(s in Tar.sp)
+        {
+          pdf(paste(hndl.modl.sel,names(SP.list)[s],"_monthly.pdf",sep=""))
+          fn.show.mod.sel(MODS=Store.Best.Model[[s]]$res,outs=length(Store.Best.Model[[s]]$res@objects))
+          dev.off()
+          
+          pdf(paste(hndl.modl.sel,names(SP.list)[s],"_daily.pdf",sep=""))
+          fn.show.mod.sel(MODS=Store.Best.Model.daily[[s]]$res,outs=length(Store.Best.Model.daily[[s]]$res@objects))
+          dev.off()
+        }})
+      
     }
   }
-  if(select.best.method=="glmmulti")
-  {
-    fitFun= function(formula, data,always="", ...) 
-  {
-    glm(as.formula(paste(deparse(formula), always)), data=data, ...)
-  }
-  efrt="km.gillnet.hours.c"
-  Inter="MainTerm"
-  system.time({
-  for(s in Tar.sp)
-  {
-      #monthly
-    PREDS=Predictors_monthly
-    d=Store_nom_cpues_monthly[[s]]$QL_dat%>%filter(vessel%in%VES.used[[s]] & blockx%in%BLKS.used[[s]])
-    d=makecategorical(PREDS[which(PREDS%in%Categorical)],d)
-    d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
-    id.cov=which(PREDS%in%Covariates)
-    d=mutate_at(d, setNames(c(PREDS[id.cov],efrt), paste0("LN", c(PREDS[id.cov],efrt),sep="")), log)
-    always=cNSTNT
-    Store.Best.Model[[s]]=fn.modl.sel(RESPNS="LNcpue")
-    best.fm=Store.Best.Model[[s]]$BEST    
-    best.fm=all.vars(best.fm)
-    best.fm=as.formula(paste(best.fm[1],'~',paste(c(always,best.fm[-1]),collapse='+')))
-    Best.Model[[s]]=best.fm
-    rm(d,id.cov,PREDS)
-    
-      #daily
-    d=Store_nom_cpues_daily[[s]]$QL_dat%>%filter(vessel%in%VES.used.daily[[s]] & blockx%in%BLKS.used.daily[[s]])
-    PREDS=Predictors_daily
-    d=d %>% mutate(mean.depth=10*round(mean.depth/10),
-                   nlines.c=ifelse(nlines.c>2,'>2',nlines.c),
-                   mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
-     d=makecategorical(PREDS[which(PREDS%in%Categorical)],d)
-    d$LNcpue=log(d[,match(Response,names(d))]/d[,match(efrt,names(d))])
-    id.cov=which(PREDS%in%Covariates)
-    d=mutate_at(d, setNames(c(PREDS[id.cov],efrt), paste0("LN", c(PREDS[id.cov],efrt),sep="")), log)
-    always=cNSTNT.daily
-    Store.Best.Model.daily[[s]]=fn.modl.sel(RESPNS="LNcpue")
-    best.fm=Store.Best.Model.daily[[s]]$BEST    
-    best.fm=all.vars(best.fm)
-    best.fm=as.formula(paste(best.fm[1],'~',paste(c(always,best.fm[-1]),collapse='+')))
-    Best.Model.daily[[s]]=best.fm
-    rm(d,id.cov,PREDS)
-}
   
-  #4.22.3.3. show selection outcomes
-  hndl.modl.sel="C:/Matias/Analyses/Catch and effort/Outputs/Model Selection/"
-  for(s in Tar.sp)
-  {
-    pdf(paste(hndl.modl.sel,names(SP.list)[s],"_monthly.pdf",sep=""))
-    fn.show.mod.sel(MODS=Store.Best.Model[[s]]$res,outs=length(Store.Best.Model[[s]]$res@objects))
-    dev.off()
-    
-    pdf(paste(hndl.modl.sel,names(SP.list)[s],"_daily.pdf",sep=""))
-    fn.show.mod.sel(MODS=Store.Best.Model.daily[[s]]$res,outs=length(Store.Best.Model.daily[[s]]$res@objects))
-    dev.off()
-  }})
-  
-  }
+
 }   
 if(Def.mod.Str=="NO")
 {
