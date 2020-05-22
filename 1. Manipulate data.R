@@ -206,7 +206,7 @@ if(!is.na(match("financial year",names(TEPS.current))))
 #Other.fishery.catch=read.csv(paste(Current.yr.dat,"/otherSH.csv",sep=""),stringsAsFactors=F)      
 
 #Catch price
-PRICES=read.csv(paste(Current.yr.dat,"/PriceComparison.csv",sep=""),stringsAsFactors=F)  #update 2016-17
+PRICES=read.csv(paste(Current.yr.dat,"/PriceComparison.csv",sep=""),stringsAsFactors=F)  
 
 
 
