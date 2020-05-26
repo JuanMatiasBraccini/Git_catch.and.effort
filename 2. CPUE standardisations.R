@@ -289,6 +289,9 @@ use.blok.area='NO'
 #Criteria for keeping species for analysis
 N.keep=5      #in years
 Min.kg=100   #in kg
+Min.annual.prop.zero=0.1  #minimum annual proportion of zero records to be meaningful
+core.per=90
+
 
 #Maximum possible effort
 Net.max=8500    #Rory pers comm
@@ -586,30 +589,103 @@ nms=SpiSis$RSCommonName
 SpiSis=SpiSis$SPECIES
 names(SpiSis)=nms
 SpiSis=SpiSis[-match(c(22999),SpiSis)]
+
+#Get proportion of 0 catch by year
+Prop.ktch=vector('list',length(SpiSis))
+names(Prop.ktch)=SpiSis
+Prop.ktch.daily=Prop.ktch
+
+d=Data.monthly.GN%>%
+  dplyr::select(Same.return,FINYEAR,BLOCKX,SPECIES,LIVEWT.c)%>%
+  group_by(Same.return,FINYEAR,BLOCKX,SPECIES)%>%
+  summarise(LIVEWT.c=sum(LIVEWT.c))%>%
+  spread(SPECIES,LIVEWT.c,fill=0)
+
+d.daily=Data.daily.GN%>%
+  dplyr::select(Same.return.SNo,FINYEAR,BLOCKX,SPECIES,LIVEWT.c)%>%
+  group_by(Same.return.SNo,FINYEAR,BLOCKX,SPECIES)%>%
+  summarise(LIVEWT.c=sum(LIVEWT.c))%>%
+  spread(SPECIES,LIVEWT.c,fill=0)
+
+for(s in 1:length(SpiSis))
+{
+  if(SpiSis[s]%in%colnames(d))
+  {
+    Bi=d[,c("Same.return","FINYEAR","BLOCKX",SpiSis[s])]%>%
+      rename(Catch.Target=!!as.symbol(SpiSis[s]))
+    Ag.blk=Bi%>%
+            group_by(BLOCKX)%>%
+            summarise(tot=sum(Catch.Target))%>%
+            arrange(-tot)%>%
+            mutate(cumsum=cumsum(tot),
+                   percentile=cumsum/sum(tot))%>%
+            filter(percentile<=core.per/100)%>%
+            pull(BLOCKX)
+    Bi=Bi%>%filter(BLOCKX%in%Ag.blk)%>%
+      mutate(catch.pos=as.numeric(Catch.Target>0))
+    TAB=table(Bi$catch.pos,Bi$FINYEAR)
+    Prop.ktch[[s]]=round(TAB[2,]/colSums(TAB),2)
+  }
+
+  if(SpiSis[s]%in%colnames(d.daily))
+  {
+      Bi=d.daily[,c("Same.return.SNo","FINYEAR","BLOCKX",SpiSis[s])]%>%
+        rename(Catch.Target=!!as.symbol(SpiSis[s]))
+      Ag.blk=Bi%>%
+        group_by(BLOCKX)%>%
+        summarise(tot=sum(Catch.Target))%>%
+        arrange(-tot)%>%
+        mutate(cumsum=cumsum(tot),
+               percentile=cumsum/sum(tot))%>%
+        filter(percentile<=core.per/100)%>%
+        pull(BLOCKX)
+      Bi=Bi%>%filter(BLOCKX%in%Ag.blk)%>%
+        mutate(catch.pos=as.numeric(Catch.Target>0))
+      TAB=table(Bi$catch.pos,Bi$FINYEAR)
+      Prop.ktch.daily[[s]]=round(TAB[2,]/colSums(TAB),2)
+    }
+}
+rm(d,d.daily)
+
+Prop.ktch=do.call(rbind,Prop.ktch)
+Prop.ktch.daily=do.call(rbind,Prop.ktch.daily)
+
+write.csv(Prop.ktch,"C:/Matias/Analyses/Catch and effort/Outputs/Paper/Prop.records.with.catch.by.year.csv")
+write.csv(Prop.ktch.daily,"C:/Matias/Analyses/Catch and effort/Outputs/Paper/Prop.records.with.catch.daily.by.year.csv")
+
+#keep species with at least 10 of years with Min.annual.prop.zero
+Prop.ktch[Prop.ktch>=Min.annual.prop.zero]=1
+Prop.ktch[Prop.ktch<Min.annual.prop.zero]=0
+
+Prop.ktch.daily[Prop.ktch.daily>=Min.annual.prop.zero]=1
+Prop.ktch.daily[Prop.ktch.daily<Min.annual.prop.zero]=0
+
+First.year.catch=apply(Prop.ktch,1, function(x) head(x[x!=0],1))
+First.year.catch.daily=apply(Prop.ktch.daily,1, function(x) head(x[x!=0],1))
+
+Annual.year.sp=names(which(rowSums(Prop.ktch)>10))
+Annual.year.sp.daily=names(which(rowSums(Prop.ktch.daily)>10))
+
+SpiSis=subset(SpiSis,SpiSis%in%unique(c(Annual.year.sp,Annual.year.sp.daily)))
+
 SP.list=as.list(SpiSis)
 
 #remove these species; not enough positive record data to estimate glm coefficients    
-SP.list=SP.list[-match(c("Thresher Shark",
-                         "Angel Shark","Sevengill Sharks","School Shark",
-                         "Gulper sharks, Sleeper Sharks & Dogfishes"),names(SP.list))]
+SP.list=SP.list[-match(c("School Shark"),names(SP.list))]
 
-#remove wobbies as too many different species mixed up
-SP.list=SP.list[-match(c("Wobbegong"),names(SP.list))]
+#remove these as too many different species mixed up
+SP.list=SP.list[-match(c("Wobbegong","Hammerhead Sharks"),names(SP.list))]
 
-#remove "Blacktip Shark" because only a few years of daily data available and could be spinner
-SP.list=SP.list[-match(c("Blacktip Shark"),names(SP.list))]
 
-#remove "SawShark"  as it could be different species and only very few records
-SP.list=SP.list[-match("SawShark",names(SP.list))]  
+First.year.catch=First.year.catch[match(unlist(SP.list),names(First.year.catch))]
+First.year.catch.daily=First.year.catch.daily[match(unlist(SP.list),names(First.year.catch.daily))]
 
-#remove "Hammerhead Sharks" because it can be a mixed of species
-SP.list=SP.list[-match("Hammerhead Sharks",names(SP.list))] 
 
 nnn=1:length(SP.list)
 
 #get Effective area (90% of catch) and raster
 fn.scale=function(x,scaler) ((x/max(x,na.rm=T))^0.5)*scaler
-core.per=90
+
 Core=SP.list
 pdf('C:/Matias/Analyses/Catch and effort/species core areas/cores.pdf')
 for(s in nnn)
@@ -940,8 +1016,8 @@ system.time({Species.list=foreach(s=nnn,.packages=c('dplyr','doParallel')) %dopa
 })
 names(Species.list)=names(SP.list) 
 
-Species.list["Tiger Shark"] <- list(NULL)   #only 2 vessels meet criteria  
-Species.list["Shortfin Mako"] <- list(NULL) 
+Species.list["Tiger Shark"] <- list(NULL)    #only 2 vessels meet criteria   
+
 
   #Daily 
 #note: select species range and add effort by date or ID (==Same.return.SNo). Note that for catch aggregating by date
@@ -1802,7 +1878,7 @@ San.Yrs=fn.sel.yrs.used(DD,ThrShld.n.vess=5)
 rm(DD)
 DATA.list.LIVEWT.c$"Sandbar Shark"=subset(DATA.list.LIVEWT.c$"Sandbar Shark",FINYEAR%in%San.Yrs)
 
-
+#fix some species names
 Nms.sp=capitalize(tolower(names(SP.list)))  
 Nms.sp[match(c("Smooth hammerhead shark","Dusky whaler"),Nms.sp)]=c("Smooth hammerhead","Dusky shark")
 
@@ -3919,8 +3995,7 @@ if(Def.mod.Str=="NO")
   {
       #Monthly
     for(s in nnn) Best.Model[[s]]=formula(cpue~finyear + blockx + s(vessel,bs='re') + s(month,k=12,bs='cc'))
-    Best.Model['Tiger Shark']=Best.Model['Shortfin Mako']=
-    Best.Model['Common Sawshark']=Best.Model['Bronze Whaler']=list(NULL)
+    Best.Model['Tiger Shark']=Best.Model['Bronze Whaler']=list(NULL)
     
       #Daily
     Best.Model.daily$`Sandbar Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
@@ -3934,10 +4009,13 @@ if(Def.mod.Str=="NO")
     
     Best.Model.daily$`Smooth Hammerhead Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
                                                          s(long10.corner,lat10.corner)+s(mean.depth))
-    Best.Model.daily$`Shortfin Mako`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                               s(long10.corner,lat10.corner))
-    Best.Model.daily$`Pencil Shark`=Best.Model.daily$`Tiger Shark`=Best.Model.daily$`Spinner Shark`=
-    Best.Model.daily$`Common Sawshark`=Best.Model.daily$`Bronze Whaler`=Best.Model.daily$`Smooth Hammerhead Shark`
+    Best.Model.daily$`Tiger Shark`=Best.Model.daily$`Spinner Shark`=
+    Best.Model.daily$`Bronze Whaler`=Best.Model.daily$`Smooth Hammerhead Shark`
+    
+    # Best.Model.daily$`Shortfin Mako`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
+    #                                            s(long10.corner,lat10.corner))
+    # Best.Model.daily$`Pencil Shark`=Best.Model.daily$`Tiger Shark`=Best.Model.daily$`Spinner Shark`=
+    # Best.Model.daily$`Common Sawshark`=Best.Model.daily$`Bronze Whaler`=Best.Model.daily$`Smooth Hammerhead Shark`
   }
   
   if(Use.Delta)
@@ -4718,7 +4796,12 @@ if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
     {
       if(!is.null(BLKS.used[[s]]))
       {
-        d=DATA.list.LIVEWT.c[[s]]%>%filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]])
+        iid=match(SpiSis[match(names(DATA.list.LIVEWT.c)[s],names(SpiSis))],names(First.year.catch))
+        Firs.yr.ktch=names(First.year.catch[[iid]])
+        theseyears=sort(unique(DATA.list.LIVEWT.c[[s]]$FINYEAR))
+        theseyears=theseyears[match(Firs.yr.ktch,theseyears):length(theseyears)]
+        
+        d=DATA.list.LIVEWT.c[[s]]%>%filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]] & FINYEAR%in%theseyears )
         if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
         Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
         Continuous=Covariates.monthly
@@ -4745,8 +4828,14 @@ if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
     {
       if(!is.null(BLKS.used.daily[[s]]))
       {
+        iid=match(SpiSis[match(names(DATA.list.LIVEWT.c.daily)[s],names(SpiSis))],names(First.year.catch.daily))
+        Firs.yr.ktch=names(First.year.catch.daily[[iid]])
+        theseyears=sort(unique(DATA.list.LIVEWT.c.daily[[s]]$FINYEAR))
+        theseyears=theseyears[match(Firs.yr.ktch,theseyears):length(theseyears)]
+        
+        
         d=DATA.list.LIVEWT.c.daily[[s]]%>%
-            filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]])
+            filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]] & FINYEAR%in%theseyears)
         Terms=Predictors_daily
         Continuous=Covariates.daily
         colnames(d)=tolower(colnames(d))
@@ -6465,15 +6554,15 @@ if(Use.Tweedie)
       if(!is.null(cpuedata[[l]]))aaa=cpuedata[[l]]%>%mutate(finyear=as.numeric(substr(finyear,1,4)))
       if(!is.null(cpuedata.daily[[l]]))aaa.daily=cpuedata.daily[[l]]%>%mutate(finyear=as.numeric(substr(finyear,1,4)))
       
-      msn=Yrs[which(!Yrs%in%c(aaa$finyear,aaa.daily$finyear))]
-      if(length(msn)>0)
-      {
-        ad=aaa[length(msn),]
-        ad[,]=NA
-        ad$finyear=msn
-        aaa=rbind(aaa,ad)
-        aaa=aaa[order(aaa$finyear),]
-      }
+      # msn=Yrs[which(!Yrs%in%c(aaa$finyear,aaa.daily$finyear))]
+      # if(length(msn)>0)
+      # {
+      #   ad=aaa[length(msn),]
+      #   ad[,]=NA
+      #   ad$finyear=msn
+      #   aaa=rbind(aaa,ad)
+      #   aaa=aaa[order(aaa$finyear),]
+      # }
       if(!is.null(cpuedata[[l]]))with(aaa,
            {
              if(add.lines=="NO") points(finyear+tc[l], response, pch=19, lty=2, col=CL[l],cex=CxS)
@@ -6667,50 +6756,54 @@ if(Use.Tweedie)
 
 
 #Get glm predictions for daily and compare to gam
-if(Model.run=="First")
+if(Use.Delta)
 {
-  system.time({Pred.daily.tar.glm=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm')) %do%
-    {
-      return(fn.MC.delta.cpue(BiMOD=Stand.out.daily[[s]]$Bi$res,
-                              MOD=Stand.out.daily[[s]]$Pos$res,
-                              BiData=Stand.out.daily[[s]]$Bi$DATA%>%mutate(LNeffort=LN.effort),
-                              PosData=Stand.out.daily[[s]]$Pos$DATA,
-                              niter=Niter,
-                              pred.term='finyear',
-                              ALL.terms=c(Predictors_daily)))
-    }
-  })
-  names(Pred.daily.tar.glm)=names(SP.list)[Tar.sp]
-  stopCluster(cl)
-  
-  #relative glm and gam standardised
-  fn.fig("Figure.Annual_Index_glm_gam.stand",1200, 2400)    
-  par(mfrow=c(4,1),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
-  for(s in 1:length(Tar.sp))
+  if(Model.run=="First")
   {
-    #Daily
-    GAM=Pred.daily[[Tar.sp[s]]]
-    Mn=mean(GAM$response)
-    GAM=GAM%>%mutate(response=response/Mn,
-                     lower.CL=lower.CL/Mn,
-                     upper.CL=upper.CL/Mn)
-    GLM=Pred.daily.tar.glm[[s]]
-    Mn=mean(GLM$response)
-    GLM=GLM%>%mutate(response=response/Mn,
-                     lower.CL=lower.CL/Mn,
-                     upper.CL=upper.CL/Mn)
-    Mon.dat=list(GAM=GAM,GLM=GLM)
-    LgND="NO"
-    if(s==1) LgND="YES"
-    Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
-    if(s==1) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
-    mtext(Nms.sp[Tar.sp[s]],4,line=1,las=3,cex=1.5)
+    system.time({Pred.daily.tar.glm=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm')) %do%
+      {
+        return(fn.MC.delta.cpue(BiMOD=Stand.out.daily[[s]]$Bi$res,
+                                MOD=Stand.out.daily[[s]]$Pos$res,
+                                BiData=Stand.out.daily[[s]]$Bi$DATA%>%mutate(LNeffort=LN.effort),
+                                PosData=Stand.out.daily[[s]]$Pos$DATA,
+                                niter=Niter,
+                                pred.term='finyear',
+                                ALL.terms=c(Predictors_daily)))
+      }
+    })
+    names(Pred.daily.tar.glm)=names(SP.list)[Tar.sp]
+    stopCluster(cl)
+    
+    #relative glm and gam standardised
+    fn.fig("Figure.Annual_Index_glm_gam.stand",1200, 2400)    
+    par(mfrow=c(4,1),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
+    for(s in 1:length(Tar.sp))
+    {
+      #Daily
+      GAM=Pred.daily[[Tar.sp[s]]]
+      Mn=mean(GAM$response)
+      GAM=GAM%>%mutate(response=response/Mn,
+                       lower.CL=lower.CL/Mn,
+                       upper.CL=upper.CL/Mn)
+      GLM=Pred.daily.tar.glm[[s]]
+      Mn=mean(GLM$response)
+      GLM=GLM%>%mutate(response=response/Mn,
+                       lower.CL=lower.CL/Mn,
+                       upper.CL=upper.CL/Mn)
+      Mon.dat=list(GAM=GAM,GLM=GLM)
+      LgND="NO"
+      if(s==1) LgND="YES"
+      Plot.cpue(cpuedata=Mon.dat,ADD.LGND=LgND,whereLGND='topright',COL="grey",CxS=1.35,Yvar="finyear",add.lines="YES")
+      if(s==1) mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
+      mtext(Nms.sp[Tar.sp[s]],4,line=1,las=3,cex=1.5)
+    }
+    mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+    mtext("Relative CPUE",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
+    dev.off()
+    
   }
-  mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-  mtext("Relative CPUE",side=2,line=1.15,font=1,las=0,cex=1.5,outer=T)
-  dev.off()
-  
 }
+
 
 
 #Plot Other species normalised
@@ -7740,8 +7833,9 @@ if(do.influence=="YES")
 
 
 #   4.22.11 Construct spatial standardised catch rates    
-system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))  
-{
+if(Use.Delta)  
+{ system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))  
+    {
   if(Use.Qualif.level)
   {
     #Monthly
@@ -7833,8 +7927,7 @@ system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))
     Pred.daily.zone.nrmlzd[[s]]=pred.temp.nrm
     
   }
-  if(Use.Delta)  
-  {
+
     cl <- makeCluster(detectCores()-1)
     registerDoParallel(cl)
     #monthly
@@ -7968,9 +8061,9 @@ system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))
     })   
     names(Zone_preds.daily)=names(SP.list)[Tar.sp]
     stopCluster(cl)
-  }
-}})
 
+}})
+  }
 if(Use.Tweedie)  
 {
   cl <- makeCluster(detectCores()-1)
@@ -8111,6 +8204,414 @@ if(Use.Tweedie)
 
 }
 
+#   4.22.12 Explore smooth hammerhead
+Explore.smooth.HH=FALSE
+if(Explore.smooth.HH)
+{
+  s=match("Smooth Hammerhead Shark",names(DATA.list.LIVEWT.c.daily)) 
+  fn.bubl=function(Tab1)
+  {
+    N=nrow(Tab1)
+    plot(1:nrow(Tab1),1:nrow(Tab1),col="transparent",xlim=c(1,ncol(Tab1)),yaxt='n',xaxt='n',xlab='',ylab='')
+    for(n in 1:ncol(Tab1)) points(rep(n,N),1:N,cex=fn.scale (Tab1[,n],3),pch=19,col="steelblue")
+    axis(1,1:ncol(Tab1),colnames(Tab1),las=3)
+    axis(2,1:nrow(Tab1),rownames(Tab1),las=1)
+  }
+  d=DATA.list.LIVEWT.c.daily[[s]]%>%
+    filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]])
+  colnames(d)=tolower(colnames(d))
+  
+  
+  hndl.ZmuHH='C:/Matias/Analyses/Catch and effort/Outputs/Paper/smooth HH_explore/'
+  
+  fn.fig(paste(hndl.ZmuHH,"annual records distribution_vessel"),2000, 2400)   
+  fn.bubl(Tab1=table(d$vessel,d$finyear))
+  dev.off()
+  
+  fn.fig(paste(hndl.ZmuHH,"annual records distribution_month"),2000, 2400)
+  fn.bubl(Tab1=table(d$month,d$finyear))
+  dev.off()
+  
+  fn.fig(paste(hndl.ZmuHH,"annual records distribution_block10"),2000, 2400)
+  fn.bubl(Tab1=table(d$block10,d$finyear))
+  dev.off()
+  
+  Terms=Predictors_daily
+  Continuous=Covariates.daily
+  
+  Terms=tolower(Terms)
+  Continuous=tolower(Continuous)
+  Factors=Terms[!Terms%in%Continuous]
+  Terms=all.vars(Best.Model.daily[[s]])[-1]
+  d <- d%>%
+    dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+    mutate(cpue=catch.target/km.gillnet.hours.c)
+  d <- makecategorical(Factors[Factors%in%Terms],d)
+  
+  #1. Fit model
+  mod<-bam(Best.Model.daily[[s]],data=d,family='tw',method="fREML",discrete=TRUE) 
+  
+  #2.Make predictions
+  lsmeas=pred.fun(mod=mod,biascor="NO",PRED="finyear")
+  
+  
+  #nominal
+  out.mean = d %>%
+    group_by(finyear) %>%
+    summarise(mean = mean(cpue),
+              n = length(cpue),
+              sd = sd(cpue)) %>%
+    mutate(lowCL = mean - 1.96*sd/sqrt(n),
+           uppCL = mean + 1.96*sd/sqrt(n)) %>%
+    data.frame
+  
+  out.delta.log = d %>%
+    mutate(cpue.target=cpue)%>%
+    group_by(finyear) %>%
+    summarise(n = length(cpue.target),
+              m = length(cpue.target[cpue.target>0]),
+              mean.lognz = mean(log(cpue.target[cpue.target>0])),
+              sd.lognz = sd(log(cpue.target[cpue.target>0]))) %>%
+    mutate(p.nz = m/n,
+           theta = log(p.nz)+mean.lognz+sd.lognz^2/2,
+           c = (1-p.nz)^(n-1),
+           d = 1+(n-1)*p.nz,
+           vartheta = ((d-c)*(1-c*d)-m*(1-c)^2)/(m*(1-c*d)^2)+
+             sd.lognz^2/m+sd.lognz^4/(2*(m+1)),
+           mean = exp(theta),
+           lowCL = exp(theta - 1.96*sqrt(vartheta)),
+           uppCL = exp(theta + 1.96*sqrt(vartheta))) %>%
+    as.data.frame
+  
+
+  NRMLIZD="YES"
+  Y=as.numeric(substr(lsmeas$finyear,1,4))  
+  fn.fig(paste(hndl.ZmuHH,"index"),2000, 2400)
+  with(lsmeas,
+       {
+         if(NRMLIZD=="NO")Mn=1
+         if(NRMLIZD=="YES")Mn=mean(response)
+         if(NRMLIZD=="NO")
+         {
+           YMAX=max(response+1.96*SE/Mn)
+           YMIN=min(response-1.96*SE/Mn)
+         }
+         
+         if(NRMLIZD=="YES")
+         {
+           YMAX=2
+           YMIN=0
+         }
+         
+         plot(Y-.1,response/Mn,col="orange",pch=19,cex=1.5,lwd=1.5,type='o',main=Nms.sp[s],xlab='financial year',
+              ylab='relative cpue',ylim=c(YMIN,YMAX))
+         segments(Y-.1,(response+1.96*SE)/Mn,
+                  Y-.1,(response-1.96*SE)/Mn,col="orange")
+       })
+  with(out.mean,
+       {
+         if(NRMLIZD=="NO")Mn=1
+         if(NRMLIZD=="YES")Mn=mean(mean)
+         points(Y,mean/Mn,col="grey60",pch=19,type='o')
+         segments(Y,(lowCL)/Mn,
+                  Y,(uppCL)/Mn,col="grey60")
+       })
+  with(out.delta.log,
+       {
+         if(NRMLIZD=="NO")Mn=1
+         if(NRMLIZD=="YES")Mn=mean(mean)
+         points(Y+.15,mean/Mn,col="grey80",pch=19,type='o')
+         segments(Y+.15,(lowCL)/Mn,
+                  Y+.15,(uppCL)/Mn,col="grey80")
+       })
+  legend('topright',c("lsmeans","nominal.mean","nominal.delta.log"),
+         lty=1,col=c('orange',"grey50","grey80"),bty='n')
+  points(2015,1,pch="*",col=2,cex=3)
+  text(2015,1,"CITES listing",col=2,srt=45,pos=4)
+  dev.off()
+  
+  library(RColorBrewer)
+  
+  #Explore cpue by vessel
+  d=DATA.list.LIVEWT.c.daily[[s]]%>%
+    filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]])
+  colnames(d)=tolower(colnames(d))
+  Uni.ves=unique(d$vessel)
+  
+  ves.cpue=vector('list',length(Uni.ves))
+  names(ves.cpue)=Uni.ves
+  for(v in 1:length(Uni.ves))
+  {
+    ves.cpue[[v]] = d %>%
+      filter(vessel==Uni.ves[v])%>%
+      mutate(cpue.target=catch.target/km.gillnet.hours.c)%>%
+      group_by(finyear) %>%
+      summarise(n = length(cpue.target),
+                m = length(cpue.target[cpue.target>0]),
+                mean.lognz = mean(log(cpue.target[cpue.target>0])),
+                sd.lognz = sd(log(cpue.target[cpue.target>0]))) %>%
+      mutate(p.nz = m/n,
+             theta = log(p.nz)+mean.lognz+sd.lognz^2/2,
+             c = (1-p.nz)^(n-1),
+             d = 1+(n-1)*p.nz,
+             vartheta = ((d-c)*(1-c*d)-m*(1-c)^2)/(m*(1-c*d)^2)+
+               sd.lognz^2/m+sd.lognz^4/(2*(m+1)),
+             mean = exp(theta),
+             lowCL = exp(theta - 1.96*sqrt(vartheta)),
+             uppCL = exp(theta + 1.96*sqrt(vartheta))) %>%
+      as.data.frame%>%
+      dplyr::select(finyear,mean,lowCL,uppCL)
+    
+  }
+  
+  n <- length(Uni.ves)
+  qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+  CL = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+  NRMLIZD="YES"
+  Y=sort(as.numeric(substr(unique(d$finyear),1,4)))  
+  
+  fn.fig(paste(hndl.ZmuHH,"cpue by vessel"),2000, 2400)   
+  plot(Y,Y,ylim=c(0,3),ylab="CPUE",xlab="Financial year",col="transparent")
+  for(v in 1:length(Uni.ves))with(ves.cpue[[v]],
+                                  {
+                                    yy=sort(as.numeric(substr(ves.cpue[[v]]$finyear,1,4)))
+                                    if(NRMLIZD=="NO")Mn=1
+                                    if(NRMLIZD=="YES")Mn=mean(mean)
+                                    points(yy+.15,mean/Mn,col=CL[v],pch=19,type='o',cex=1.25)
+                                    #segments(yy+.15,(lowCL)/Mn,
+                                    #          yy+.15,(uppCL)/Mn,col=CL[v])
+                                  })
+  legend("topleft",Uni.ves,fill=CL,cex=.95,bty='n',ncol=4)
+  dev.off()
+  
+  fn.fig(paste(hndl.ZmuHH,"prop records reporting smoothHH by vessel"),2000, 2400)   
+  d2=d%>%mutate(catch.target=ifelse(catch.target>0,1,0))%>%select(vessel,finyear,catch.target)
+  Yrs=as.numeric(substr(sort(unique(d2$finyear)),1,4))
+  d2=tbl_df(d2)%>%
+    group_by(vessel, finyear) %>%
+    summarise (n = n(),
+               count=sum(catch.target)) %>%
+    mutate(prop = count / n)%>%
+    select(-c( n,count))%>%
+    spread(finyear,prop,fill=0)%>%
+    data.frame
+  Tab1=as.matrix(d2[,-1])
+  colnames(Tab1)=Yrs
+  rownames(Tab1)=d2$vessel
+  
+  N=nrow(Tab1)
+  plot(1:nrow(Tab1),1:nrow(Tab1),col="transparent",xlim=c(1,ncol(Tab1)),yaxt='n',xaxt='n',xlab='',ylab='')
+  for(n in 1:ncol(Tab1)) points(rep(n,N),1:N,cex=Tab1[,n]*4,pch=19,col="steelblue")
+  axis(1,1:ncol(Tab1),colnames(Tab1),las=3)
+  axis(2,1:nrow(Tab1),rownames(Tab1),las=1)
+  dev.off()
+  
+  
+  #Refit model without dodgy vessels
+  Dodgy=c("E 035")
+  Uni.ves=Uni.ves[!Uni.ves%in%Dodgy]
+  
+  d1 <- d%>%
+    filter(vessel%in%Uni.ves)%>%
+    dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+    mutate(cpue=catch.target/km.gillnet.hours.c)
+  d1 <- makecategorical(Factors[Factors%in%Terms],d1)
+  
+  #1. Fit model
+  
+  mod<-bam(cpue ~ finyear + s(vessel, bs = "re") +s(month, k = 12, 
+                                                    bs = "cc") + s(long10.corner, lat10.corner) + s(mean.depth) ,data=d1,family='tw',method="fREML",discrete=TRUE) 
+  
+  #2.Make predictions
+  lsmeas=pred.fun(mod=mod,biascor="NO",PRED="finyear")
+  
+  
+  #nominal
+  out.mean = d1 %>%
+    group_by(finyear) %>%
+    summarise(mean = mean(cpue),
+              n = length(cpue),
+              sd = sd(cpue)) %>%
+    mutate(lowCL = mean - 1.96*sd/sqrt(n),
+           uppCL = mean + 1.96*sd/sqrt(n)) %>%
+    data.frame
+  
+  out.delta.log = d1 %>%
+    mutate(cpue.target=cpue)%>%
+    group_by(finyear) %>%
+    summarise(n = length(cpue.target),
+              m = length(cpue.target[cpue.target>0]),
+              mean.lognz = mean(log(cpue.target[cpue.target>0])),
+              sd.lognz = sd(log(cpue.target[cpue.target>0]))) %>%
+    mutate(p.nz = m/n,
+           theta = log(p.nz)+mean.lognz+sd.lognz^2/2,
+           c = (1-p.nz)^(n-1),
+           d = 1+(n-1)*p.nz,
+           vartheta = ((d-c)*(1-c*d)-m*(1-c)^2)/(m*(1-c*d)^2)+
+             sd.lognz^2/m+sd.lognz^4/(2*(m+1)),
+           mean = exp(theta),
+           lowCL = exp(theta - 1.96*sqrt(vartheta)),
+           uppCL = exp(theta + 1.96*sqrt(vartheta))) %>%
+    as.data.frame
+  
+  
+  NRMLIZD="YES"
+  Y=as.numeric(substr(lsmeas$finyear,1,4))  
+  fn.fig(paste(hndl.ZmuHH,"index_without_E035"),2000, 2400)
+  with(lsmeas,
+       {
+         if(NRMLIZD=="NO")Mn=1
+         if(NRMLIZD=="YES")Mn=mean(response)
+         if(NRMLIZD=="NO")
+         {
+           YMAX=max(response+1.96*SE/Mn)
+           YMIN=min(response-1.96*SE/Mn)
+         }
+         
+         if(NRMLIZD=="YES")
+         {
+           YMAX=2
+           YMIN=0
+         }
+         
+         plot(Y-.1,response/Mn,col="orange",pch=19,cex=1.5,lwd=1.5,type='o',main=Nms.sp[s],xlab='financial year',
+              ylab='relative cpue',ylim=c(YMIN,YMAX))
+         segments(Y-.1,(response+1.96*SE)/Mn,
+                  Y-.1,(response-1.96*SE)/Mn,col="orange")
+       })
+  with(out.mean,
+       {
+         if(NRMLIZD=="NO")Mn=1
+         if(NRMLIZD=="YES")Mn=mean(mean)
+         points(Y,mean/Mn,col="grey60",pch=19,type='o')
+         segments(Y,(lowCL)/Mn,
+                  Y,(uppCL)/Mn,col="grey60")
+       })
+  with(out.delta.log,
+       {
+         if(NRMLIZD=="NO")Mn=1
+         if(NRMLIZD=="YES")Mn=mean(mean)
+         points(Y+.15,mean/Mn,col="grey80",pch=19,type='o')
+         segments(Y+.15,(lowCL)/Mn,
+                  Y+.15,(uppCL)/Mn,col="grey80")
+       })
+  legend('topright',c("lsmeans","nominal.mean","nominal.delta.log"),
+         lty=1,col=c('orange',"grey50","grey80"),bty='n')
+  points(2015,1,pch="*",col=2,cex=3)
+  text(2015,1,"CITES listing",col=2,srt=45,pos=4)
+  dev.off()
+  
+  
+}
+
+#   4.22.13 Explore why dusky and sandbar daily so uncertain
+Explore.why.dusky.sandbar.uncertain=FALSE
+if(Explore.why.dusky.sandbar.uncertain)
+{
+  #s=5
+  s=6
+  
+  d=DATA.list.LIVEWT.c.daily[[s]]%>%
+    filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]] & FINYEAR%in%theseyears)
+  Terms=Predictors_daily
+  Continuous=Covariates.daily
+  colnames(d)=tolower(colnames(d))
+  Terms=tolower(Terms)
+  Continuous=tolower(Continuous)
+  Factors=Terms[!Terms%in%Continuous]
+  Terms=all.vars(Best.Model.daily[[s]])[-1]
+  d <- d%>%
+    dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+    mutate(cpue=catch.target/km.gillnet.hours.c)
+  d <- makecategorical(Factors[Factors%in%Terms],d)
+  
+  
+  #Best.Model.daily[[s]]
+  What="finyear+ vessel + month + depth + lat long"
+  mod<-bam(cpue ~ finyear+ s(vessel, bs = "re")+ 
+             s(month, k = 12,bs = "cc")+ s(mean.depth)+ s(long10.corner, lat10.corner),data=d,family='tw',method="fREML",discrete=TRUE)
+  
+  #2.Make predictions
+  lsmeas=pred.fun(mod=mod,biascor="NO",PRED="finyear")
+  
+  
+  #nominal
+  out.mean = d %>%
+    group_by(finyear) %>%
+    summarise(mean = mean(cpue),
+              n = length(cpue),
+              sd = sd(cpue)) %>%
+    mutate(lowCL = mean - 1.96*sd/sqrt(n),
+           uppCL = mean + 1.96*sd/sqrt(n)) %>%
+    data.frame
+  
+  out.delta.log = d %>%
+    mutate(cpue.target=cpue)%>%
+    group_by(finyear) %>%
+    summarise(n = length(cpue.target),
+              m = length(cpue.target[cpue.target>0]),
+              mean.lognz = mean(log(cpue.target[cpue.target>0])),
+              sd.lognz = sd(log(cpue.target[cpue.target>0]))) %>%
+    mutate(p.nz = m/n,
+           theta = log(p.nz)+mean.lognz+sd.lognz^2/2,
+           c = (1-p.nz)^(n-1),
+           d = 1+(n-1)*p.nz,
+           vartheta = ((d-c)*(1-c*d)-m*(1-c)^2)/(m*(1-c*d)^2)+
+             sd.lognz^2/m+sd.lognz^4/(2*(m+1)),
+           mean = exp(theta),
+           lowCL = exp(theta - 1.96*sqrt(vartheta)),
+           uppCL = exp(theta + 1.96*sqrt(vartheta))) %>%
+    as.data.frame
+  
+  
+  NRMLIZD="YES"
+  Y=as.numeric(substr(lsmeas$finyear,1,4))  
+  
+  hndl.crap='C:/Matias/Analyses/Catch and effort/Outputs/Paper/why dusky and sandbar daily so uncertain/'
+  fn.fig(paste(hndl.crap,Nms.sp[s],"_",What,sep=""),2000, 2400)
+  with(lsmeas,
+       {
+         if(NRMLIZD=="NO")Mn=1
+         if(NRMLIZD=="YES")Mn=mean(response)
+         if(NRMLIZD=="NO")
+         {
+           YMAX=max(response+1.96*SE/Mn)
+           YMIN=min(response-1.96*SE/Mn)
+         }
+         
+         if(NRMLIZD=="YES")
+         {
+           YMAX=2
+           YMIN=0
+         }
+         
+         plot(Y-.1,response/Mn,col="orange",pch=19,cex=1.5,lwd=1.5,type='o',main=Nms.sp[s],xlab='financial year',
+              ylab='relative cpue',ylim=c(YMIN,YMAX))
+         segments(Y-.1,(response+1.96*SE)/Mn,
+                  Y-.1,(response-1.96*SE)/Mn,col="orange")
+       })
+  with(out.mean,
+       {
+         if(NRMLIZD=="NO")Mn=1
+         if(NRMLIZD=="YES")Mn=mean(mean)
+         points(Y,mean/Mn,col="grey60",pch=19,type='o')
+         segments(Y,(lowCL)/Mn,
+                  Y,(uppCL)/Mn,col="grey60")
+       })
+  with(out.delta.log,
+       {
+         if(NRMLIZD=="NO")Mn=1
+         if(NRMLIZD=="YES")Mn=mean(mean)
+         points(Y+.15,mean/Mn,col="grey80",pch=19,type='o')
+         segments(Y+.15,(lowCL)/Mn,
+                  Y+.15,(uppCL)/Mn,col="grey80")
+       })
+  legend('topright',c("lsmeans","nominal.mean","nominal.delta.log"),
+         lty=1,col=c('orange',"grey50","grey80"),bty='n')
+  dev.off()
+  
+}
+
 
 ##############--- 4. EXPORT INDICES---###################
 
@@ -8155,11 +8656,12 @@ for (s in 1:length(Tar.sp))
       #Standardised
     a=subset(Zone_preds.monthly[[s]][[z]]$Preds,select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
+    ii=Tar.sp[s]
+    write.csv(a,paste(Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
   
     a=subset(Zone_preds.daily[[s]][[z]]$Preds,select=Sel.vars)    
     names(a)=nams.Sel.vars
-    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
+    write.csv(a,paste(Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
   
     rm(a)
   }
@@ -8174,11 +8676,12 @@ for (s in 1:length(Tar.sp))
     #Standardised
     a=subset(Zone_preds.monthly[[s]][[z]]$Preds.creep,select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly",Zn[z],".csv",sep=""),row.names=F) 
+    ii=Tar.sp[s]
+    write.csv(a,paste(Nms.sp[ii],".annual.abundance.basecase.monthly",Zn[z],".csv",sep=""),row.names=F) 
     
     a=subset(Zone_preds.daily[[s]][[z]]$Preds.creep,select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily",Zn[z],".csv",sep=""),row.names=F) 
+    write.csv(a,paste(Nms.sp[ii],".annual.abundance.basecase.daily",Zn[z],".csv",sep=""),row.names=F) 
     
     rm(a)
   }
@@ -8207,11 +8710,12 @@ for (s in 1:length(Tar.sp))
   {
     a=subset(Zone_preds.monthly[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly.",Zn[z],"_relative.csv",sep=""),row.names=F) 
+    ii=Tar.sp[s]
+    write.csv(a,paste(Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_relative.csv",sep=""),row.names=F) 
     
     a=subset(Zone_preds.daily[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily.",Zn[z],"_relative.csv",sep=""),row.names=F) 
+    write.csv(a,paste(Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_relative.csv",sep=""),row.names=F) 
     
     rm(a)
   }
