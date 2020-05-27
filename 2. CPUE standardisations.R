@@ -289,7 +289,7 @@ use.blok.area='NO'
 #Criteria for keeping species for analysis
 N.keep=5      #in years
 Min.kg=100   #in kg
-Min.annual.prop.zero=0.1  #minimum annual proportion of zero records to be meaningful
+Min.annual.prop.zero=0.2  #minimum annual proportion of zero records to be meaningful
 core.per=90
 
 
@@ -787,15 +787,19 @@ if(Model.run=="First")
 }
 
 #adjust core areas following McAuley and Simpfendorfer
-# Dusky.range=c(-28,120)
-# Core$"Dusky Whaler Bronze Whaler"$Lat[2]=Dusky.range[1]
-# Core$"Dusky Whaler Bronze Whaler"$Long[2]=Dusky.range[2]
-# Sandbar.range=c(-26,118)
+Dusky.range=c(-28,120)
+Sandbar.range=c(-26,118)
+Whiskery.range=c(-28,129)
+Gummy.range=c(116,129) 
+
+# Core$"Dusky Whaler"$Lat[2]=Dusky.range[1]
+# Core$"Dusky Whaler"$Long[2]=Dusky.range[2]
+
 # Core$"Sandbar Shark"$Long[2]=Sandbar.range[2]
-# Whiskery.range=c(-28,129)
+
 # Core$"Whiskery Shark"$Lat[2]=Whiskery.range[1]
 # Core$"Whiskery Shark"$Long[2]=Whiskery.range[2]
-# Gummy.range=c(116,129)
+
 # Core$"Gummy Shark"$Long=Gummy.range
 
 
@@ -1015,8 +1019,6 @@ system.time({Species.list=foreach(s=nnn,.packages=c('dplyr','doParallel')) %dopa
   }
 })
 names(Species.list)=names(SP.list) 
-
-Species.list["Tiger Shark"] <- list(NULL)    #only 2 vessels meet criteria   
 
 
   #Daily 
@@ -2182,7 +2184,7 @@ for ( i in Tar.sp)
 }
 
 
-#calculate Effective (as per McAuley, ie use all records within effective area)
+#calculate Effective cpue (as per McAuley, ie use all records within effective area)
 #note: effective is used as the conventionally used nominal cpue
 Effective=vector('list',length(SP.list)) 
 names(Effective)=names(SP.list)
@@ -3995,7 +3997,8 @@ if(Def.mod.Str=="NO")
   {
       #Monthly
     for(s in nnn) Best.Model[[s]]=formula(cpue~finyear + blockx + s(vessel,bs='re') + s(month,k=12,bs='cc'))
-    Best.Model['Tiger Shark']=Best.Model['Bronze Whaler']=list(NULL)
+    Best.Model['Bronze Whaler']=list(NULL)
+    Best.Model$`Tiger Shark`=formula(cpue~finyear + blockx + vessel + s(month,k=12,bs='cc'))
     
       #Daily
     Best.Model.daily$`Sandbar Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
