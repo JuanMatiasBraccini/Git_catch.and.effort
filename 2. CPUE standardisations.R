@@ -889,7 +889,7 @@ Data.daily.GN=Data.daily.GN %>%
                   mutate(Temperature=ifelse(is.na(Temperature),na.approx(Temperature),Temperature))%>%
                   group_by(MONTH)%>%
                   mutate(Temp.res=Temperature/mean(Temperature,na.rm=T))%>%
-                  select(-c(LONG.round,LAT.round))
+                  dplyr::select(-c(LONG.round,LAT.round))
   
 
 
@@ -941,7 +941,7 @@ fn.cpue.data=function(Dat,EffrrT,sp)
     Ids=match(c("LAT","LONG"),names(EffrrT))
     Dat=Dat%>%left_join(EffrrT[,-Ids],by=c("BLOCKX","FINYEAR","MONTH","VESSEL"))
     
-    #consider effor reporter
+    #consider effort reporter
     Dat$Reporter=with(Dat,ifelse(Eff.Reporter=="bad","bad",Reporter))  
     
     #remove records with NA effort
@@ -1005,7 +1005,7 @@ fn.cpue.data.daily=function(Dat,EffrrT,sp)
 }
 
   #Monthly
-#note: select species range, and add effort by Same return
+#note: select species within CORE area and add effort by Same return
 #      #remove Bronze Whaler due to few records and uncertain species ID prior to Daily logbooks
 cl <- makeCluster(detectCores()-1)
 registerDoParallel(cl)
@@ -1022,7 +1022,7 @@ names(Species.list)=names(SP.list)
 
 
   #Daily 
-#note: select species range and add effort by date or ID (==Same.return.SNo). Note that for catch aggregating by date
+#note: select species within CORE area and add effort by date or ID (==Same.return.SNo). Note that for catch aggregating by date
 #       or by ID makes no difference but it's needed for merging with effort
 registerDoParallel(cl)
 system.time({Species.list.daily=foreach(s=nnn,.packages=c('dplyr','doParallel')) %dopar%
@@ -2186,9 +2186,48 @@ for ( i in Tar.sp)
 
 #calculate Effective cpue (as per McAuley, ie use all records within effective area)
 #note: effective is used as the conventionally used nominal cpue
+fn.out.effective=function(a)
+{
+  colnames(a)=tolower(colnames(a))
+  out = a %>%
+    group_by(finyear) %>%
+    summarise(Sumy = sum(livewt.c),
+              Sumx = sum(km.gillnet.hours.c),
+              My = mean(livewt.c),
+              Mx = mean(km.gillnet.hours.c),
+              Sy = sd(livewt.c),
+              Sx = sd(km.gillnet.hours.c),
+              r = cor(livewt.c, km.gillnet.hours.c),
+              n = length(livewt.c)) %>%
+    as.data.frame
+  out$r[is.na(out$r)] = 0
+  out = out %>%
+    mutate(mean=Sumy/Sumx,
+           se =  sqrt(1/n*(My^2*Sx^2/(Mx^4) + Sy^2/(Mx^2) - 2*My*r*Sx*Sy/(Mx^3))),
+           lowCL = mean - 1.96*se,
+           uppCL = mean + 1.96*se) %>%
+    as.data.frame
+  return(out)
+}
+
 Effective=vector('list',length(SP.list)) 
 names(Effective)=names(SP.list)
 Effective_daily=Effective
+for(s in Tar.sp)   
+{
+  #Monthly
+  Effective[[s]]=fn.out.effective(a=subset(Species.list[[s]],SPECIES==SP.list[[s]]))
+  
+  #Daily
+  Effective_daily[[s]]=fn.out.effective(a=subset(Species.list.daily[[s]],SPECIES==SP.list[[s]]))
+}
+
+
+#-- Nominal   (not used)
+#note: Ratio = mean(catch)/mean(effort)
+#      Mean = mean(cpue)
+#     LnMean= exp(mean(log(cpue))+bias corr)
+#     DLnMean = exp(log(prop pos)+exp(mean(log(cpue))+bias corr)
 fn.out.nominal=function(d,method)
 {
   if(is.na(match('cpue.target',names(d))))d=d%>%mutate(cpue.target=catch.target/km.gillnet.hours.c)
@@ -2200,10 +2239,10 @@ fn.out.nominal=function(d,method)
       group_by(finyear) %>%
       summarise(My = mean(catch.target),
                 Mx = mean(effort),
-                Sy = sd(catch),
+                Sy = sd(catch.target),
                 Sx = sd(effort),
-                r = cor(catch, effort),
-                n = length(catch)) %>%
+                r = cor(catch.target, effort),
+                n = length(catch.target)) %>%
       as.data.frame
     out$r[is.na(out$r)] = 0
     out = out %>%
@@ -2267,29 +2306,6 @@ fn.out.nominal=function(d,method)
   
   return(out)
 }
-for(s in Tar.sp)   
-{
-  #Monthly
-  DAT=DATA.list.LIVEWT.c_all_reporters[[s]]%>%
-                mutate(effort=Km.Gillnet.Hours.c,
-                       catch=Catch.Target)
-  colnames(DAT)=tolower(colnames(DAT))
-  Effective[[s]]=fn.out.nominal(d=DAT,method="Nominal")
-  
-  #Daily
-  DAT=DATA.list.LIVEWT.c.daily_all_reporters[[s]]%>%
-                  mutate(effort=Km.Gillnet.Hours.c,
-                         catch=Catch.Target)
-  colnames(DAT)=tolower(colnames(DAT))
-  Effective_daily[[s]]=fn.out.nominal(d=DAT,method="Nominal")
-}
-
-
-#-- Nominal   (not used)
-#note: Ratio = mean(catch)/mean(effort)
-#      Mean = mean(cpue)
-#     LnMean= exp(mean(log(cpue))+bias corr)
-#     DLnMean = exp(log(prop pos)+exp(mean(log(cpue))+bias corr)
 
 Store_nom_cpues_monthly=vector('list',length(SP.list)) 
 names(Store_nom_cpues_monthly)=names(SP.list)
@@ -3586,6 +3602,7 @@ if(Def.mod.Str=="YES")     #takes 16 minutes
           #Monthly
           d=DATA.list.LIVEWT.c[[s]]%>%
             filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]])
+          if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
           if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
           Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
           Continuous=Covariates.monthly
@@ -3699,6 +3716,7 @@ if(Def.mod.Str=="YES")     #takes 16 minutes
           {
             d=DATA.list.LIVEWT.c[[s]]%>%
               filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]])
+            if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
             if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
             Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
             Continuous=Covariates.monthly
@@ -4805,7 +4823,11 @@ if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
         theseyears=theseyears[match(Firs.yr.ktch,theseyears):length(theseyears)]
         
         d=DATA.list.LIVEWT.c[[s]]%>%filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]] & FINYEAR%in%theseyears )
+        
+          #remove first years with very few positive catch observation
+        if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
         if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
+        
         Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
         Continuous=Covariates.monthly
         colnames(d)=tolower(colnames(d))
@@ -5170,6 +5192,7 @@ if(Model.run=="First")
     system.time({sens_monthly=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv')) %dopar%
       {
         d=DATA.list.LIVEWT.c[[s]]
+        if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
         if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
         Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
         Continuous=Covariates.monthly
@@ -5615,6 +5638,7 @@ if(Model.run=="First")  #takes 4 mins
         if(!is.null(BLKS.used[[s]]))
         {
           d=DATA.list.LIVEWT.c[[s]]%>%filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]])
+          if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
           if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
           Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
           Continuous=Covariates.monthly
@@ -6329,9 +6353,11 @@ if(Use.Tweedie)     #takes <1 min
 stopCluster(cl) 
 
 
-#Remove early effective years for sandbar
+#Remove early effective years for sandbar and gummy shark
 Effective$`Sandbar Shark`=Effective$`Sandbar Shark`%>%
               filter(finyear%in%Pred$`Sandbar Shark`$finyear)
+Effective$`Gummy Shark`=Effective$`Gummy Shark`%>%
+              filter(finyear%in%Pred$`Gummy Shark`$finyear)
 
 #Calculate CV
 for(s in nnn)
@@ -6626,7 +6652,7 @@ if(Use.Tweedie)
 }
 
 
-  #Plot Target and nominal (i.e. effective) normalised    
+  #Plot Target and nominal (and effective) normalised    
 Pred.normlzd=Pred.creep
 Pred.daily.normlzd=Pred.daily.creep
 Unstandardised.normlzd=Unstandardised.creep
@@ -8086,6 +8112,7 @@ if(Use.Tweedie)
         {
           d=DATA.list.LIVEWT.c[[s]]%>%
             filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]] & zone==zns[z])
+          if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
           if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
           Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
           Continuous=Covariates.monthly
