@@ -6778,11 +6778,271 @@ if(Use.Tweedie)
     legend("bottomleft",c("Standardised","Nominal","Effective"),bty='n',pch=21,
            pt.bg=c(CLs[1],"grey80","white"),cex=1.45)
     mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-    mtext("Relative CPUE",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
+    mtext("Relative catch rate",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
     dev.off()
   }
 }
 
+
+#ACA
+# Sensitivity tests comparing Tweedie, Lognormal and Delta-lognormal
+if(Use.Tweedie)
+{
+  if(Model.run=="First") 
+  {
+    cl <- makeCluster(detectCores()-1)
+    registerDoParallel(cl)
+    
+    #1. Run standardisation
+    #monthly
+    system.time({Stand.out.Tweedie.sens=foreach(s=nnn,.packages=c('dplyr','cede','mgcv')) %dopar%
+      {
+        if(s %in% Tar.sp)
+        {
+          iid=match(SpiSis[match(names(DATA.list.LIVEWT.c)[s],names(SpiSis))],names(First.year.catch))
+          Firs.yr.ktch=names(First.year.catch[[iid]])
+          theseyears=sort(unique(DATA.list.LIVEWT.c[[s]]$FINYEAR))
+          theseyears=theseyears[match(Firs.yr.ktch,theseyears):length(theseyears)]
+          
+          d=DATA.list.LIVEWT.c[[s]]%>%filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]] & FINYEAR%in%theseyears )
+          
+          #remove first years with very few positive catch observation
+          if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
+          if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
+          
+          Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
+          Continuous=Covariates.monthly
+          colnames(d)=tolower(colnames(d))
+          Terms=tolower(Terms)
+          Continuous=tolower(Continuous)
+          Factors=Terms[!Terms%in%Continuous]
+          Terms=all.vars(Best.Model[[s]])[-1]
+          d <- d%>%
+            dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+            mutate(cpue=catch.target/km.gillnet.hours.c)
+          
+          
+          #NEW##########
+          #Fit lognormal + constant (set at 10% mean cpue, Campbell 2004)
+          Mn.cpue=mean(d%>%filter(cpue>0)%>%pull(cpue))*.1
+          d.logN=d%>%mutate(cpue=ifelse(cpue==0,Mn.cpue,cpue),
+                            cpue=log(cpue))
+          d.logN <- makecategorical(Factors[Factors%in%Terms],d.logN)
+          mod.lognormal=bam(Best.Model[[s]],data=d.logN,family="gaussian",method="fREML",discrete=TRUE)
+          
+          #Fit Delta
+          # binomial part
+          Bi <- d %>%mutate(cpue=as.numeric(catch.target>0))
+          Bi <- makecategorical(Factors[Factors%in%Terms],Bi)
+          mod.bi<-bam(Best.Model[[s]],data=Bi,family="binomial",method="fREML",discrete=TRUE)
+          
+          #lognormal part
+          d.pos<- d%>%
+            filter(cpue>0)%>%
+            mutate(cpue=log(cpue))
+          d.pos <- makecategorical(Factors[Factors%in%Terms],d.pos)
+          mod.pos<-bam(Best.Model[[s]],data=d.pos,family="gaussian",method="fREML",discrete=TRUE)
+          
+          
+          return(list(d.logN=d.logN,mod.lognormal=mod.lognormal,
+                      Bi=Bi,mod.bi=mod.bi,
+                      d.pos=d.pos,mod.pos=mod.pos))
+          
+          rm(d,d.logN,Bi,d.pos,mod.pos,mod.bi,mod.lognormal)
+        }
+      }
+    })   
+    
+    #daily
+    system.time({Stand.out.daily.Tweedie.sens=foreach(s=nnn,.packages=c('dplyr','cede','mgcv')) %dopar%
+      {
+        if(s %in% Tar.sp)
+        {
+          iid=match(SpiSis[match(names(DATA.list.LIVEWT.c.daily)[s],names(SpiSis))],names(First.year.catch.daily))
+          Firs.yr.ktch=names(First.year.catch.daily[[iid]])
+          theseyears=sort(unique(DATA.list.LIVEWT.c.daily[[s]]$FINYEAR))
+          theseyears=theseyears[match(Firs.yr.ktch,theseyears):length(theseyears)]
+          
+          
+          d=DATA.list.LIVEWT.c.daily[[s]]%>%
+            filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]] & FINYEAR%in%theseyears)
+          Terms=Predictors_daily
+          Continuous=Covariates.daily
+          colnames(d)=tolower(colnames(d))
+          Terms=tolower(Terms)
+          Continuous=tolower(Continuous)
+          Factors=Terms[!Terms%in%Continuous]
+          Terms=all.vars(Best.Model.daily[[s]])[-1]
+          d <- d%>%
+            dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+            mutate(cpue=catch.target/km.gillnet.hours.c)
+          
+          
+          #Fit lognormal + constant (set at 10% mean cpue, Campbell 2004)
+          Mn.cpue=mean(d%>%filter(cpue>0)%>%pull(cpue))*.1
+          d.logN=d%>%mutate(cpue=ifelse(cpue==0,Mn.cpue,cpue),
+                            cpue=log(cpue))
+          d.logN <- makecategorical(Factors[Factors%in%Terms],d.logN)
+          mod.lognormal=bam(Best.Model.daily[[s]],data=d.logN,family="gaussian",method="fREML",discrete=TRUE)
+          
+          #Fit Delta
+          # binomial part
+          Bi <- d %>%mutate(cpue=as.numeric(catch.target>0))
+          Bi <- makecategorical(Factors[Factors%in%Terms],Bi)
+          mod.bi<-bam(Best.Model.daily[[s]],data=Bi,family="binomial",method="fREML",discrete=TRUE)
+          
+          #lognormal part
+          d.pos<- d%>%
+            filter(cpue>0)%>%
+            mutate(cpue=log(cpue))
+          d.pos <- makecategorical(Factors[Factors%in%Terms],d.pos)
+          mod.pos<-bam(Best.Model.daily[[s]],data=d.pos,family="gaussian",method="fREML",discrete=TRUE)
+          
+          
+          return(list(d.logN=d.logN,mod.lognormal=mod.lognormal,
+                      Bi=Bi,mod.bi=mod.bi,
+                      d.pos=d.pos,mod.pos=mod.pos))
+          
+          rm(d,d.logN,Bi,d.pos,mod.pos,mod.bi,mod.lognormal)
+        }
+      }
+    })
+    
+    names(Stand.out.Tweedie.sens)=names(Stand.out.daily.Tweedie.sens)=names(SP.list)
+    
+    
+    #2. Predict annual effect
+    #Monthly
+    system.time({
+      Pred.Tweedie.sens=foreach(s=nnn,.packages=c('dplyr','emmeans')) %do%
+        {
+          if(!is.null(Stand.out.Tweedie.sens[[s]]))
+          {
+            #Lognormal
+            d.logN=Stand.out.Tweedie.sens[[s]]$d.logN   #note: need data as global for ref_grid
+            Lognormal=pred.fun(mod=Stand.out.Tweedie.sens[[s]]$mod.lognormal,biascor="YES",PRED="finyear")%>%
+              dplyr::select(finyear,response)
+            
+            #Delta
+            Bi=Stand.out.Tweedie.sens[[s]]$Bi   
+            Bi.pred=pred.fun(mod=Stand.out.Tweedie.sens[[s]]$mod.bi,biascor="NO",PRED="finyear")
+            
+            d.pos=Stand.out.Tweedie.sens[[s]]$d.pos   
+            Pos.pred=pred.fun(mod=Stand.out.Tweedie.sens[[s]]$mod.pos,biascor="YES",PRED="finyear")
+            
+            Delta=full_join(Bi.pred%>%dplyr::select(finyear,prob),
+                            Pos.pred%>%dplyr::select(finyear,response),by='finyear')%>%
+              mutate(response=response*prob)%>%
+              dplyr::select(-prob)
+            
+            
+            return(list(Lognormal=Lognormal,Delta=Delta))
+            rm(d.logN,Bi,d.pos)
+          }
+        }
+    })
+    
+    #Daily   
+    system.time({
+      Pred.daily.Tweedie.sens=foreach(s=nnn,.packages=c('dplyr','emmeans')) %do%
+        {
+          if(!is.null(Stand.out.daily.Tweedie.sens[[s]]))
+          {
+            #Lognormal
+            d.logN=Stand.out.daily.Tweedie.sens[[s]]$d.logN   #note: need data as global for ref_grid
+            Lognormal=pred.fun(mod=Stand.out.daily.Tweedie.sens[[s]]$mod.lognormal,biascor="YES",PRED="finyear")%>%
+              dplyr::select(finyear,response)
+            
+            #Delta
+            Bi=Stand.out.daily.Tweedie.sens[[s]]$Bi   
+            Bi.pred=pred.fun(mod=Stand.out.daily.Tweedie.sens[[s]]$mod.bi,biascor="NO",PRED="finyear")
+            
+            d.pos=Stand.out.daily.Tweedie.sens[[s]]$d.pos   
+            Pos.pred=pred.fun(mod=Stand.out.daily.Tweedie.sens[[s]]$mod.pos,biascor="YES",PRED="finyear")
+            
+            Delta=full_join(Bi.pred%>%dplyr::select(finyear,prob),
+                            Pos.pred%>%dplyr::select(finyear,response),by='finyear')%>%
+              mutate(response=response*prob)%>%
+              dplyr::select(-prob)
+            
+            
+            return(list(Lognormal=Lognormal,Delta=Delta))
+            rm(d.logN,Bi,d.pos)
+          }
+        }
+    })
+    
+    names(Pred.Tweedie.sens)=names(Pred.daily.Tweedie.sens)=names(SP.list)
+    
+    stopCluster(cl)
+    
+    
+    #3. Display annual indices  
+    Plot.cpue.sens=function(cpuedata,cpuedata.daily,CL,CxS,Yvar,add.lines,firstyear)    
+    {
+      if(length(cpuedata)>3)tc=seq(-1.5*0.15,1.5*0.15,length.out=length(cpuedata))
+      if(length(cpuedata)<=3)tc=seq(-.5*0.25,.5*0.25,length.out=length(cpuedata))
+      if(length(cpuedata)==1)tc=seq(-.5*0.5,.5*0.5,length.out=length(cpuedata))
+      
+      #normalize
+      for(l in 1:length(cpuedata)) cpuedata[[l]]$response=cpuedata[[l]]$response/mean(cpuedata[[l]]$response)
+      for(l in 1:length(cpuedata.daily)) cpuedata.daily[[l]]$response=cpuedata.daily[[l]]$response/mean(cpuedata.daily[[l]]$response)
+      
+      
+      Yrs=c(as.numeric(substr(cpuedata[[1]][,match(Yvar,names(cpuedata[[1]]))],1,4)),
+            as.numeric(substr(cpuedata.daily[[1]][,match(Yvar,names(cpuedata.daily[[1]]))],1,4)))
+      Tops=c(unlist(lapply(cpuedata, `[`, "response")),
+             unlist(lapply(cpuedata.daily, `[`, "response")))
+      Tops=Tops[!is.infinite(Tops)]
+      ymax=max(Tops)
+      Quant=quantile(Tops,probs=c(.95,1))
+      if(diff(Quant)>3) ymax=quantile(Tops,probs=.995)
+      
+      plot(Yrs,Yrs,ylim=c(0,ymax),xlim=c(firstyear,max(Yrs)),ylab="",xlab="",
+           col="transparent",cex.axis=1.25)
+      for(l in 1:length(cpuedata))
+      {
+        if(!is.null(cpuedata[[l]]))aaa=cpuedata[[l]]%>%mutate(finyear=as.numeric(substr(finyear,1,4)))
+        if(!is.null(cpuedata.daily[[l]]))aaa.daily=cpuedata.daily[[l]]%>%mutate(finyear=as.numeric(substr(finyear,1,4)))
+        
+        if(!is.null(cpuedata[[l]]))with(aaa,
+                                        {
+                                          if(add.lines=="NO") points(finyear+tc[l], response, pch=19, lty=2, col=CL[l],cex=CxS)
+                                          if(add.lines=="YES") points(finyear+tc[l], response, "o", pch=21, lty=2, bg=CL[l],cex=CxS)
+                                          
+                                        })
+        if(!is.null(cpuedata.daily[[l]]))with(aaa.daily,
+                                              {
+                                                if(l==1)polygon(x=c(finyear[1]-.5,finyear[length(finyear)]+.5,finyear[length(finyear)]+.5,finyear[1]-.5),
+                                                                y=c(0,0,ymax*.99,ymax*.99),col='grey92',border="transparent")
+                                                if(add.lines=="NO") points(finyear+tc[l], response, pch=21, lty=2, col=CL[l],cex=CxS)
+                                                if(add.lines=="YES") points(finyear+tc[l], response, "o", pch=21, lty=2, bg=CL[l],cex=CxS)
+                                              })
+      }
+      
+    }
+    CL.sens=c("black","grey50","white")
+    fn.fig("Figure 3.Annual_Index_normalised_Tweedie_Delta_lognormal",1800, 2400)  
+    par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
+    for(s in Tar.sp)
+    {
+      Plot.cpue.sens(cpuedata=list(Tweedie=Pred[[s]],
+                                   Lognormal=Pred.Tweedie.sens[[s]]$Lognormal,
+                                   Delta=Pred.Tweedie.sens[[s]]$Delta),
+                     cpuedata.daily=list(Tweedie=Pred.daily[[s]],
+                                         Lognormal=Pred.daily.Tweedie.sens[[s]]$Lognormal,
+                                         Delta=Pred.daily.Tweedie.sens[[s]]$Delta),
+                     CL=CL.sens,CxS=CxS,Yvar="finyear",add.lines="YES",firstyear=1975)
+      legend("topright",Nms.sp[s],bty='n',cex=1.75)
+    }
+    legend("bottomleft",c("Tweedie","Lognormal","Delta-lognormal"),bty='n',pch=21,
+           pt.bg=CL.sens,cex=1.45)
+    mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+    mtext("Relative catch rate",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
+    dev.off()
+    
+  }
+}
 
 #Get glm predictions for daily and compare to gam
 if(Use.Delta)
@@ -7457,7 +7717,7 @@ if(Model.run=="First")
            })
       if(i==2) mtext("                             Month",
                      side=1,line=2,font=1,las=0,cex=CX.t)
-      if(i==1) mtext("Relative CPUE",side=2,line=2.5,font=1,las=0,cex=CX.t)
+      if(i==1) mtext("Relative catch rate",side=2,line=2.5,font=1,las=0,cex=CX.t)
     }
     
     #Depth effect    
