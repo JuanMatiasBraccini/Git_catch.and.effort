@@ -1,18 +1,5 @@
 #                 SCRIPT FOR RECONSTRUCTING TOTAL DISCARDS IN TDGDLF    #
 
-rm(list=ls(all=TRUE))
-
-User="Matias"
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Source_Shark_bio.R")
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Smart_par.R")
-library(rlang)
-#library(dplyr)
-#library(tidyr)
-library(tidyverse)
-library(doParallel)
-library(zoo)
-library(abind)
-
 #notes:
 # observer data must have at least Min.obs.per.block & Min.shots.per.block
 # Ratio estimator method used with all years combined. Model-based by species not 
@@ -24,16 +11,38 @@ library(abind)
 # Longlines: Very few blocks (4 observed blocks only) so few observations and too 
 #           much extrapolated!! Hence, grouped commercial LL and GN and use observed GN
 
-#note: longline was removed from analysis because doesn't meet min observed shot selection criteria 
+# Longline was removed from analysis because doesn't meet min observed shot selection criteria 
 #      (at most 2 shots per block and only 5 blocks)
 
+
 #To do:
+#  Add post capture mortality to total discard calculation
+#  Run Sensitivity tests
+# Update Discarding csv file with Parks Australia findings
 # Tabulate effort coverage from the observer data
 # combine GN and LL total catch by year block
 # Show porportion of effort observed by year/gear. 
 
 #Note: no point in showing precision and bias because the universe (i.e. the actual
 #       observations) is a small proportion of the total effort
+
+
+
+rm(list=ls(all=TRUE))
+
+
+library(rlang)
+#library(dplyr)
+#library(tidyr)
+library(tidyverse)
+library(doParallel)
+library(zoo)
+library(abind)
+
+User="Matias"
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Source_Shark_bio.R")
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Smart_par.R")
+
 
 
 
@@ -51,7 +60,7 @@ Dat_obs=Dat_obs %>% filter(Method=="GN")
 
 
 #Catch and effort data   
-Dat_total=read.csv('C:\\Matias\\Analyses\\Catch and effort\\Data_outs\\Data.monthly.csv',stringsAsFactors = F)
+Dat_total=read.csv('C:\\Matias\\Analyses\\Data_outs\\Data.monthly.csv',stringsAsFactors = F)
 Dat_total=Dat_total %>% filter(LAT<=(-26) & Estuary=="NO") %>%
                         mutate(YEAR=YEAR.c,
                                BLOCK=BLOCKX,
@@ -68,10 +77,10 @@ Dat_total.LL=Dat_total %>% filter(METHOD=="LL")
 Dat_total=Dat_total %>% filter(METHOD=="GN")
 
 #Discarded/retained
-Comm.disc.sp=read.csv("C:\\Matias\\Analyses\\Ecosystem indices\\Shark-bycatch\\SPECIES+PCS+FATE.csv",stringsAsFactors = F)
+Comm.disc.sp=read.csv("C:/Matias/Analyses/Ecosystem indices and multivariate/Shark-bycatch/SPECIES+PCS+FATE.csv",stringsAsFactors = F)
 
 #Length weight relationships
-setwd('C:\\Matias\\Analyses\\Catch and effort\\Bycatch total catch recons')
+setwd('C:/Matias/Analyses/Reconstruction_total bycatch TDGDLF')
 
 Len.wei=read.csv("length.weights.csv",stringsAsFactors = F)
 
@@ -94,7 +103,7 @@ Commercial.sp=subset(Comm.disc.sp,FATE=="C" & NATURE=="S")$SPECIES
 
 
 
-#Use only observed GN. Combine GN and LL total catch
+#Use only observed GN. Combine the total catch of GN and LL 
 DATA_obs=list(GN=Dat_obs,LL=Dat_obs.LL)
 DATA_total=list(GN=Dat_total,LL=Dat_total.LL)  
 
@@ -106,7 +115,7 @@ DATA_total=list(GN=Dat_total,LL=Dat_total.LL)
 for(i in 1:length(DATA_obs)) DATA_obs[[i]]$Discarded=with(DATA_obs[[i]],
                                           ifelse(SPECIES%in%Commercial.sp,"Retained","Discarded"))
 
-#Show overal observed discarded and retained species by year
+#Show overal observed discarded and retained species by year   #Replace by this infographic: https://twitter.com/ISSF/status/1147943595942526978?s=03
 fun.horiz.bar=function(d)
 {
   d$dummy=with(d,ifelse(Discarded=="Retained","Retained",SPECIES))
