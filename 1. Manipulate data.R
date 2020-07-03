@@ -1,11 +1,5 @@
 ###--- SHARK GILLNET AND LONGLINE FISHERY CATCH AND EFFORT MANIPULATIONS ----###
 
-#MISSING:
-#       1. charter.mean.w is dummy. Go out with them to calculate properly! (or use Karina's rec fish size)
-#             another issue with Charter data is species id (e.g. bull sharks for licence FT1L373 may not be)
-
-#      BUT, directly source recreational and charter catches from 'Catch.recons.Recreational.R', this will sort all issues!!!
-
 #NOTES:
   #MONTHLY RECORDS:   CAESS data from 1988/89 to 2007/08 (some fishers kept reporting in CAESS 
 #                      after introduction of daily logbooks).
@@ -217,21 +211,6 @@ TEPS.pre.current=read.csv("Historic/Historic.TEPS.res.csv",stringsAsFactors =F)
 Spec.catch.zone.pre.2013=read.csv("Historic/Spec.catch.zone.csv")  
 
 
-#Charter operators                            
-#       species identification is an issue
-channel <- odbcConnectExcel2007("Charter/Charter.xlsx") 
-Charter.fish.catch<- sqlFetch(channel,"Data")
-close(channel)
-charter.mean.w=read.csv('Charter/Sp_mean_weight.csv')    
-charter.blk=read.csv('Charter/Centroid_Grid_Block_5NM_All.csv')
-
-
-#Rec fisheries  
-#note:  iSurvey 2011-12 Tables 7-10 (estimated retained number of shark and ray individuals in 2011-12,boat-based
-#       phone diary survey (Ryan et al 2013)
-Rec.fish.catch=read.csv("Recreational/I.Survey.csv")
-
-
 #SHAPE FILE PERTH ISLANDS
 # PerthIs=read.table("C:/Matias/Data/Mapping/WAislandsPointsNew.txt", header=T)
 # Rottnest.Is=subset(PerthIs,ID%in%c("ROTT1"))
@@ -398,62 +377,7 @@ Do.jpeg="YES"
 
 ##################--- DATA MANIPULATION SECTION ---##############
 
-#Non-commercial Fisheries             
- #a. recreational
-Rec.fish.catch=Rec.fish.catch%>%
-   mutate(FinYear=paste(2000+as.numeric(substr(Year,1,2)),substr(Year,3,4),sep="-"),
-         Bioregion=paste(sapply(strsplit(Rec.fish.catch$RegionReportingGroupName, "_"), "[", 2),
-                         sapply(strsplit(Rec.fish.catch$RegionReportingGroupName, "_"), "[", 3)),
-         Common.Name=Lowlevelgrouping,
-         Scientific.Name=ScientificName,
-         Kept.Number=Kept,
-         Kept.Number.se=se.Kept,
-         Rel.Number=Released,
-         Rel.Number.se=se.Released,
-         Caught.Number=Total,
-         Caught.Number.se=se.Total)%>%
-   filter(!FinYear=="Grand Total")%>%
-  select(FinYear,Bioregion,Common.Name,Scientific.Name,Kept.Number,Kept.Number.se,
-         Rel.Number,Rel.Number.se,Caught.Number,Caught.Number.se)
-
-
-  #b. charter boats
-names(Charter.fish.catch)[match("TO Zone",names(Charter.fish.catch))]="Zone"
-names(Charter.fish.catch)[match("Calendar Year",names(Charter.fish.catch))]="Year"
-names(Charter.fish.catch)[match("05x05NM Block",names(Charter.fish.catch))]="Block5"
-names(Charter.fish.catch)[match("Species Common Name",names(Charter.fish.catch))]="SNAME"
-names(Charter.fish.catch)[match("Fish Kept Count",names(Charter.fish.catch))]="Kept_N"
-names(Charter.fish.catch)[match("Fish Released Count",names(Charter.fish.catch))]="Released_N"
-names(Charter.fish.catch)[match("Licence Count",names(Charter.fish.catch))]="Number_boats"
-names(Charter.fish.catch)[match("Fishing Trip Count",names(Charter.fish.catch))]="Trips_N"
-Charter.fish.catch=subset(Charter.fish.catch,!Zone=='Grand Total')
-Charter.fish.catch=Charter.fish.catch%>%left_join(charter.mean.w,by=c("SNAME"))
-#Charter.fish.catch=merge(Charter.fish.catch,charter.mean.w,by="SNAME",all.x=T)
-Charter.fish.catch$Kept_w=Charter.fish.catch$Kept_N*Charter.fish.catch$Mean_weight_kg
-Charter.fish.catch$Released_w=Charter.fish.catch$Released_N*Charter.fish.catch$Mean_weight_kg
-Charter.fish.catch$Year=year(Charter.fish.catch$Year)
-Charter.fish.catch$Month=month(Charter.fish.catch$Month)
-Charter.fish.catch=Charter.fish.catch%>%left_join(charter.blk,by=c("Block5"="BlockNo"))
-#Charter.fish.catch=merge(Charter.fish.catch,charter.blk,by.x="Block5",by.y="BlockNo",all.x=T)
-Tab.chart.blck.sp=aggregate(cbind(Kept_N,Released_N)~SNAME+Block5,Charter.fish.catch,sum)
-Tab.chart.blck.sp_w=aggregate(cbind(Kept_w,Released_w)~SNAME+Block5,Charter.fish.catch,sum)
-Tab.chart.yr.sp_w=aggregate(cbind(Kept_w,Released_w)~SNAME+Year,Charter.fish.catch,sum)
-# par(mfcol=c(2,1),mar=c(2,2,1,1),oma=c(1,1,1,1),las=1,mgp=c(1,.5,0))
-# with(aggregate(cbind(Kept_N,Released_N)~LAT+LONG,Charter.fish.catch,sum),
-# {
-#        plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Kept_N,3),
-#             main=paste("All years. Kept numbers","(n=",sum(Kept_N),")"),ylab='',xlab='')
-#        plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Released_N,3),
-#             main=paste("All years. Released numbers","(n=",sum(Released_N),")"),ylab='',xlab='')
-#      })
 yr=as.numeric(substr(Current.yr,1,4))
-# with(aggregate(cbind(Kept_N,Released_N)~LAT+LONG,subset(Charter.fish.catch,Year==yr),sum),
-# {
-#        plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Kept_N,3),
-#             main=paste(yr,"Kept numbers","(n=",sum(Kept_N),")"),ylab='',xlab='')
-#        plot(LONG,LAT,pch=19,col="steelblue",cex=fn.scale(Released_N,3),
-#             main=paste(yr,"Released numbers","(n=",sum(Released_N),")"),ylab='',xlab='')
-#      })
 
 #Quick check to determine samples size catch age composition
 if(explore.Catch.compo=="YES")
@@ -7249,7 +7173,6 @@ Exprt.list=list(
   Mesh.monthly=Mesh.monthly,
   Mesh.size=Mesh.size,
   TEPS.current=TEPS.current,
-  Rec.fish.catch=Rec.fish.catch,
   Data.current.Sofar=Data.current.Sofar,
   PRICES=PRICES,
   TEPS.pre.current=TEPS.pre.current,

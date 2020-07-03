@@ -18,7 +18,7 @@ source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R")
 #     vessels from zone 2. Rory instructed this is biased. See '4.Script for testing effect of DATE or ID 
 #     in effort calculation'.  This is not an issue for km.gn.hr
 
-#     Before executing SOFAR bit, run "2.CPUE standardisations.R" to construct latest standardised cpue
+#     Before executing SOFAR script, run "2.CPUE standardisations.R" to construct latest standardised cpue
 
 #MISSING for 2020: add daily.other to the catch of other (this is daily not reported in CAES for other methods)
 
@@ -34,7 +34,7 @@ setwd("C:/Matias/Analyses/Data_outs")
 
 Data.monthly=read.csv("Data.monthly.csv")
 daily.other=read.csv("Data.daily.other.fisheries.csv")
-Rec.fish.catch=read.csv("Rec.fish.catch.csv")
+Rec.fish.catch=read.csv('recons_recreational.csv')
 Data.current.Sofar=read.csv("Data.current.Sofar.csv")
 PRICES=read.csv("PRICES.csv")
 Total.effort.days.monthly=read.csv("Annual.total.eff.days.csv")
@@ -165,45 +165,23 @@ MainFeatures=MainFeatures[,match(c("SPECIES","Catch.tons"),names(MainFeatures))]
 
 
 #Add latest data on Recreational fishing catch
-Rec.Groups=Rec.Catch.stats=NULL
-REC=subset(Rec.fish.catch,FinYear==Current.yr)  
-#use latest estimate if no estimates available for current year
-if(nrow(REC)==0)
-{
-  REC.yrs=sort(as.character(unique(Rec.fish.catch$FinYear)))
-  REC=subset(Rec.fish.catch,FinYear==REC.yrs[length(REC.yrs)])  
-}
-REC.yr=as.character(unique(REC$FinYear))
-REC.yr=paste(substr(REC.yr,1,4),"/",substr(REC.yr,6,7),sep="")
-Tot.Ktch=sum(REC$Kept.Number)+sum(REC$Rel.Number)
-Yr.Rec.Ktch=as.character(unique(REC$FinYear))
-Tot.Kept=sum(REC$Kept.Number)
-Rec.Catch.stats=data.frame(Group="All sharks and rays",Total.Catch=Tot.Ktch,Total.Retained=Tot.Kept)                           
-REC=subset(REC,Bioregion%in%c("South Coast","West Coast"))
-REC$Group=with(REC,
-               ifelse(Common.Name%in%c("Bronze Whaler","Sandbar Shark","Tiger Shark","Whaler Sharks"),"Whalers",
-                      ifelse(Common.Name%in%c("Gummy Sharks","School Shark","Whiskery Shark"),"Hounds",
-                             ifelse(Common.Name%in%c("Wobbegong"),"wobbegongs",
-                                    ifelse(Common.Name%in%c("Hammerhead Sharks"),"hammerheads ","other")))))
-Rec.Groups=aggregate(Kept.Number~Group,REC,sum)
-Rec.Groups$Percent=round(Rec.Groups$Kept.Number*100/sum(Rec.Groups$Kept.Number))
-Rec.Groups$Bioregion="WC and SC"
-Rec.Catch.stats=rbind(Rec.Catch.stats,data.frame(Group="All sharks and rays.SC&WC",
-                                                 Total.Catch=sum(REC$Caught.Number),Total.Retained=sum(REC$Kept.Number)))
-Rec.fish.catch.WC=subset(REC,Bioregion=="West Coast")
-Rec.Catch.stats=rbind(Rec.Catch.stats,data.frame(Group="All sharks and rays.WC",
-                                                 Total.Catch=sum(Rec.fish.catch.WC$Caught.Number),Total.Retained=sum(Rec.fish.catch.WC$Kept.Number)))
-Rec.Groups.WC=aggregate(Kept.Number~Group,Rec.fish.catch.WC,sum)
-Rec.Groups.WC$Percent=round(Rec.Groups.WC$Kept.Number*100/sum(Rec.Groups.WC$Kept.Number))
-Rec.Groups.WC$Bioregion="WC"
-Rec.Groups=rbind(Rec.Groups,Rec.Groups.WC)
-REC=sum(REC$Kept.Number)
-Avg.wt=5        #average weight of a shark                                                   
-Rec.fi.Tot.catch=data.frame(SPECIES=paste("Recreational catch ","(",REC.yr,")",sep=""), Catch.tons=REC*Avg.wt/1000)
-Re.Percnt.Tot.Com= Rec.fi.Tot.catch$Catch.tons*100/MainFeatures$Catch.tons[which(MainFeatures$SPECIES=="Total sharks and rays")]  
-Rec.fi.Tot.catch$Catch.tons=ifelse(Re.Percnt.Tot.Com<5,"< 5% of commercial catch",
-                                   ifelse(Re.Percnt.Tot.Com>=5 &Re.Percnt.Tot.Com<10,"< 10% of commercial catch",
-                                          Re.Percnt.Tot.Com))
+Rec.fi.Tot.catch=Rec.fish.catch%>%
+    group_by(FINYEAR)%>%
+    summarise(Catch.tons=sum(LIVEWT.c)/1000)%>%
+    mutate(yr=as.numeric(substr(FINYEAR,1,4)),
+           yr.min=abs(yr-as.numeric(substr(Current.yr,1,4))))%>%
+    filter(yr.min==min(yr.min))%>%
+    mutate(SPECIES=paste("Recreational catch ","(",FINYEAR,")",sep=""),
+           Percnt.Tot.Com= Catch.tons*100/MainFeatures$Catch.tons[which(MainFeatures$SPECIES=="Total sharks and rays")],
+           Catch.tons=ifelse(Percnt.Tot.Com<5,"< 5% of commercial catch",
+                       ifelse(Percnt.Tot.Com>=5 &Percnt.Tot.Com<10,"< 10% of commercial catch",
+                       ifelse(Percnt.Tot.Com>=10 &Percnt.Tot.Com<20,"< 20% of commercial catch",
+                       Percnt.Tot.Com))))%>%
+      data.frame
+REC.yr=Rec.fi.Tot.catch$FINYEAR
+Rec.fi.Tot.catch=Rec.fi.Tot.catch%>%
+                  dplyr::select(SPECIES,Catch.tons)
+
 
 Ktch.indic=subset(MainFeatures,SPECIES=="Total indicators",select=Catch.tons)$Catch.tons
 
