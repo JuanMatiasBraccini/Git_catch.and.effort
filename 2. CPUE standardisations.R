@@ -582,7 +582,7 @@ A=rowSums(A[,-1],na.rm=T)
 names(A)=Anm
 SpiSis=unique(Data.monthly.GN%>%mutate(RSCommonName=ifelse(SPECIES==8001,'Greynurse Shark',RSCommonName))%>%
                          filter(SPECIES%in%as.numeric(names(A[A>=N.keep])))%>%
-                         select(SPECIES,RSCommonName) %>%
+                         dplyr::select(SPECIES,RSCommonName) %>%
                          filter(!RSCommonName==""))
 SpiSis=SpiSis[!duplicated(SpiSis$SPECIES),]
 nms=SpiSis$RSCommonName
@@ -1040,10 +1040,10 @@ stopCluster(cl)
 #Remove variables not used after prelim analysis
 for(s in nnn)
 {
-  if(!is.null(Species.list[[s]])) Species.list[[s]] = Species.list[[s]] %>%  select(-c(LIVEWT,Boundary.blk,Km.Gillnet.Hours_shot.c,
+  if(!is.null(Species.list[[s]])) Species.list[[s]] = Species.list[[s]] %>%  dplyr::select(-c(LIVEWT,Boundary.blk,Km.Gillnet.Hours_shot.c,
                               TYPE.DATA,Sch.or.DogS,Freo_lag6,Freo_lag12,mesh,
                               NETLEN.c, BDAYS.c,HOURS.c))
-  if(!is.null(Species.list.daily[[s]])) Species.list.daily[[s]] = Species.list.daily[[s]] %>%  select(-c(LIVEWT,Km.Gillnet.Days.inv,
+  if(!is.null(Species.list.daily[[s]])) Species.list.daily[[s]] = Species.list.daily[[s]] %>%  dplyr::select(-c(LIVEWT,Km.Gillnet.Days.inv,
                                 Km.Gillnet.Hours.inv,Km.Gillnet.Hours_shot.c,netlen.c,hours.c,
                                 bdays.c,TYPE.DATA,LIVEWT,nfish,Freo_lag6,Freo_lag12))
 }

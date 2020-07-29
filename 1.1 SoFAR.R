@@ -117,7 +117,7 @@ DAT$Bioregion=with(DAT,ifelse(Bioregion=="Gascoyne","WC",Bioregion))
 #Create current year data set for other fisheries in temperate region (i.e non TDGDLF or NSF)  
 #select south and west coast fisheries
 CAESS.shark.fishery.codes=c("SGL1","SGL2","SGL","WCGL","C127","CL02")
-Other.fishery.catch=subset(Data.monthly,SPECIES<=31000 & !FisheryCode%in%CAESS.shark.fishery.codes)  #HERE: add daily.other
+Other.fishery.catch=subset(Data.monthly,SPECIES<=31000 & !FisheryCode%in%CAESS.shark.fishery.codes)  
 Other.fishery.catch=subset(Other.fishery.catch, !(METHOD=="LL"&Estuary=="NO"))
 Other.fishery.catch$LAT=-as.numeric(substr(Other.fishery.catch$BLOCKX,1,2))
 Other.fishery.catch=subset(Other.fishery.catch, !(METHOD=="GN"&Estuary=="NO" & LAT<(-26)))
@@ -233,10 +233,12 @@ names(N.Crew)=c("zone","min","max")
 #note: this applies an average fin price to all sharks with valuable fins using
 #       Prices provided by Eva
 #dolar.per.kg.fin=35 
-PRICES=PRICES%>%mutate(dolar.per.kg=PRICES[,match(paste("uv",substr(Current.yr,3,4),
-                                        substr(Current.yr,6,7),sep=""),names(PRICES))],
-                       dolar.per.kg=as.numeric(gsub("\\$", "", dolar.per.kg)))%>%
-                select(-uv1718)
+PRICES=PRICES%>%mutate(dolar.per.kg=Beach.Price..Adjusted.,
+            #          dolar.per.kg=PRICES[,match(paste("uv",substr(Current.yr,3,4),
+            #                            substr(Current.yr,6,7),sep=""),names(PRICES))],
+                       dolar.per.kg=as.numeric(gsub("\\$", "", dolar.per.kg)),
+                       SPECIES=ASA.Species.Code)
+            #%>%select(-uv1718)
 
 Fin.Weight=subset(DAT,SPECIES%in%Elasmo.species,select=c(SPECIES,SNAME,RSCommonName,zone,LIVEWT.c))
 Fin.Weight=subset(Fin.Weight,!(SPECIES%in%c(13000,20000,31000,26999))) #remove no fin species (wobbies, spurdog,rays except shovelnose)
@@ -561,7 +563,7 @@ Ktch_comm_accept=Tot.wt%>%mutate(SPECIES=ifelse(SPECIES=="sandbar","Sandbar",SPE
                           filter(SPECIES%in%c("Gummy","Whiskery","Bronzy.Dusky","Sandbar"))%>%
                           select(SPECIES,Catch.tons)%>%
                           left_join(Catch.range.key.species,by="SPECIES")%>%
-                          mutate(Acceptable=ifelse(Catch.tons>=Min.catch & Catch.tons<=Max.catch,"Acceptable",
+                          mutate(Acceptable=ifelse(Catch.tons>=Min.catch*.9 & Catch.tons<=Max.catch*1.1,"Acceptable",
                                                    "Unacceptable"))
  
 write.csv(Ktch_comm_accept,"Ktch_comm_accept.csv",row.names=F)
@@ -569,8 +571,11 @@ write.csv(Ktch_comm_accept,"Ktch_comm_accept.csv",row.names=F)
 
 
 #Export tables as .csv
-if(!is.null(Rec.Catch.stats))write.csv(Rec.Catch.stats,paste("1.2.Rec.Catch.stats.",Yr.Rec.Ktch,".csv",sep=""),row.names=F)
-if(!is.null(Rec.Catch.stats))write.csv(Rec.Groups,paste("1.3.Rec.Groups.SC&WC.",Yr.Rec.Ktch,".csv",sep=""),row.names=F)
+Yr.Rec.Ktch=max(Rec.fish.catch$FINYEAR)
+Rec.Catch.stats=Rec.fish.catch%>%filter(FINYEAR==Yr.Rec.Ktch)%>%
+  group_by(Common.Name)%>%summarise(Total.catch.kg=sum(LIVEWT.c))
+write.csv(Rec.Catch.stats,paste("1.2.Rec.Catch.stats.",Yr.Rec.Ktch,".csv",sep=""),row.names=F)
+
 write.csv(Licenses,"1.4.Number.of.vessels.csv",row.names=F)
 write.csv(N.Crew,"1.5.Number.of.crew.csv",row.names=F)
 write.csv(Total.value,"1.6.EconomicEffects.csv",row.names=F)
