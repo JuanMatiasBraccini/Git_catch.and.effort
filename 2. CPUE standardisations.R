@@ -8908,6 +8908,8 @@ if(Explore.why.dusky.sandbar.uncertain)
 setwd("C:/Matias/Analyses/Data_outs")
 Sel.vars=c("finyear","response","CV","lower.CL","upper.CL")
 nams.Sel.vars=c("Finyear","Mean","CV","LOW.CI","UP.CI")
+
+Nms.sp=ifelse(Nms.sp=="Bronze whaler","Copper shark",Nms.sp)
  
 #Absolute scale 
     #4.22.12.1 zones combined with NO efficiency creep

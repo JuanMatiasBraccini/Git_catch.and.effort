@@ -297,7 +297,9 @@ for (s in 1:length(Keep.sp))
            LOW.CI=LOW.CI/Mn,
            UP.CI=UP.CI/Mn,
            Mean=Mean/Mn)
-  
+  NM=ifelse(NM=='Blacktips','Blacktip sharks',
+     ifelse(NM=='Spot tail shark','Spot-tail shark',
+            NM))
   write.csv(cpue.stand,paste("C:/Matias/Analyses/Data_outs/",NM,'/',NM,".annual.abundance.NSF_relative.csv",sep=""),row.names=F) 
 }
 
