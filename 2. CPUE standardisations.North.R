@@ -289,8 +289,6 @@ system.time({
 
 
 ##############--- 4. EXPORT DATA ---###################
-setwd("C:/Matias/Analyses/Data_outs")
-
 for (s in 1:length(Keep.sp))
 {
   NM=Species.names$Name[match(Keep.sp[s],Species.names$SPECIES)]
@@ -300,7 +298,7 @@ for (s in 1:length(Keep.sp))
            UP.CI=UP.CI/Mn,
            Mean=Mean/Mn)
   
-  write.csv(cpue.stand,paste(NM,".annual.abundance.NSF_relative.csv",sep=""),row.names=F) 
+  write.csv(cpue.stand,paste("C:/Matias/Analyses/Data_outs/",NM,'/',NM,".annual.abundance.NSF_relative.csv",sep=""),row.names=F) 
 }
 
 

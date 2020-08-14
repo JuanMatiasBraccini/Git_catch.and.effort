@@ -6822,7 +6822,7 @@ if(Use.Tweedie)
             mutate(cpue=catch.target/km.gillnet.hours.c)
           
           
-          #NEW##########
+          #NEW#
           #Fit lognormal + constant (set at 10% mean cpue, Campbell 2004)
           Mn.cpue=mean(d%>%filter(cpue>0)%>%pull(cpue))*.1
           d.logN=d%>%mutate(cpue=ifelse(cpue==0,Mn.cpue,cpue),
@@ -8915,11 +8915,11 @@ for (s in Tar.sp)
 {
   a=subset(Pred[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly_no.creep.csv",sep=""),row.names=F) 
+  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly_no.creep.csv",sep=""),row.names=F) 
   
   a=subset(Pred.daily[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily_no.creep.csv",sep=""),row.names=F) 
+  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.daily_no.creep.csv",sep=""),row.names=F) 
 
   rm(a)
 }
@@ -8929,11 +8929,11 @@ for (s in Tar.sp)
 {
   a=subset(Pred.creep[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly.csv",sep=""),row.names=F) 
+  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly.csv",sep=""),row.names=F) 
   
   a=subset(Pred.daily.creep[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily.csv",sep=""),row.names=F) 
+  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.daily.csv",sep=""),row.names=F) 
   rm(a)
 }
 
@@ -8947,11 +8947,11 @@ for (s in 1:length(Tar.sp))
     a=subset(Zone_preds.monthly[[s]][[z]]$Preds,select=Sel.vars)   
     names(a)=nams.Sel.vars
     ii=Tar.sp[s]
-    write.csv(a,paste(Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
+    write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
   
     a=subset(Zone_preds.daily[[s]][[z]]$Preds,select=Sel.vars)    
     names(a)=nams.Sel.vars
-    write.csv(a,paste(Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
+    write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
   
     rm(a)
   }
@@ -8967,11 +8967,11 @@ for (s in 1:length(Tar.sp))
     a=subset(Zone_preds.monthly[[s]][[z]]$Preds.creep,select=Sel.vars)   
     names(a)=nams.Sel.vars
     ii=Tar.sp[s]
-    write.csv(a,paste(Nms.sp[ii],".annual.abundance.basecase.monthly",Zn[z],".csv",sep=""),row.names=F) 
+    write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly",Zn[z],".csv",sep=""),row.names=F) 
     
     a=subset(Zone_preds.daily[[s]][[z]]$Preds.creep,select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(Nms.sp[ii],".annual.abundance.basecase.daily",Zn[z],".csv",sep=""),row.names=F) 
+    write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily",Zn[z],".csv",sep=""),row.names=F) 
     
     rm(a)
   }
@@ -8984,11 +8984,11 @@ for (s in Tar.sp)
 {
   a=subset(Pred.normlzd[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
+  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
   
   a=subset(Pred.daily.normlzd[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
+  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
   rm(a)
 }
 
@@ -9001,11 +9001,11 @@ for (s in 1:length(Tar.sp))
     a=subset(Zone_preds.monthly[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
     names(a)=nams.Sel.vars
     ii=Tar.sp[s]
-    write.csv(a,paste(Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_relative.csv",sep=""),row.names=F) 
+    write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_relative.csv",sep=""),row.names=F) 
     
     a=subset(Zone_preds.daily[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_relative.csv",sep=""),row.names=F) 
+    write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_relative.csv",sep=""),row.names=F) 
     
     rm(a)
   }
@@ -9019,14 +9019,14 @@ for (s in nnn[-sort(Tar.sp)])
   {
     a=subset(Pred.normlzd[[s]],select=Sel.vars.other)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
+    write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
   }
   
   if(!is.null(Pred.daily.normlzd[[s]]))
   {
     a=subset(Pred.daily.normlzd[[s]],select=Sel.vars.other)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(Nms.sp[s],".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
+    write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
   }
   rm(a)
 }
@@ -9659,6 +9659,80 @@ if (plot.cpue.paper.figures=="YES")
     }
     dev.off()  
     
+  }
+  
+  Check.num.vs.weight=FALSE
+  if(Check.num.vs.weight)
+  {
+    D=Data.daily.GN%>%filter(!is.na(nfish) & SPECIES<35000)%>%
+      mutate(year=as.numeric(substr(FINYEAR,1,4)))%>%
+      group_by(SPECIES,year)%>%
+      summarise(N.tot=sum(nfish),
+                W.tot=sum(LIVEWT.c/1000),
+                N.mean=mean(nfish),
+                W.mean=mean(LIVEWT.c),
+                Mean.weight=mean(LIVEWT.c/nfish),
+                Mean.weight.sd=sd(LIVEWT.c/nfish),
+                n = length(LIVEWT.c))%>%
+      mutate(se=Mean.weight.sd/sqrt(n))
+    A1=table(D$SPECIES)
+    SP=names(A1[A1>10])
+    D=subset(D,SPECIES%in%SP)
+    
+    Nms=Data.daily.GN%>%distinct(SPECIES,.keep_all = TRUE)%>%dplyr::select(c(SPECIES,SNAME))%>%
+      filter(SPECIES%in%SP)%>%arrange(SPECIES)
+    smart.par=function(n.plots,MAR,OMA,MGP) return(par(mfrow=n2mfrow(n.plots),mar=MAR,oma=OMA,las=1,mgp=MGP))
+    
+    tiff(file="total_number.vs.weight.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    smart.par(length(SP),MAR=c(1.5,4,1.5,2),OMA=c(3,3,.5,3),MGP=c(1,.5,0))
+    for(s in 1:length(SP))
+    {
+      with(subset(D,SPECIES==SP[s]),{
+        plot(year,N.tot,type='l',lwd=2,col=2,ylab='',xlab='',main=tolower(Nms$SNAME[s]))
+        par(new=T)
+        plot(year,W.tot,type='l',lwd=2,col=3,ylab='',xlab='',yaxt='n',xaxt='n')
+        axis(4,seq(round(min(W.tot)),round(max(W.tot)),length.out = 5))
+      })
+    }
+    mtext("Financial year",1,outer=T,line=.5,cex=1.2)
+    mtext("total numbers",2,outer=T,line=1.25,cex=1.2,las=3)
+    mtext("total weight (tonnes)",4,outer=T,line=1.25,cex=1.2,las=3)
+    plot.new()
+    legend("top",c("Number","Weight"),col=2:3,lty=1,bty='n',lwd=2,cex=1.25)
+    dev.off()
+    
+    
+    tiff(file="mean_number.vs.weight.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    smart.par(length(SP),MAR=c(1.5,4,1.5,2),OMA=c(3,3,.5,3),MGP=c(1,.5,0))
+    for(s in 1:length(SP))
+    {
+      with(subset(D,SPECIES==SP[s]),{
+        plot(year,N.mean,type='l',lwd=2,col=2,ylab='',xlab='',main=tolower(Nms$SNAME[s]))
+        par(new=T)
+        plot(year,W.mean,type='l',lwd=2,col=3,ylab='',xlab='',yaxt='n',xaxt='n')
+        axis(4,seq(round(min(W.mean)),round(max(W.mean)),length.out = 5))
+      })
+    }
+    mtext("Financial year",1,outer=T,line=.5,cex=1.2)
+    mtext("Mean numbers",2,outer=T,line=1.25,cex=1.2,las=3)
+    mtext("Mean weight (kg)",4,outer=T,line=1.25,cex=1.2,las=3)
+    plot.new()
+    legend("top",c("Number","Weight"),col=2:3,lty=1,bty='n',lwd=2,cex=1.25)
+    dev.off()
+    
+    
+    tiff(file="mean_size.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    smart.par(length(SP),MAR=c(1.5,4,1.5,2),OMA=c(3,3,.5,3),MGP=c(1,.5,0))
+    for(s in 1:length(SP))
+    {
+      with(subset(D,SPECIES==SP[s]),{
+        plot(year,Mean.weight,type='l',lwd=2,ylab='',xlab='',ylim=c(min(Mean.weight-1.96*se),max(Mean.weight+1.96*se)),main=tolower(Nms$SNAME[s]))
+        segments(year,Mean.weight+1.96*se,year,Mean.weight-1.96*se)
+      })
+    }
+    mtext("Financial year",1,outer=T,line=.5,cex=1.2)
+    mtext("Mean size (kg)",2,outer=T,line=1.25,cex=1.2,las=3)
+    dev.off()
   }
 }
 
