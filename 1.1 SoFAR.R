@@ -337,10 +337,10 @@ Table1.SoFar.Scalies[,ID.nm]= Table1.SoFar.Scalies[,ID.nm]/1000
 
 
 #order and add scientific name
-id=c("Gummy","Dusky_whaler","Whiskery","Sandbar","Hammerheads","Spinner","Wobbegongs","Rays","Common_saw_shark","School",
+id.elasmo=c("Gummy","Dusky_whaler","Whiskery","Sandbar","Hammerheads","Spinner","Wobbegongs","Rays","Common_saw_shark","School",
      "Other_elasmobranchs")
-Matched=match(id,Table1.SoFar.Elasmos$Species)
-id.0=id[which(is.na(Matched))]
+Matched=match(id.elasmo,Table1.SoFar.Elasmos$Species)
+id.0=id.elasmo[which(is.na(Matched))]
 Matched=Matched[!is.na(Matched)]
 Table1.SoFar.Elasmos=Table1.SoFar.Elasmos[Matched,]
 if(length(id.0)>0)
@@ -359,9 +359,9 @@ Table1.SoFar.Elasmos=merge(Table1.SoFar.Elasmos,Order.Elas.Sp.SoFAR,by="Species"
 THISS=c("Species","Species_or_taxon","Zone1","Zone2","West.dem","South","West","Total")
 Table1.SoFar.Elasmos=Table1.SoFar.Elasmos[,match(THISS,names(Table1.SoFar.Elasmos))]
 
-id=c("Blue_morwong","Blue_groper","West_Australian_dhufish","Pink_snapper","Boarfishes","Samsonfish","Redfishes","Mulloway","Sweetlips",
+id.scale=c("Blue_morwong","Blue_groper","West_Australian_dhufish","Pink_snapper","Boarfishes","Samsonfish","Redfishes","Mulloway","Sweetlips",
      "Baldchin_groper","Other_scalefish")
-Table1.SoFar.Scalies=Table1.SoFar.Scalies[match(id,Table1.SoFar.Scalies$Species),]
+Table1.SoFar.Scalies=Table1.SoFar.Scalies[match(id.scale,Table1.SoFar.Scalies$Species),]
 
 Group.total=colSums(Table1.SoFar.Scalies[,2:ncol(Table1.SoFar.Scalies)],na.rm=T)
 Group.total=data.frame(Species="Total Scalefish",rbind(Group.total))
@@ -859,129 +859,236 @@ dev.off()
 # For AMM -----------------------------------------------------------------
 do.AMM=FALSE
 if(do.AMM)
-{Management=read.csv('C:/Matias/Management/Sharks/Timeline management measures/Management_timeline.csv')
-Management=Management%>%
+{
+  library(stringr)
+  Management=read.csv('C:/Matias/Management/Sharks/Timeline management measures/Management_timeline.csv')
+  Management=Management%>%
   mutate(date=as.POSIXct(StartDate,format="%d/%m/%Y"),
          finyear=decimal_date(date))%>%
-  filter(Relevant.to%in%c('TDGDLF',"TDGDLF & NSF"))
+  filter(Relevant.to%in%c('TDGDLF',"TDGDLF & NSF") & 
+           round(finyear)<=as.numeric(substr(Current.yr,1,4)))
 
 
-#Catch and management measures timeline
-AMM.ktch.eff.managmtnt=function(GROUP,LAT1,LAT2,MGMT,SEP,Lab.font,Lab.back,
-                                nn,frms,n.frms,do.animation,speed)
-{
-  dat=subset(Data.monthly,SPECIES%in%GROUP & LAT<=LAT1 & LAT >=LAT2 & METHOD%in%c("GN","LL") &
-               Estuary=="NO")
-  
-  #aggregate by total
-  annual.catch.total=aggregate(LIVEWT.c~FINYEAR,data=dat,sum,na.rm=T)%>%
-    mutate(finyear=1+as.numeric(substr(FINYEAR,1,4)),
-           LIVEWT.c=LIVEWT.c/1000)%>%
-    dplyr::select(-FINYEAR)
-  
-  dummy=annual.catch.total[1:nrow(MGMT),]%>%
-    mutate(LIVEWT.c=NA,
-           finyear=MGMT$finyear)%>%
-    filter(!finyear%in%annual.catch.total$finyear)
-  annual.catch.total=rbind(annual.catch.total,dummy)
-  
-  Man=MGMT%>%dplyr::select(Event,finyear,Category)%>%mutate(id=1:nrow(MGMT))
-  
-  d=annual.catch.total%>%
-    left_join(Man,by='finyear')%>%
-    arrange(finyear)%>%
-    filter(finyear>=1975)%>%
-    mutate(LIVEWT.c=ifelse(is.na(LIVEWT.c),na.approx(LIVEWT.c),LIVEWT.c),
-           Category=ifelse(is.na(Category),"",Category),
-           Event=ifelse(is.na(Event),"",Event))
-  
-  set.seed(666)
-  colors=c(Data='red',Closure='steelblue',Other='forestgreen','NA'='transparent')
-  p=ggplot(d,
-           aes(finyear, LIVEWT.c,label=Event,color = factor(Category))) +
-    geom_line(colour="orange",size=1.25) + geom_point() +
-    geom_label_repel(box.padding=SEP,hjust = 0,size = Lab.font,fill=Lab.back) + 
-    geom_line(colour="orange",size=1.25, alpha = 0.3) + geom_point(alpha = 0.4)+
-    ylab("Cach (tonnes live wt)") + xlab("Financial year")+
-    theme(legend.position = "none",
-          axis.text=element_text(size=12),
-          axis.title=element_text(size=14)
-          # panel.background = element_rect(fill = "black", color  =  NA),
-          # panel.border = element_rect(fill = NA, color = "white"),  
-          # panel.grid.major = element_line(color = "grey20"),  
-          # panel.grid.minor = element_line(color = "grey20"),  
-          # panel.spacing = unit(0.5, "lines")
-    )+
-    scale_color_manual(values = colors)
-  p
-  ggsave("AMM_catch.management.tiff", width = 8,height = 5, dpi = 300, compression = "lzw")
-  
-  
-  
-  #animation
-  if(do.animation)
+  #Catch and management measures timeline
+  AMM.ktch.eff.managmtnt=function(GROUP,LAT1,LAT2,MGMT,SEP,Lab.font,Lab.back,
+                                  nn,frms,n.frms,do.animation,speed)
   {
-    Min.yr=min(dat$YEAR.c)
+    dat=subset(Data.monthly,SPECIES%in%GROUP & LAT<=LAT1 & LAT >=LAT2 & METHOD%in%c("GN","LL") &
+                 Estuary=="NO")
     
-    a=dat%>%
-      mutate(finyear=1+as.numeric(substr(FINYEAR,1,4)))%>%
-      group_by(finyear)%>%
-      summarise(LIVEWT.c=sum(LIVEWT.c)/1000)
+    #aggregate by total
+    annual.catch.total=aggregate(LIVEWT.c~FINYEAR,data=dat,sum,na.rm=T)%>%
+      mutate(finyear=1+as.numeric(substr(FINYEAR,1,4)),
+             LIVEWT.c=LIVEWT.c/1000)%>%
+      dplyr::select(-FINYEAR)
     
-    b=a[rep(1:nrow(a),nn),]%>%
-      arrange(finyear)
-    SEQ=seq(1,nrow(b),by=nn)
-    b$finyear[-SEQ]=NA
-    b$LIVEWT.c[-SEQ]=NA
-    b$finyear=with(b,ifelse(is.na(finyear),na.approx(finyear),finyear))
-    b$LIVEWT.c=with(b,ifelse(is.na(LIVEWT.c),na.approx(LIVEWT.c),LIVEWT.c))
+    dummy=annual.catch.total[1:nrow(MGMT),]%>%
+      mutate(LIVEWT.c=NA,
+             finyear=MGMT$finyear)%>%
+      filter(!finyear%in%annual.catch.total$finyear)
+    annual.catch.total=rbind(annual.catch.total,dummy)
     
-    Man1=b%>%
-      full_join(Man%>%filter(finyear>=Min.yr),by='finyear')%>%
-      filter(finyear>=Min.yr)%>%
-      mutate(Event=ifelse(is.na(Event),'',Event),
-             Category=ifelse(is.na(Category),'',Category))%>%
-      group_by(Event)%>%
-      mutate(n=n())%>%
-      mutate(temp = case_when((n >= n.frms) ~ (1),
-                              (n<n.frms) ~ (n.frms))) %>%
-      uncount(temp)%>%
-      dplyr::select(-c(id,n))%>%
+    Man=MGMT%>%dplyr::select(Event,finyear,Category)%>%mutate(id=1:nrow(MGMT))
+    
+    d=annual.catch.total%>%
+      left_join(Man,by='finyear')%>%
       arrange(finyear)%>%
-      data.frame
-    #dummy=Man1[rep(1,5),]
-    #dummy$Event=dummy$Category=''
-    #dummy$finyear=seq(dummy$finyear[1]-.5,dummy$finyear[1]-.99,length.out=nrow(dummy))
-    #Man1=rbind(dummy,Man1)
-    Man1$ID=1:nrow(Man1)
-    Man1$LIVEWT.c=with(Man1,ifelse(is.na(LIVEWT.c),na.approx(LIVEWT.c, rule=2),LIVEWT.c))
-    Man1$Event.yr=with(Man1,ifelse(Event!='',paste(round(finyear),Event,sep=': '),''))
-    anim <- ggplot(Man1, aes(finyear, LIVEWT.c,label=Event.yr)) +
-      geom_line(colour="orange",size=3) +
-      geom_label_repel(box.padding=SEP,hjust = 0,size = 9,fill=Lab.back)+
-      theme(legend.position = "none",
-            axis.text=element_text(size=16),
-            axis.title=element_text(size=18))+
-      scale_color_manual(values = colors)+
+      filter(finyear>=1975)%>%
+      mutate(LIVEWT.c=ifelse(is.na(LIVEWT.c),na.approx(LIVEWT.c),LIVEWT.c),
+             Category=ifelse(is.na(Category),"",Category),
+             Event=ifelse(is.na(Event),"",Event))
+    
+    set.seed(666)
+    colors=c(Data='red',Closure='steelblue',Other='forestgreen','NA'='transparent')
+    p=ggplot(d,
+             aes(finyear, LIVEWT.c,label=Event,color = factor(Category))) +
+      geom_line(colour="orange",size=1.25) + geom_point() +
+      geom_label_repel(box.padding=SEP,hjust = 0,size = Lab.font,fill=Lab.back) + 
+      geom_line(colour="orange",size=1.25, alpha = 0.3) + geom_point(alpha = 0.4)+
       ylab("Cach (tonnes live wt)") + xlab("Financial year")+
-      transition_reveal(as.numeric(ID))
-    p.animate=animate(anim,nframes=frms,duration = speed, height = 700, width = 1000)
-    anim_save("AMM_catch.management.gif", p.animate)
+      theme(legend.position = "none",
+            axis.text=element_text(size=12),
+            axis.title=element_text(size=14)
+            # panel.background = element_rect(fill = "black", color  =  NA),
+            # panel.border = element_rect(fill = NA, color = "white"),  
+            # panel.grid.major = element_line(color = "grey20"),  
+            # panel.grid.minor = element_line(color = "grey20"),  
+            # panel.spacing = unit(0.5, "lines")
+      )+
+      scale_color_manual(values = colors)
+    p
+    ggsave("AMM_catch.management.tiff", width = 8,height = 5, dpi = 300, compression = "lzw")
+    
+    
+    
+    #animation
+    if(do.animation)
+    {
+      Min.yr=min(dat$YEAR.c)
+      
+      a=dat%>%
+        mutate(finyear=1+as.numeric(substr(FINYEAR,1,4)))%>%
+        group_by(finyear)%>%
+        summarise(LIVEWT.c=sum(LIVEWT.c)/1000)
+      
+      b=a[rep(1:nrow(a),nn),]%>%
+        arrange(finyear)
+      SEQ=seq(1,nrow(b),by=nn)
+      b$finyear[-SEQ]=NA
+      b$LIVEWT.c[-SEQ]=NA
+      b$finyear=with(b,ifelse(is.na(finyear),na.approx(finyear),finyear))
+      b$LIVEWT.c=with(b,ifelse(is.na(LIVEWT.c),na.approx(LIVEWT.c),LIVEWT.c))
+      
+      Man1=b%>%
+        full_join(Man%>%filter(finyear>=Min.yr),by='finyear')%>%
+        filter(finyear>=Min.yr)%>%
+        mutate(Event=ifelse(is.na(Event),'',Event),
+               Category=ifelse(is.na(Category),'',Category))%>%
+        group_by(Event)%>%
+        mutate(n=n())%>%
+        mutate(temp = case_when((n >= n.frms) ~ (1),
+                                (n<n.frms) ~ (n.frms))) %>%
+        uncount(temp)%>%
+        dplyr::select(-c(id,n))%>%
+        arrange(finyear)%>%
+        data.frame
+      #dummy=Man1[rep(1,5),]
+      #dummy$Event=dummy$Category=''
+      #dummy$finyear=seq(dummy$finyear[1]-.5,dummy$finyear[1]-.99,length.out=nrow(dummy))
+      #Man1=rbind(dummy,Man1)
+      Man1$ID=1:nrow(Man1)
+      Man1$LIVEWT.c=with(Man1,ifelse(is.na(LIVEWT.c),na.approx(LIVEWT.c, rule=2),LIVEWT.c))
+      Man1$Event.yr=with(Man1,ifelse(Event!='',paste(round(finyear),Event,sep=': '),''))
+      anim <- ggplot(Man1, aes(finyear, LIVEWT.c,label=Event.yr)) +
+        geom_line(colour="orange",size=3) +
+        geom_label_repel(box.padding=SEP,hjust = 0,size = 9,fill=Lab.back)+
+        theme(legend.position = "none",
+              axis.text=element_text(size=20),
+              axis.title=element_text(size=24))+
+        scale_color_manual(values = colors)+
+        ylab("Cach (tonnes live wt)") + xlab("Financial year")+
+        transition_reveal(as.numeric(ID))
+      p.animate=animate(anim,nframes=frms,duration = speed, height = 700, width = 1000)
+      anim_save("AMM_catch.management.gif", p.animate)
+    }
+    
+  }
+  AMM.ktch.eff.managmtnt(GROUP=Elasmo.species,
+                         LAT1=TDGDLF.lat.range[1],
+                         LAT2=TDGDLF.lat.range[2],
+                         MGMT=Management,
+                         SEP=.1,
+                         Lab.font=3.5,
+                         Lab.back="white",
+                         nn=50,
+                         frms=300,
+                         n.frms=600,
+                         do.animation=TRUE,
+                         speed=100)  #lower speed value is faster
+  
+  #summary landed weight
+  Summary.landwt=DAT%>%
+        mutate(Taxa=case_when(
+          SPECIES%in%Elasmo.species ~ "Elasmo",
+          SPECIES%in%Scalefish.species ~ "Scalefish"))%>%
+        group_by(Taxa)%>%
+        summarise(Catch.tons=round(sum(LANDWT)/1000,0))
+  
+
+  fun.Tab1.SoFaR.LANDWT=function(SP,id,Tab.livewt,Add)
+  {
+    Dat=DAT  
+    Dat$Spec.tab1=NA
+    SPECIES=names(SP)
+    for(p in 1:length(SPECIES))
+    {
+      Dat$Spec.tab1=with(Dat,ifelse(SPECIES%in%SP[[p]],names(SP[p]),Spec.tab1))
+    }
+    Dat=subset(Dat,!(is.na(Spec.tab1)))
+    Dat$LANDWT=Dat$LANDWT/1000
+    TABLA=aggregate(LANDWT~Spec.tab1+Bioregion,data=Dat,sum,na.rm=T)
+    TABLA2=aggregate(LANDWT~Spec.tab1+zone,data=Dat,sum,na.rm=T)
+    wide <- reshape(TABLA,v.names="LANDWT",timevar="Bioregion",idvar="Spec.tab1",direction="wide")
+    colnames(wide)=c("Species","South","West")
+    wide=wide[,match(c("Species","West","South"),names(wide))]
+    wide2 <- reshape(TABLA2,v.names="LANDWT",timevar="zone",idvar="Spec.tab1",direction="wide")
+    colnames(wide2)=c("Species","West.dem","Zone1","Zone2")
+    wide=merge(wide,wide2,by="Species")
+    wide[,2:ncol(wide)]=round(wide[,2:ncol(wide)])
+    wide$Total=rowSums(wide[,2:3],na.rm=T)
+    
+    Matched=match(id,wide$Species)
+    id.0=id[which(is.na(Matched))]
+    Matched=Matched[!is.na(Matched)]
+    wide=wide[Matched,]
+    
+    all=colSums(wide[,-1],na.rm=T)
+    nms=names(all)
+    all=matrix(all,nrow=1)
+    colnames(all)=nms
+    all=cbind(Species=Add,as.data.frame(all))
+    wide=rbind(wide,all)
+    wide[,3:ncol(wide)]=round(wide[,3:ncol(wide)],1)
+    wide[is.na(wide)] = ""
+    wide[wide==0] = "<0.1"
+    wide=wide%>%rename(Total.land=Total)
+    
+    Tab.livewt=Tab.livewt%>%
+      mutate_all(funs(ifelse(.=='<0.1', 0, .)))%>%
+      mutate_at(vars(JASDGLF.Zn1,JASDGLF.Zn2,WCDGDLF,Total),
+                as.numeric)%>%
+      mutate_if(is.numeric, round, 0)
+    Tab.livewt[is.na(Tab.livewt)] = ""
+    Tab.livewt[Tab.livewt==0] = "<0.1"
+    
+    wide=Tab.livewt%>%
+      left_join(wide,by=c('Name' = 'Species'))%>%
+      mutate(JASDGLF.Zn1=paste(JASDGLF.Zn1," (",Zone1,")",sep=''),
+             JASDGLF.Zn2=paste(JASDGLF.Zn2," (",Zone2,")",sep=''),
+             WCDGDLF=paste(WCDGDLF," (",West.dem,")",sep=''),
+             Total=paste(Total," (",Total.land,")",sep=''))%>%
+      dplyr::select(Name,JASDGLF.Zn1,JASDGLF.Zn2,WCDGDLF,Total)
+    
+    wide=wide%>%mutate_all(function(x) ifelse(x==' ()','',x))
+    return(wide)
   }
   
-}
-AMM.ktch.eff.managmtnt(GROUP=Elasmo.species,
-                       LAT1=TDGDLF.lat.range[1],
-                       LAT2=TDGDLF.lat.range[2],
-                       MGMT=Management,
-                       SEP=.1,
-                       Lab.font=3.5,
-                       Lab.back="white",
-                       nn=50,
-                       frms=180,
-                       n.frms=500,
-                       do.animation=TRUE,
-                       speed=50)  #lower speed value is faster
-
+  AAM.table.Elasmos=fun.Tab1.SoFaR.LANDWT(SP=Spec.tab.1.elasmo,
+                                          id=id.elasmo,
+                                          Tab.livewt=Table1.SoFar.Elasmos,
+                                          Add='Total Elasmobranchs')
+  
+  AAM.table.Scalies=fun.Tab1.SoFaR.LANDWT(SP=Spec.tab.1.scalies,
+                                          id=id.scale,
+                                          Tab.livewt=Table1.SoFar.Scalies%>%
+                                            filter(Name!='Demersal scalefish suite component'),
+                                          Add='Total Scalefish')
+  
+  dummy=MainFeatures.doc
+  colnames(dummy)[1:2]=c("First.col","Second.col")
+  dummy=dummy%>%
+    mutate(Catch.tons=str_remove(Catch.tons, " t"))
+  dummy=dummy%>%
+    mutate(Catch.tons=
+             case_when(SPECIES=="Total sharks and rays"~
+                         paste(Catch.tons," (",
+                               Summary.landwt[match('Elasmo',Summary.landwt$Taxa),'Catch.tons'],
+                               ")",sep=''),
+                       SPECIES=="Total scalefish"~
+                         paste(Catch.tons," (",
+                               Summary.landwt[match('Scalefish',Summary.landwt$Taxa),'Catch.tons'],
+                               ")",sep=''),
+                       SPECIES=="Gummy shark"~AAM.table.Elasmos[match('Gummy',AAM.table.Elasmos$Name),'Total'],
+                       SPECIES=="Dusky shark"~AAM.table.Elasmos[match('Dusky_whaler',AAM.table.Elasmos$Name),'Total'],
+                       SPECIES=="Sandbar shark"~AAM.table.Elasmos[match('Sandbar',AAM.table.Elasmos$Name),'Total'],
+                       SPECIES=="Whiskery shark"~AAM.table.Elasmos[match('Whiskery',AAM.table.Elasmos$Name),'Total'],
+                       TRUE ~ Catch.tons))
+  
+  
+  
+  write.table(dummy,"AMM_Summary.LANDWT.csv",sep = ",",row.names = F)
+  write.table(AAM.table.Elasmos,"AMM_Table1.SoFar.Elasmos.csv",sep = ",",row.names = F)
+  write.table(AAM.table.Scalies,"AMM_Table1.SoFar.Scalies.csv",sep = ",",row.names = F)
+  
   
 }
