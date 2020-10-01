@@ -73,7 +73,7 @@ require(animation) # NB, must install ImageMagick
 library(dplyr)
 library(tidyr)
 
-options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240) 
+options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240,dplyr.summarise.inform = FALSE) 
 par.default=par()
 
 source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
@@ -128,9 +128,8 @@ if(Get.CAESS.Logbook=="YES")
            rowid=NA)
   Data.monthly.CAESS=Data.monthly.CAESS%>%
                       rename(LIVEWT=livewt,
-                             SNAME=sname1,
                              Factor=FACTOR)
-
+  if(!"SNAME"%in%names(Data.monthly.CAESS)) Data.monthly.CAESS=Data.monthly.CAESS%>%rename(SNAME=sname1)
   ID=match(names(Data.monthly),names(Data.monthly.CAESS))
   Data.monthly.CAESS=Data.monthly.CAESS[,ID]
   Data.monthly=rbind(Data.monthly,Data.monthly.CAESS)
@@ -161,7 +160,7 @@ channel <- odbcConnectExcel2007("Fish Cube WA_daily.other_names.xlsx")
 Data.daily.other.fisheries.names<- sqlFetch(channel,"Sheet1")
 close(channel)
 Data.daily.other.fisheries.names=Data.daily.other.fisheries.names%>%
-  select(RSSpeciesId,species,CAESname)%>%
+  dplyr::select(RSSpeciesId,species,CAESname)%>%
   filter(RSSpeciesId%in%unique(Data.daily.other.fisheries$`Species Id`)&
            species<31000)
 
@@ -176,7 +175,7 @@ Data.daily.other.fisheries=Data.daily.other.fisheries%>%
          year='Calendar Year',
          RSCommonName='Species Common Name')%>%
   left_join(Data.daily.other.fisheries.names,by=c("Species Id" = "RSSpeciesId"))%>%
-  select(Bioregion,date,Vessel,method,fishery,fishery.name,block10,finyear,year,
+  dplyr::select(Bioregion,date,Vessel,method,fishery,fishery.name,block10,finyear,year,
          species,RSCommonName,CAESname,livewt)
 
 #TEPS
@@ -439,7 +438,7 @@ if(explore.Catch.compo=="YES")
   fun.sample.catch.age.com(d=Data.daily %>%
                              filter(port=="ALBANY" & finyear%in%c('2014-15','2015-16','2016-17') &
                                       species%in%c(17003,17001,18003,18007))%>% 
-                             select(port,species,nfish,vessel,TSNo,finyear))
+                             dplyr::select(port,species,nfish,vessel,TSNo,finyear))
 }
 
 
@@ -511,10 +510,11 @@ only.liver.fin=Data.monthly%>%
                   pull(Same.return)
 only.liver.fin=Data.monthly%>%
                 filter(Same.return%in%only.liver.fin & SPECIES<50000)%>%
+                mutate(SNAME=tolower(SNAME))%>%
                 group_by(Same.return,SNAME)%>%
                 summarise(n = n()) %>%
                 mutate(freq = n / sum(n))%>%
-                select(-n)%>%
+                dplyr::select(-n)%>%
                 spread(SNAME,freq,fill=0)%>%
                 data.frame%>%
                 mutate(Prop=shark.fins+shark.liver)
@@ -737,11 +737,13 @@ Data.monthly$zone=as.character(with(Data.monthly,ifelse(LONG>=116.5 & LAT<=(-26)
                   ifelse(LAT>(-23) & LONG>=123.75,"Joint",NA))))))))
 
 
-# A.9. Create Monthly effort dataset
+# A.9. Create Monthly effort dataset   
 Data.monthly$NETLEN=with(Data.monthly,ifelse(METHOD%in%c("LL","HL","DL")&NETLEN>0,NA,NETLEN))
 Effort.vars=c("FDAYS","BDAYS","HOURS","HOOKS","SHOTS","NETLEN")
 Effort.monthly=Data.monthly[,match(c("FINYEAR","YEAR","MONTH","zone","VESSEL","METHOD","BLOCKX",Effort.vars,
-                                      "YEAR.c","Same.return","LAT","LONG"),names(Data.monthly))]
+                                      "YEAR.c","Same.return","LAT","LONG","fishery"),names(Data.monthly))]
+Effort.monthly=Effort.monthly%>%rename(FisheryCode=fishery)
+
   #add dummy nlines
 Effort.monthly$nlines=NA
 Effort.vars=c(Effort.vars,"nlines")
@@ -1221,7 +1223,8 @@ Data.daily$netlen=with(Data.daily,ifelse(method%in%c("LL","HL","DL")&netlen>0,NA
 Effort.vars.daily=c("fdays","bdays","hours","hooks","shots","netlen","nlines")
 Effort.daily=Data.daily[,match(c("SNo","DSNo","TSNo","Same.return.SNo","finyear","year","month","date",
               "zone","vessel","method","blockx","block10",Effort.vars.daily,"Same.return","ID","LatDeg",
-              "LongDeg","LatMin","LongMin"),names(Data.daily))]
+              "LongDeg","LatMin","LongMin","fishery"),names(Data.daily))]
+Effort.daily=Effort.daily%>%rename(FisheryCode=fishery)
 Effort.daily$year.c=Effort.daily$year
 Effort.daily$LAT=Effort.daily$LatDeg+(Effort.daily$LatMin/60)
 Effort.daily$LONG=Effort.daily$LongDeg+(Effort.daily$LongMin/60)
@@ -1339,7 +1342,7 @@ if(Inspect.New.dat=="YES")
   Avg.wt.list=vector('list',length=length(Uniq.sp.with.weight))
   names(Avg.wt.list)=Uniq.sp.nam.with.weight
   for (i in 1:length(Uniq.sp.with.weight)) Avg.wt.list[[i]]=fn.avg.wt(Uniq.sp.with.weight[i],Uniq.sp.nam.with.weight[i])
-  Current.data=Current.data%>%left_join(Wei.range%>%select(TW.min,TW.max,SPECIES),
+  Current.data=Current.data%>%left_join(Wei.range%>%dplyr::select(TW.min,TW.max,SPECIES),
                                         by=c("species"="SPECIES"))
 
   Current.data$Chk.wt=with(Current.data,
@@ -1520,9 +1523,10 @@ names(Data.daily)=sort(c(names(Data.monthly),"day","block10"))
 #       have more rows than Monthly records
 Data.daily.agg=aggregate(cbind(LANDWT,LIVEWT)~FINYEAR+YEAR+MONTH+VESSEL+METHOD+BLOCKX+
                           blockxFC+SPECIES+SNAME+CONDITN+Factor+YEAR.c+LAT+LONG+Same.return+
-                           TYPE.DATA+Bioregion+zone+Estuary+RSCommonName+RSSpeciesId,
+                           TYPE.DATA+Bioregion+zone+Estuary+RSCommonName+RSSpeciesId+
+                           FisheryZone+FisheryCode+PORT,
                     data=Data.daily[,-match(c("day","block10"),names(Data.daily))],sum,na.rm=T)
-
+Data.daily.agg=Data.daily.agg%>%rename(Landing.Port=PORT)
 
 #SECTION C. ---- CATCH MERGING AND CORRECTIONS ----
 
@@ -1601,12 +1605,8 @@ if(length(IIdd)>0)
 rm(a,b)
 
 
-Data.daily.agg$FisheryZone=NA
-Data.daily.agg$FisheryCode=NA
-Data.daily.agg$Landing.Port=NA
 Data.daily.agg$BDAYS=NA
 Data.daily.agg$licence=NA
-Data.daily.agg$Landing.Port=NA
 Data.daily.agg$rowid=NA
 
   #merge monthly and aggregated daily
@@ -1747,7 +1747,7 @@ fn.chk.ktch(d1=Data.monthly.original,
 # }
    
 #Export conversion factors for fishers to check
-out.ratios=F
+out.ratios=FALSE
 if(out.ratios)
 {
   Condition.codes=data.frame(CONDITN=c("HG","WH","WF","WD","SC","FL","NU","OT","GG","HD"),
@@ -1762,7 +1762,7 @@ if(out.ratios)
     left_join(Condition.codes,by='CONDITN')%>%
     arrange(SPECIES)%>%
     rename(condition=CONDITN,Species=SNAME,Conversion.factor=Factor.c)%>%
-    select(c(Species,condition,Description,Conversion.factor))
+    dplyr::select(c(Species,condition,Description,Conversion.factor))
   write.csv(out1,"C:\\Matias\\Presentations\\DoF\\AMM\\2019\\Conversion.ratios.csv",row.names = F)
 }
 
@@ -5977,9 +5977,9 @@ if(do.Alexs=="YES")
 ##################--- F. PROCEDURE SECTION ---##############
 #SECTION F 1. ---- EXTRACT QUANTITIES ---- 
 
-#1 Check for spatial expansion
+#Check for spatial expansion
 
-#1.1. Annual
+  #Annual
 Expand.fun=function(DATA)
 {
   dummy=1:NN.monthly
@@ -6058,13 +6058,13 @@ Effort1.fun=function(DATA)
               Av.eff.fleet.LL=Annual.av.eff.fleet.LL))
 }
 
-#number of blocks
+  #number of blocks
 N.blocks=unique(Data.monthly$BLOCKX)
 N.blocks=N.blocks[!N.blocks%in%Estuaries]
 N.blocks=length(N.blocks)
 
 
-#1.2. Proportion of blocks fished per month for each year
+  #Proportion of blocks fished per month for each year
 # Table.0.catch.block.month=matrix(nrow=NN.monthly,ncol=12)
 # rownames(Table.0.catch.block.month)=FINYEAR.monthly
 # colnames(Table.0.catch.block.month)=1:12
@@ -6078,6 +6078,71 @@ N.blocks=length(N.blocks)
 #   Table.0.catch.block.month[i,]=round(store/N.blocks,3)
 # }
 # 
+
+#1. Define shark fisheries in the north and south  
+Effort.monthly=Effort.monthly%>%
+       mutate(Shark.fishery=case_when(zone=='Joint' & FisheryCode%in%c('CL02','OT')~'JANS',
+                                      zone=='North' & FisheryCode%in%c('C127','OT')~'WANCS',
+                                      zone=='West' & FisheryCode%in%c('WCGL','C070')~'WCDGDL',
+                                      zone=='Zone1' & FisheryCode=='WCGL'~'JASDGDL',
+                                      is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
+                                      FisheryCode%in%c("SGL1","SGL2","SGL")~'JASDGDL',
+                                      zone%in%c('West','Zone1') & FisheryCode=='OT'~'OANCGCWC',
+                                      FisheryCode=="WL"~'OASC',
+                                      TRUE~"non.shark.fishery"))
+Effort.daily=Effort.daily%>%
+  mutate(Shark.fishery=case_when(zone=='Joint' & FisheryCode%in%c('CL02','OT')~'JANS',
+                                 zone=='North' & FisheryCode%in%c('C127','OT')~'WANCS',
+                                 zone=='West' & FisheryCode%in%c('WCGL','C070')~'WCDGDL',
+                                 zone=='Zone1' & FisheryCode=='WCGL'~'JASDGDL',
+                                 is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
+                                 FisheryCode%in%c("SGL1","SGL2","SGL")~'JASDGDL',
+                                 zone%in%c('West','Zone1') & FisheryCode=='OT'~'OANCGCWC',
+                                 FisheryCode=="WL"~'OASC',
+                                 TRUE~"non.shark.fishery"))
+
+Data.monthly=Data.monthly%>%
+  mutate(Shark.fishery=case_when(zone=='Joint' & FisheryCode%in%c('CL02','OT')~'JANS',
+                                 zone=='North' & FisheryCode%in%c('C127','OT')~'WANCS',
+                                 zone=='West' & FisheryCode%in%c('WCGL','C070')~'WCDGDL',
+                                 zone=='Zone1' & FisheryCode=='WCGL'~'JASDGDL',
+                                 is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
+                                 FisheryCode%in%c("SGL1","SGL2","SGL")~'JASDGDL',
+                                 zone%in%c('West','Zone1') & FisheryCode=='OT'~'OANCGCWC',
+                                 FisheryCode=="WL"~'OASC',
+                                 TRUE~"non.shark.fishery"))
+
+Data.monthly.north=Data.monthly.north%>%
+  mutate(Shark.fishery=case_when(zone=='Joint' & FisheryCode%in%c('CL02','OT')~'JANS',
+                                 zone=='North' & FisheryCode%in%c('C127','OT')~'WANCS',
+                                 zone=='West' & FisheryCode%in%c('WCGL','C070')~'WCDGDL',
+                                 zone=='Zone1' & FisheryCode=='WCGL'~'JASDGDL',
+                                 is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
+                                 FisheryCode%in%c("SGL1","SGL2","SGL")~'JASDGDL',
+                                 zone%in%c('West','Zone1') & FisheryCode=='OT'~'OANCGCWC',
+                                 FisheryCode=="WL"~'OASC',
+                                 TRUE~"non.shark.fishery"))
+
+Data.daily=Data.daily%>%
+  mutate(Shark.fishery=case_when(zone=='Joint' & FisheryCode%in%c('CL02','OT')~'JANS',
+                                 zone=='North' & FisheryCode%in%c('C127','OT')~'WANCS',
+                                 zone=='West' & FisheryCode%in%c('WCGL','C070')~'WCDGDL',
+                                 zone=='Zone1' & FisheryCode=='WCGL'~'JASDGDL',
+                                 is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
+                                 FisheryCode%in%c("SGL1","SGL2","SGL")~'JASDGDL',
+                                 zone%in%c('West','Zone1') & FisheryCode=='OT'~'OANCGCWC',
+                                 FisheryCode=="WL"~'OASC',
+                                 TRUE~"non.shark.fishery"))
+Data.daily.north=Data.daily.north%>%
+  mutate(Shark.fishery=case_when(zone=='Joint' & FisheryCode%in%c('CL02','OT')~'JANS',
+                                 zone=='North' & FisheryCode%in%c('C127','OT')~'WANCS',
+                                 zone=='West' & FisheryCode%in%c('WCGL','C070')~'WCDGDL',
+                                 zone=='Zone1' & FisheryCode=='WCGL'~'JASDGDL',
+                                 is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
+                                 FisheryCode%in%c("SGL1","SGL2","SGL")~'JASDGDL',
+                                 zone%in%c('West','Zone1') & FisheryCode=='OT'~'OANCGCWC',
+                                 FisheryCode=="WL"~'OASC',
+                                 TRUE~"non.shark.fishery"))
 
 
 #2. Calculate gillnet effort 
@@ -6459,18 +6524,24 @@ Effort.daily$Fishing_yr=with(Effort.daily,ifelse(month>=6,year,year-1))
         #km gn days 
 if(Use.Date=="NO")
 {
-  Attach.Effort.daily.c=aggregate(Km.Gillnet.Days.c~ID+vessel+zone+finyear,data=Effort.daily,max,na.rm=T)
-  Attach.Effort.daily=aggregate(Km.Gillnet.Days.inv~ID+vessel+zone+finyear,data=Effort.daily,max,na.rm=T)
+  Attach.Effort.daily.c=aggregate(Km.Gillnet.Days.c~ID+vessel+zone+finyear,
+                                  data=subset(Effort.daily,!Shark.fishery=='non.shark.fishery'),max,na.rm=T)
+  Attach.Effort.daily=aggregate(Km.Gillnet.Days.inv~ID+vessel+zone+finyear,
+                                  data=subset(Effort.daily,!Shark.fishery=='non.shark.fishery'),max,na.rm=T)
   
-  Jodie.Effort.daily.c_block10=aggregate(Km.Gillnet.Days.c~ID+vessel+zone+Fishing_yr+block10,data=Effort.daily,max,na.rm=T)
+  Jodie.Effort.daily.c_block10=aggregate(Km.Gillnet.Days.c~ID+vessel+zone+Fishing_yr+block10,
+                                  data=subset(Effort.daily,!Shark.fishery=='non.shark.fishery'),max,na.rm=T)
 }
 
 if(Use.Date=="YES")
 {
-  Attach.Effort.daily.c=aggregate(Km.Gillnet.Days.c~date+vessel+zone+finyear,data=Effort.daily,max,na.rm=T) 
-  Attach.Effort.daily=aggregate(Km.Gillnet.Days.inv~date+vessel+zone+finyear,data=Effort.daily,max,na.rm=T)
+  Attach.Effort.daily.c=aggregate(Km.Gillnet.Days.c~date+vessel+zone+finyear,
+                                  data=subset(Effort.daily,!Shark.fishery=='non.shark.fishery'),max,na.rm=T) 
+  Attach.Effort.daily=aggregate(Km.Gillnet.Days.inv~date+vessel+zone+finyear,
+                                data=subset(Effort.daily,!Shark.fishery=='non.shark.fishery'),max,na.rm=T)
   
-  Jodie.Effort.daily.c_block10=aggregate(Km.Gillnet.Days.c~date+vessel+zone+Fishing_yr+block10,data=Effort.daily,max,na.rm=T)
+  Jodie.Effort.daily.c_block10=aggregate(Km.Gillnet.Days.c~date+vessel+zone+Fishing_yr+block10,
+                                data=subset(Effort.daily,!Shark.fishery=='non.shark.fishery'),max,na.rm=T)
 }
 
 Attach.Effort.daily.c=aggregate(Km.Gillnet.Days.c~zone+finyear,data=Attach.Effort.daily.c,sum,na.rm=T)
@@ -6479,10 +6550,13 @@ Jodie.Effort.daily.c_block10=aggregate(Km.Gillnet.Days.c~vessel+zone+Fishing_yr+
 
 
         #km gn hours
-Attach.Effort.daily.hrs.c=aggregate(Km.Gillnet.Hours.c~finyear+vessel+ID+zone,data=Effort.daily,max,na.rm=T)
-Attach.Effort.daily.hrs=aggregate(Km.Gillnet.Hours.inv~finyear+vessel+ID+zone,data=Effort.daily,max,na.rm=T)
+Attach.Effort.daily.hrs.c=aggregate(Km.Gillnet.Hours.c~finyear+vessel+ID+zone,
+                                    data=subset(Effort.daily,!Shark.fishery=='non.shark.fishery'),max,na.rm=T)
+Attach.Effort.daily.hrs=aggregate(Km.Gillnet.Hours.inv~finyear+vessel+ID+zone,
+                                  data=subset(Effort.daily,!Shark.fishery=='non.shark.fishery'),max,na.rm=T)
 
-Jodie.Effort.daily.hrs.c_block10=aggregate(Km.Gillnet.Hours.c~Fishing_yr+vessel+ID+zone+block10,data=Effort.daily,max,na.rm=T)
+Jodie.Effort.daily.hrs.c_block10=aggregate(Km.Gillnet.Hours.c~Fishing_yr+vessel+ID+zone+block10,
+                                           data=subset(Effort.daily,!Shark.fishery=='non.shark.fishery'),max,na.rm=T)
 
 # if(Use.Date=="YES")
 # {
@@ -6499,15 +6573,11 @@ Jodie.Effort.daily.hrs.c_block10=aggregate(Km.Gillnet.Hours.c~zone+Fishing_yr+ve
 Attach.Effort.daily.c=Attach.Effort.daily.c %>% left_join(Attach.Effort.daily.hrs.c,by=c("zone","finyear"))
 Attach.Effort.daily=Attach.Effort.daily %>% left_join(Attach.Effort.daily.hrs,by=c("zone","finyear"))
 Attach.Effort.daily=Attach.Effort.daily.c %>% left_join(Attach.Effort.daily,by=c("zone","finyear"))
-#Attach.Effort.daily.c=merge(Attach.Effort.daily.c,Attach.Effort.daily.hrs.c,by=c("zone","finyear"),all=T)
-#Attach.Effort.daily=merge(Attach.Effort.daily,Attach.Effort.daily.hrs,by=c("zone","finyear"),all=T)
-#Attach.Effort.daily=merge(Attach.Effort.daily.c,Attach.Effort.daily,by=c("zone","finyear"),all.x=T)
 
 
 Jodie.Effort=Jodie.Effort.daily.c_block10%>%full_join(Jodie.Effort.daily.hrs.c_block10,
                                                 by=c("vessel","zone","Fishing_yr","block10"))
-#Jodie.Effort=merge(Jodie.Effort.daily.c_block10,Jodie.Effort.daily.hrs.c_block10,
-#                   by=c("vessel","zone","Fishing_yr","block10"),all.x=T)
+
 
 
 
@@ -6529,8 +6599,10 @@ if(Apply.zn2.multi.sht=="Yes")
 #note: max is used to remove duplicated effort records from same return (i.e. from different species caught in that return)
     #km gn days             
       #max to remove duplicates
-Attach.Effort.monthly.c=aggregate(Km.Gillnet.Days.c~MONTH+BLOCKX+VESSEL+zone+FINYEAR,data=Effort.monthly,max,na.rm=T)
-Attach.Effort.monthly=aggregate(Km.Gillnet.Days.inv~MONTH+BLOCKX+VESSEL+zone+FINYEAR,data=Effort.monthly,max,na.rm=T)
+Attach.Effort.monthly.c=aggregate(Km.Gillnet.Days.c~MONTH+BLOCKX+VESSEL+zone+FINYEAR,
+                                  data=subset(Effort.monthly,!Shark.fishery=='non.shark.fishery'),max,na.rm=T)
+Attach.Effort.monthly=aggregate(Km.Gillnet.Days.inv~MONTH+BLOCKX+VESSEL+zone+FINYEAR,
+                                  data=subset(Effort.monthly,!Shark.fishery=='non.shark.fishery'),max,na.rm=T)
 
       #split boundary blocks
 fn.split.boundary=function(DAT,What)
@@ -6556,8 +6628,10 @@ Attach.Effort.monthly=aggregate(Km.Gillnet.Days.inv~zone+FINYEAR,data=Attach.Eff
 
     #km gn hours
       #max to remove duplicates
-Attach.Effort.monthly.hrs.c=aggregate(Km.Gillnet.Hours.c~MONTH+BLOCKX+VESSEL+zone+FINYEAR,data=Effort.monthly,max,na.rm=T)
-Attach.Effort.monthly.hrs=aggregate(Km.Gillnet.Hours.inv~MONTH+BLOCKX+VESSEL+zone+FINYEAR,data=Effort.monthly,max,na.rm=T)
+Attach.Effort.monthly.hrs.c=aggregate(Km.Gillnet.Hours.c~MONTH+BLOCKX+VESSEL+zone+FINYEAR,
+                                      data=subset(Effort.monthly,!Shark.fishery=='non.shark.fishery'),max,na.rm=T)
+Attach.Effort.monthly.hrs=aggregate(Km.Gillnet.Hours.inv~MONTH+BLOCKX+VESSEL+zone+FINYEAR,
+                                    data=subset(Effort.monthly,!Shark.fishery=='non.shark.fishery'),max,na.rm=T)
 
 
       #split boundary blocks
@@ -6573,9 +6647,6 @@ Attach.Effort.monthly.hrs=aggregate(Km.Gillnet.Hours.inv~zone+FINYEAR,data=Attac
 Attach.Effort.monthly.c=Attach.Effort.monthly.c %>%left_join(Attach.Effort.monthly.hrs.c,by=c("zone","FINYEAR"))
 Attach.Effort.monthly=Attach.Effort.monthly %>%left_join(Attach.Effort.monthly.hrs,by=c("zone","FINYEAR"))
 Attach.Effort.monthly=Attach.Effort.monthly.c %>%left_join(Attach.Effort.monthly,by=c("zone","FINYEAR"))
-#Attach.Effort.monthly.c=merge(Attach.Effort.monthly.c,Attach.Effort.monthly.hrs.c,by=c("zone","FINYEAR"),all=T)
-#Attach.Effort.monthly=merge(Attach.Effort.monthly,Attach.Effort.monthly.hrs,by=c("zone","FINYEAR"),all=T)
-#Attach.Effort.monthly=merge(Attach.Effort.monthly.c,Attach.Effort.monthly,by=c("zone","FINYEAR"),all.x=T)
 
 rm(Attach.Effort.monthly.c,Attach.Effort.monthly.hrs.c,Attach.Effort.monthly.hrs)    
    
@@ -6609,7 +6680,8 @@ if(Use.Date=="YES") use.ID="NO"   #select if aggregating effort by date
 fn.Eff.Sofar=function(THESE.YRS)
 {
   #3.1.1. Aggregate effort by year and zone
-  SUBSET=subset(Effort.daily,finyear%in%THESE.YRS)
+  SUBSET=Effort.daily%>%
+      filter(finyear%in%THESE.YRS & !Shark.fishery=='non.shark.fishery')
   
   #km gn days                         
   if(use.shots=="NO")
@@ -6849,15 +6921,19 @@ Total.effort.hours.monthly=data.frame(FINYEAR=FinYR,
                           Total.effort.joint.hours.monthly$JASGL)
 
   #NSF  
-Effort.monthly.NSF=subset(Effort.monthly,zone%in%c("Closed","Joint","North"),
+Effort.monthly.NSF=subset(Effort.monthly,zone%in%c("Closed","Joint","North") & 
+                          Shark.fishery%in%c('JANS','WANCS'),
                      select=c(FINYEAR,MONTH,BLOCKX,zone,VESSEL,METHOD,Same.return,
-                                   FDAYS,BDAYS.c,HOURS.c,HOOKS,SHOTS.c,NETLEN.c,nlines,
-                                   Km.Gillnet.Days.c,Km.Gillnet.Hours.c))
+                              FDAYS,BDAYS.c,HOURS.c,HOOKS,SHOTS.c,NETLEN.c,nlines,
+                              Km.Gillnet.Days.c,Km.Gillnet.Hours.c,
+                              FisheryCode))
 
-Effort.daily.NSF=subset(Effort.daily,zone%in%c("Closed","Joint","North"),
+Effort.daily.NSF=subset(Effort.daily,zone%in%c("Closed","Joint","North") & 
+                          Shark.fishery%in%c('JANS','WANCS'),
                     Select=c(date,finyear,month,blockx,zone,vessel,method,Same.return,Same.return.SNo,
-                                 fdays,bdays.c,hours.c,hooks,shots.c,netlen.c,nlines,
-                                 Km.Gillnet.Days.c,Km.Gillnet.Hours.c))
+                             fdays,bdays.c,hours.c,hooks,shots.c,netlen.c,nlines,
+                             Km.Gillnet.Days.c,Km.Gillnet.Hours.c,
+                             FisheryCode))
 
 Effort.monthly.NSF$hook.days=with(Effort.monthly.NSF,BDAYS.c*HOOKS)
 Effort.monthly.NSF$hook.hours=with(Effort.monthly.NSF,BDAYS.c*HOOKS*HOURS.c)
@@ -6878,14 +6954,13 @@ Attach.Effort.daily.c_NSF=aggregate(cbind(hook.days,hook.hours)~finyear,
                                     data=Attach.Effort.daily.c_NSF,sum,na.rm=T)
 names(Attach.Effort.monthly.c_NSF)=names(Attach.Effort.daily.c_NSF)
 
-#Total.effort_NFS=rbind(Attach.Effort.monthly.c_NSF,Attach.Effort.daily.c_NSF)  #issue: check daily 2007-08, too high effrot
-Total.effort_NFS=Attach.Effort.monthly.c_NSF
-Total.effort_NFS$hook.days=Total.effort_NFS$hook.days/1000
-Total.effort_NFS$hook.hours=Total.effort_NFS$hook.hours/1000
-Total.effort_NFS=aggregate(cbind(hook.days,hook.hours)~finyear,Total.effort_NFS,sum)
-
-#add dummy effort from , sort out issue of 2007-08 daily being too high!!
-Total.effort_NFS[32:34,2]=300
+#issue: check daily 2007-08, too high effrot
+Total.effort_NFS=rbind(Attach.Effort.monthly.c_NSF,Attach.Effort.daily.c_NSF)%>% 
+      group_by(finyear)%>%
+      summarise(hook.days=sum(hook.days),
+                hook.hours=sum(hook.hours))%>%
+      mutate(hook.days=hook.days/1000,
+             hook.hours=hook.hours/1000)
 names(Total.effort_NFS)=c("FINYEAR","Hook days","Hook hours")
 
 
@@ -6938,7 +7013,8 @@ if(Inspect.New.dat=="YES")
 #Add corresponding effort equivalents
 fn.quiv.eff=function(ktch,efF,SP,FORM.pred)
 {
-  efF=efF%>%select(-c(block10))
+  efF=efF%>%
+    dplyr::select(-c(block10))
   if(is.na(match('hook.hours',names(efF))))
   {
     efF$hook.days=with(efF,hooks)
@@ -6947,7 +7023,7 @@ fn.quiv.eff=function(ktch,efF,SP,FORM.pred)
   
   ktch=ktch%>%filter(SPECIES%in%SP)
   d=left_join(ktch,efF,by='Same.return.SNo')%>%
-    select(Same.return.SNo,METHOD,day,YEAR.c,MONTH,BLOCKX,SPECIES,LIVEWT.c,
+    dplyr::select(Same.return.SNo,METHOD,day,YEAR.c,MONTH,BLOCKX,SPECIES,LIVEWT.c,
            Km.Gillnet.Hours.c,hook.hours,Km.Gillnet.Days.c,hook.days)%>%
     filter(METHOD%in%c('GN','LL'))%>%
     mutate(m.Gillnet.Hours.c=1000*Km.Gillnet.Hours.c,
@@ -6985,14 +7061,17 @@ fn.quiv.eff=function(ktch,efF,SP,FORM.pred)
 
 }
   #North
-top.sp=aggregate(LIVEWT.c~SPECIES,Data.daily.north,sum)%>%arrange(-LIVEWT.c)
+top.sp=aggregate(LIVEWT.c~SPECIES,subset(Data.daily.north,!Shark.fishery=='non.shark.fishery'),sum)%>%
+          arrange(-LIVEWT.c)
 top.spID=cumsum(top.sp$LIVEWT.c)/sum(top.sp$LIVEWT.c)
 top.spID=1:which.min(abs(top.spID - .95))
-LL.to.GN.North=fn.quiv.eff(ktch=Data.daily.north,efF=Effort.daily.NSF%>%distinct(Same.return.SNo,.keep_all = T),
+LL.to.GN.North=fn.quiv.eff(ktch=subset(Data.daily.north,!Shark.fishery=='non.shark.fishery'),
+                           efF=subset(Effort.daily.NSF,!Shark.fishery=='non.shark.fishery')%>%distinct(Same.return.SNo,.keep_all = T),
                             SP=top.sp$SPECIES[top.spID],FORM.pred=paste('METHOD','YEAR.c','BLOCKX',sep="+"))
 
   #South
-LL.to.GN.South=fn.quiv.eff(ktch=Data.daily,efF=Effort.daily%>%distinct(Same.return.SNo,.keep_all = T),
+LL.to.GN.South=fn.quiv.eff(ktch=subset(Data.daily,!Shark.fishery=='non.shark.fishery'),
+                           efF=subset(Effort.daily,!Shark.fishery=='non.shark.fishery')%>%distinct(Same.return.SNo,.keep_all = T),
                             SP=unlist(TARGETS),FORM.pred=paste('METHOD','YEAR.c','MONTH','BLOCKX',sep="+"))
 
 
@@ -7023,15 +7102,15 @@ Data.daily=Data.daily%>%left_join(Ef.netlen.daily.1,by="Same.return.SNo")
 
   #4.2 Separate gillnet from other methods     
 #note: exclude estuaries       
-    #monthly
-Data.monthly.GN=subset(Data.monthly,METHOD=="GN" & Estuary=="NO")
-Data.monthly.LL=subset(Data.monthly,METHOD=="LL" & Estuary=="NO")
+    #monthly TDGDLF
+Data.monthly.GN=subset(Data.monthly,METHOD=="GN" & Estuary=="NO" & !Shark.fishery=='non.shark.fishery')
+Data.monthly.LL=subset(Data.monthly,METHOD=="LL" & Estuary=="NO"& !Shark.fishery=='non.shark.fishery')
 Data.monthly.other=subset(Data.monthly,!(METHOD=="LL"|METHOD=="GN")
                     |((METHOD=="LL"|METHOD=="GN") & Estuary=="YES"))
 
-    #daily
-Data.daily.GN=subset(Data.daily,METHOD=="GN" & Estuary=="NO")
-Data.daily.LL=subset(Data.daily,METHOD=="LL" & Estuary=="NO")
+    #daily TDGDLF
+Data.daily.GN=subset(Data.daily,METHOD=="GN" & Estuary=="NO" & !Shark.fishery=='non.shark.fishery')
+Data.daily.LL=subset(Data.daily,METHOD=="LL" & Estuary=="NO" & !Shark.fishery=='non.shark.fishery')
 Data.daily.other=subset(Data.daily,!(METHOD=="LL"|METHOD=="GN")
                           |((METHOD=="LL"|METHOD=="GN") & Estuary=="YES"))
 
@@ -7165,12 +7244,15 @@ Exprt.list=list(
   Annual.zone.eff.hours=Total.effort.zone.hours.monthly,
   Annual.zone.eff.days=Total.effort.zone.days.monthly,
   Annual.total.eff_NSF=Total.effort_NFS,
-  Effort.monthly=Effort.monthly%>%filter(!zone%in%c("Closed","Joint","North"))%>%
-                                  select(-crap.ef),
-  Effort.daily=Effort.daily%>%filter(!zone%in%c("Closed","Joint","North"))%>%
-                              select(-crap.ef),
+  Effort.monthly=Effort.monthly%>%
+                    filter(!zone%in%c("Closed","Joint","North"))%>%
+                    dplyr::select(-crap.ef),
+  Effort.daily=Effort.daily%>%
+                    filter(!zone%in%c("Closed","Joint","North"))%>%
+                    dplyr::select(-crap.ef),
   Effort.monthly.NSF=Effort.monthly.NSF,
-  Effort.daily.NSF=Effort.daily.NSF%>%select(-crap.ef),
+  Effort.daily.NSF=Effort.daily.NSF%>%
+                      dplyr::select(-crap.ef),
   Mesh.monthly=Mesh.monthly,
   Mesh.size=Mesh.size,
   TEPS.current=TEPS.current,
@@ -10129,7 +10211,7 @@ if(do.annual.TEPS.extraction=="YES")
            Bioregion=ifelse(Bioregion=="SC"& LAT>(-34) & LONG <115.91 ,"WC",Bioregion))
   
   #scan comments to check if not reported as a record
-  write.csv(TEPs%>%select(DailySheetNumber,SessionNumber,SpeciesCode,Status,
+  write.csv(TEPs%>%dplyr::select(DailySheetNumber,SessionNumber,SpeciesCode,Status,
                           Number,DataEntryName,ScientificName,Comments),paste(hndl,"/SCAN.TEPS.csv",sep=""))
   
   
@@ -10202,10 +10284,10 @@ if(do.Paul.Rogers_ASL=="YES")
     spread(METHOD, Trips)%>%
     replace(is.na(.), "")%>%
     data.frame%>%
-    left_join(aa%>%distinct(VESSEL,.keep_all = T)%>%select(VESSEL,BoatName),by="VESSEL")%>%
-    select(FINYEAR,VESSEL,BoatName,Gillnet,Long.line)%>%
-    rename(Gillnet.trips=Gillnet,
-           Long.line.trips=Long.line)
+        left_join(aa%>%distinct(VESSEL,.keep_all = T)%>%dplyr::select(VESSEL,BoatName),by="VESSEL")%>%
+        dplyr::select(FINYEAR,VESSEL,BoatName,Gillnet,Long.line)%>%
+        rename(Gillnet.trips=Gillnet,
+               Long.line.trips=Long.line)
   write.csv(TAB3,paste(Hndl.Rogr,"Table_trips_by_gear_fisher.csv",sep=""),row.names = F)
   
   

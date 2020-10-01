@@ -755,20 +755,20 @@ dev.off()
   #read in data
 HNDL="C:/Matias/Analyses/Data_outs/"
 #Whiskery
-whis.mon=read.csv(paste(HNDL,"Whiskery Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
-whis.daily=read.csv(paste(HNDL,"Whiskery Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
+whis.mon=read.csv(paste(HNDL,"Whiskery shark/Whiskery Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
+whis.daily=read.csv(paste(HNDL,"Whiskery shark/Whiskery Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
 
 #gummy
-gum.mon=read.csv(paste(HNDL,"Gummy Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
-gum.daily=read.csv(paste(HNDL,"Gummy Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
+gum.mon=read.csv(paste(HNDL,"Gummy Shark/Gummy Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
+gum.daily=read.csv(paste(HNDL,"Gummy Shark/Gummy Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
 
 #dusky
-dus.mon=read.csv(paste(HNDL,"Dusky Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
-dus.daily=read.csv(paste(HNDL,"Dusky Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
+dus.mon=read.csv(paste(HNDL,"Dusky Shark/Dusky Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
+dus.daily=read.csv(paste(HNDL,"Dusky Shark/Dusky Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
 
 #sandbar
-san.mon=read.csv(paste(HNDL,"Sandbar Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
-san.daily=read.csv(paste(HNDL,"Sandbar Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
+san.mon=read.csv(paste(HNDL,"Sandbar Shark/Sandbar Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
+san.daily=read.csv(paste(HNDL,"Sandbar Shark/Sandbar Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
 
 #plot cpues
 Plot.cpue.delta=function(cpuedata,cpuedata.daily,CL,CxS,
@@ -864,12 +864,17 @@ if(do.AMM)
   Management=read.csv('C:/Matias/Management/Sharks/Timeline management measures/Management_timeline.csv')
   Management=Management%>%
   mutate(date=as.POSIXct(StartDate,format="%d/%m/%Y"),
-         finyear=decimal_date(date))%>%
+         finyear=decimal_date(date))
+  Management.north=Management%>%
+    filter(Relevant.to%in%c('NSF',"TDGDLF & NSF") & 
+             round(finyear)<=as.numeric(substr(Current.yr,1,4)))
+  
+  Management=Management%>%
   filter(Relevant.to%in%c('TDGDLF',"TDGDLF & NSF") & 
            round(finyear)<=as.numeric(substr(Current.yr,1,4)))
 
 
-  #Catch and management measures timeline
+  #1. Catch and management measures timeline
   AMM.ktch.eff.managmtnt=function(GROUP,LAT1,LAT2,MGMT,SEP,Lab.font,Lab.back,
                                   nn,frms,n.frms,do.animation,speed)
   {
@@ -986,15 +991,77 @@ if(do.AMM)
                          do.animation=TRUE,
                          speed=100)  #lower speed value is faster
   
-  #summary landed weight
+  
+  #2. Effort and management measures timeline
+  AMM.eff.managmtnt=function(dat,MGMT,SEP,Lab.font,Lab.back,Effort.lab,OUT)
+  {
+    Man=MGMT%>%dplyr::select(Event,finyear,Category)%>%mutate(id=1:nrow(MGMT))
+    d=dat%>%
+      mutate(finyear=as.numeric(substr(FINYEAR,1,4)))%>%
+      full_join(Man,by='finyear')%>%
+      arrange(finyear)%>%
+      filter(finyear>=1975)%>%
+      mutate(Total=ifelse(is.na(Total),na.approx(Total),Total),
+             Category=ifelse(is.na(Category),"",Category),
+             Event=ifelse(is.na(Event),"",Event))
+    
+    this=which(!is.na(d$FINYEAR))
+    this=this[length(this)]
+    
+    if(is.na(d$FINYEAR[nrow(d)])) 
+    {
+      d$Total[(this+1):nrow(d)]=d$Total[this]
+    }
+    
+    colors=c(Data='red',Closure='steelblue',Other='forestgreen','NA'='transparent')
+    p=ggplot(d,
+             aes(finyear, Total,label=Event,color = factor(Category))) +
+      geom_line(colour="orange",size=1.25) + geom_point() +
+      geom_label_repel(box.padding=SEP,hjust = 0,size = Lab.font,fill=Lab.back) + 
+      geom_line(colour="orange",size=1.25, alpha = 0.3) + geom_point(alpha = 0.4)+
+      ylab(Effort.lab) + xlab("Financial year")+
+      theme(legend.position = "none",
+            axis.text=element_text(size=12),
+            axis.title=element_text(size=14)
+      )+
+      scale_color_manual(values = colors)
+    p
+    ggsave(OUT, width = 8,height = 5, dpi = 300, compression = "lzw")
+    
+  }
+  
+    #TDGDFL
+  set.seed(11)
+  AMM.eff.managmtnt(dat=Total.effort.days.monthly,
+                    MGMT=Management,
+                    SEP=.15,
+                    Lab.font=3,
+                    Lab.back="white",
+                    Effort.lab="Effort (1000 km gn d)",
+                    OUT="AMM_effort.management_TDGDLF.tiff") 
+  
+    #NSF
+  Total.effort.NSF=read.csv(paste(HNDL,"Annual.total.eff_NSF.csv",sep=""),stringsAsFactors=F)
+  Total.effort.NSF=Total.effort.NSF%>%
+                      mutate(Total=Hook.days)
+  set.seed(666)
+  AMM.eff.managmtnt(dat=Total.effort.NSF,
+                    MGMT=Management.north,
+                    SEP=.15,
+                    Lab.font=3,
+                    Lab.back="white",
+                    Effort.lab="Effort (1000 hook d)",
+                    OUT="AMM_effort.management_NSF.tiff")
+
+  
+  
+  #3. Summary landed weight
   Summary.landwt=DAT%>%
         mutate(Taxa=case_when(
           SPECIES%in%Elasmo.species ~ "Elasmo",
           SPECIES%in%Scalefish.species ~ "Scalefish"))%>%
         group_by(Taxa)%>%
         summarise(Catch.tons=round(sum(LANDWT)/1000,0))
-  
-
   fun.Tab1.SoFaR.LANDWT=function(SP,id,Tab.livewt,Add)
   {
     Dat=DAT  
@@ -1052,18 +1119,15 @@ if(do.AMM)
     wide=wide%>%mutate_all(function(x) ifelse(x==' ()','',x))
     return(wide)
   }
-  
   AAM.table.Elasmos=fun.Tab1.SoFaR.LANDWT(SP=Spec.tab.1.elasmo,
                                           id=id.elasmo,
                                           Tab.livewt=Table1.SoFar.Elasmos,
                                           Add='Total Elasmobranchs')
-  
   AAM.table.Scalies=fun.Tab1.SoFaR.LANDWT(SP=Spec.tab.1.scalies,
                                           id=id.scale,
                                           Tab.livewt=Table1.SoFar.Scalies%>%
                                             filter(Name!='Demersal scalefish suite component'),
                                           Add='Total Scalefish')
-  
   dummy=MainFeatures.doc
   colnames(dummy)[1:2]=c("First.col","Second.col")
   dummy=dummy%>%
@@ -1083,12 +1147,7 @@ if(do.AMM)
                        SPECIES=="Sandbar shark"~AAM.table.Elasmos[match('Sandbar',AAM.table.Elasmos$Name),'Total'],
                        SPECIES=="Whiskery shark"~AAM.table.Elasmos[match('Whiskery',AAM.table.Elasmos$Name),'Total'],
                        TRUE ~ Catch.tons))
-  
-  
-  
   write.table(dummy,"AMM_Summary.LANDWT.csv",sep = ",",row.names = F)
   write.table(AAM.table.Elasmos,"AMM_Table1.SoFar.Elasmos.csv",sep = ",",row.names = F)
   write.table(AAM.table.Scalies,"AMM_Table1.SoFar.Scalies.csv",sep = ",",row.names = F)
-  
-  
 }
