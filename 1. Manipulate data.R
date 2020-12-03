@@ -810,6 +810,43 @@ Data.daily.original$LAT=(-Data.daily.original$LAT)
 Data.daily.original$Same.return.SNo=with(Data.daily.original,paste(SNo,DSNo,TSNo))
 
 
+#Fix boat and masters names
+Data.daily=Data.daily%>%
+  mutate(BoatName=tolower(BoatName),
+         BoatName=ifelse(BoatName=="kabralee 11","kabralee ii",
+                         ifelse(BoatName=="st gerard m","st. gerard m",
+                                ifelse(BoatName=="san marco","san margo",
+                                       ifelse(BoatName=="tara-marie","tara marie",BoatName)))),
+         MastersName=tolower(MastersName),
+         MastersName=case_when(MastersName%in%c("a. joy","andrew joy")~"joy, andrew francis",
+                               MastersName%in%c("j.e.robb","j.e. robb")~  "james robb",
+                               MastersName=="marcus branderhorst" ~ "branderhorst, marcus allen",
+                               MastersName%in%c("steve buckeridge","stephen buckeridge")~ "buckeridge, stephen grant",
+                               MastersName== "storm mansted"~ "mansted, storm",
+                               MastersName== "mason thomas"~ "thomas, mason",
+                               MastersName== "james tindall"~ "tindall, james stuart",
+                               MastersName== "michael tonkin"~ "tonkin, michael",
+                               MastersName== "anthony cooke"~ "cooke, anthony",
+                               MastersName%in% c("c. black","chris black","christopher black")~  "black, christopher barry",
+                               MastersName== "neoclis triantafyllou"~ "triantafyllou, neoclis",
+                               MastersName== "d. hawkins"~ "hawkins, david joseph" ,
+                               MastersName== "darcy madgen"~  "madgen, darcy james",
+                               MastersName== "emanuel soulos"~  "soulos, emanuel nicholas",
+                               MastersName== "g.m. sharp"~  "sharp, gregory mark",
+                               MastersName== "p. murch"~ "murch, paul douglas" ,
+                               MastersName== "jason & brian scimone"~ "brian / jason scimone" ,
+                               MastersName== "c. henderson"~ "chris henderson" ,
+                               TRUE~MastersName))
+
+#Fishers operating in recent years
+# b=Data.daily%>%
+#   filter(finyear%in%c("2017-18","2018-19","2019-20"))%>%
+#   group_by(MastersName,BoatName,vessel)%>%
+#   tally()%>%
+#   data.frame%>%
+#   rename(number.of.records=n)%>%
+#   arrange(BoatName)
+
 #note: a unique shot (session) is the combination of Sno (shot num), DSNo (daily sheet num) and     
 #       TSNo (trip sheet num),i.e. the variable "Session ID"
 Session.vars=c("SNo","DSNo","TSNo")

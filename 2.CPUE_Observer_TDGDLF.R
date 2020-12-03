@@ -1,0 +1,561 @@
+#                 SCRIPT FOR DERIVING STANDARDISED CPUE FROM OBSERVER DATA ON TDGDLF    #
+
+#notes:
+
+rm(list=ls(all=TRUE))
+
+options(stringsAsFactors = FALSE)
+library(rlang)
+library(tidyverse)
+library(doParallel)
+library(zoo)
+library(abind)
+library(stringr)
+library(Hmisc)
+library(mgcv)
+library(zigam)
+library(pscl)
+library(MASS)
+library(stringr)
+
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Smart_par.R")
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_Population.dynamics/Nominal_cpue_functions.R")
+
+
+# 1. Data ---------------------------------------------------------
+
+# Observers data
+User="Matias"
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Source_Shark_bio.R")
+
+# Species names
+All.species.names=read.csv("C:/Matias/Data/Species_names_shark.only.csv") #for catch
+
+# Species to analyse
+Retained=c('BW','TK','GM','WH','HZ','LG','ES','WW','PN','SC','WD','TG','CP','MS','MI','TS','HS')
+Discarded=c('PJ','ER','SD','AA','SR','SH','WC','SE','GN')
+This.sp=c(Retained,Discarded)
+
+
+setwd('C:/Matias/Analyses/Catch and effort/Observer_TDGDLF')
+
+# Manipulate species names ---------------------------------------------------------
+All.species.names=All.species.names%>%
+  mutate(Name=capitalize(tolower(Name)),
+         Name=case_when(Name=='Port jackson shark'~'Port Jackson shark',
+                        TRUE~Name))
+
+
+# Manipulate observer data  ---------------------------------------------------------
+Res.ves=c("HAM","HOU","NAT","FLIN","RV BREAKSEA","RV Gannet","RV GANNET","RV SNIPE 2")
+Dat_obs=DATA %>%
+  filter(Mid.Lat<=(-26) & !BOAT%in%Res.ves & Taxa%in%c('Elasmobranch') & !COMMON_NAME=='WHALE')  %>% 
+  dplyr::select(c(SHEET_NO,date,Month,year,BOAT,SKIPPER,zone,BLOCK,SOAK.TIME,MESH_SIZE,
+                  MESH_DROP,NET_LENGTH,Mid.Lat,Mid.Long,Method,SPECIES,Taxa,
+                  COMMON_NAME,SCIENTIFIC_NAME,CAES_Code,TL,FL,Disc.width,Number))%>%
+  filter(Method=="GN" & !is.na(NET_LENGTH) & !is.na(SOAK.TIME))%>%
+  mutate(COMMON_NAME=ifelse(SPECIES=='PD','Spurdogs',COMMON_NAME),
+         SCIENTIFIC_NAME=ifelse(SPECIES=='PD','Squalus spp.',SCIENTIFIC_NAME),
+         CAES_Code=ifelse(SPECIES=='PD',20000,CAES_Code),
+         SPECIES=ifelse(SPECIES=='PD','SD',SPECIES))%>%
+  left_join(All.species.names%>%rename(Species=SPECIES),by=c('SPECIES'='SP'))%>%
+  mutate(Name=ifelse(is.na(Name),COMMON_NAME,Name),
+         Scien.nm=ifelse(is.na(Scien.nm),SCIENTIFIC_NAME,Scien.nm))%>%
+  filter(NET_LENGTH>=0.2 & !is.na(MESH_SIZE))%>%
+  mutate(BOAT=ifelse(BOAT=="TRACEY LEA","E35",BOAT))
+
+
+  # Group Angel sharks
+Dat_obs=Dat_obs%>%
+  mutate(COMMON_NAME=case_when(SPECIES%in%c("AO","AU")~"Angel Sharks (general)", TRUE~COMMON_NAME),
+         SCIENTIFIC_NAME=case_when(SPECIES%in%c("AO","AU")~"Family Squatinidae", TRUE~SCIENTIFIC_NAME),
+         CAES_Code=case_when(SPECIES%in%c("AO","AU")~24900, TRUE~CAES_Code),
+         Species=case_when(SPECIES%in%c("AO","AU")~24900, TRUE~Species),
+         Name=case_when(SPECIES%in%c("AO","AU")~"Angel sharks", TRUE~Name),
+         Scien.nm=case_when(SPECIES%in%c("AO","AU")~"Squatinidae", TRUE~Scien.nm),
+         SPECIES=case_when(SPECIES%in%c("AO","AU")~"AA",TRUE~SPECIES))
+
+
+
+# Set FL to disc width for stingrays for computational purposes----------------------------------------
+Stingrays=35000:40000
+Dat_obs=Dat_obs%>%
+  mutate(FL=ifelse(CAES_Code%in%Stingrays,Disc.width,FL),
+         TL=ifelse(CAES_Code%in%Stingrays,NA,TL))
+
+# Fill in missing FL info  ---------------------------------------------------------
+#1. Set to NA FL or TL records less than size at birth
+size.birth=30 #FL, in cm
+Dat_obs$FL=with(Dat_obs,ifelse(FL<size.birth,NA,FL))
+Dat_obs$TL=with(Dat_obs,ifelse(TL<(size.birth/.85),NA,TL))
+
+
+#2. Derive FL as a proportion of TL
+Dat_obs$FL=with(Dat_obs,ifelse(is.na(FL),TL*.875,FL))
+
+
+
+# Size frequency of analysed species  ---------------------------------------------------------
+Dat_obs%>%
+  filter(SPECIES%in%This.sp)%>%
+  filter(!Name=='Stingrays')%>%  #Stringrays set to average size as not measured, no point displaying
+  mutate(Name=ifelse(Name=="Eagle ray","Southern eagle ray",Name))%>%
+  ggplot( aes(x=FL, color=Name, fill=Name)) +
+  geom_histogram(alpha=0.6, binwidth = 5) +
+  theme(legend.position="none",
+        panel.spacing = unit(0.1, "lines"),
+        strip.text.x = element_text(size =9),
+        axis.title=element_text(size=16)) +
+  xlab("Size (cm)") +
+  ylab("Frequency") +
+  facet_wrap(~Name, scales = "free")
+ggsave('Figure_Size.frequency.tiff',width = 10,height = 10,compression = "lzw")
+
+# Arrange data to one row per shot  ---------------------------------------------------------
+Dat=Dat_obs%>%
+  filter(SPECIES%in%This.sp)%>%
+  group_by(SHEET_NO,date,Month,year,BOAT,zone,BLOCK,Mid.Lat,Mid.Long,MESH_SIZE,SPECIES)%>%
+  summarise(N=sum(Number),
+            SOAK.TIME=max(SOAK.TIME),
+            NET_LENGTH=max(NET_LENGTH))%>%
+  data.frame
+
+Ktch=Dat%>%
+  dplyr::select(-c(SOAK.TIME,NET_LENGTH))%>%
+  spread(SPECIES,N,fill = 0)
+Effort=Dat%>%
+        dplyr::select(SHEET_NO,date,BLOCK,SOAK.TIME,NET_LENGTH)%>%
+        mutate(Effort=SOAK.TIME*NET_LENGTH,
+               dupli=paste(SHEET_NO,date,BLOCK))%>%
+  distinct(dupli,.keep_all = T)%>%
+  dplyr::select(SHEET_NO,date,BLOCK,Effort)
+
+Ktch=left_join(Ktch,Effort,by=c('SHEET_NO','date','BLOCK'))
+
+
+# Nominal cpue  ---------------------------------------------------------
+#note: this has all records
+Ktch$season=Ktch$year
+
+Nominal.cpue=vector('list',length(This.sp))
+names(Nominal.cpue)=This.sp
+pdf("Figure_Nominal cpues.pdf")
+for(s in 1:length(This.sp))
+{
+  x=This.sp[s]
+  nm=unique(Dat_obs%>%filter(SPECIES==x)%>%pull(Name))
+  Nominal.cpue[[s]]=CalcMeanCPUE(cpuedata = Ktch, catch.column=x, effort.column="Effort",
+                                 plot.title = nm, cpue.units = "km gn hours", 
+                                 draw.plot=TRUE, show.legend=F,PaR="NO",showLNMean="NO")
+}
+dev.off()
+
+
+# Standardised cpue  ---------------------------------------------------------
+Min.yr.blks=5   #at least this number of observations per year-block of positive catches
+core.per=90     #core area defined as 90% of catch
+Min.boat= 5     #use boats with at least 5 records
+Min.yrs=10      #at least 10 positive records per year
+this.var=c('SHEET_NO','Effort','date','Month','year','BOAT','zone','BLOCK','Mid.Lat','Mid.Long','MESH_SIZE')
+
+#Check which species have enough records
+this.sp.enough=This.sp
+Store.dat=vector('list',length(This.sp))
+names(Store.dat)=This.sp
+pdf("Figure_Core areas.pdf")
+for(s in 1:length(This.sp))
+{
+  d=Ktch[,c(this.var,This.sp[s])]%>%
+    mutate(yr.blk=paste(year,BLOCK))%>%
+    rename(Catch=!!sym(This.sp[s]))%>%
+    filter(!is.na(BOAT))
+  
+  plot(d$Mid.Long,d$Mid.Lat,ylim=c(-36,-26),xlim=c(113,129),
+       pch=21,cex=.8,col="grey80",bg="white",xlab="Longitude",ylab='Latitude',
+       main=unique(Dat_obs%>%filter(SPECIES==This.sp[s])%>%pull(Name)))
+  
+  #Core area
+  Ag.blk=d%>%
+    group_by(BLOCK)%>%
+    summarise(tot=sum(Catch))%>%
+    arrange(-tot)%>%
+    mutate(cumsum=cumsum(tot),
+           percentile=cumsum/sum(tot))%>%
+    filter(percentile<=core.per/100)%>%
+    pull(BLOCK)
+  d=d%>%filter(BLOCK%in%Ag.blk)
+  
+  #Min.yr.blks
+  Tab=d%>%filter(Catch>0)%>%
+    group_by(yr.blk)%>%
+    tally()%>%
+    filter(n>=Min.yr.blks)
+  d=d%>%filter(yr.blk%in%Tab$yr.blk)
+  
+  #boat records
+  Tab=d%>%
+    group_by(BOAT)%>%
+    tally()%>%
+    filter(n>=Min.boat)
+  d=d%>%filter(BOAT%in%Tab$BOAT)
+  
+  Tab=table(d$BOAT,d$year)
+  Tab[Tab<=2]=0
+  Tab[Tab>2]=1
+  Tab=rowSums(Tab)>2
+  d=d%>%filter(BOAT%in%names(which(Tab==TRUE)))
+  
+  #Min.pos.years
+  Tab=d%>%filter(Catch>0)%>%
+    group_by(year)%>%
+    tally()%>%
+    filter(n>=Min.yrs)
+  d=d%>%filter(year%in%Tab$year)
+  
+  if(nrow(d)>0) points(d$Mid.Long,d$Mid.Lat,pch=21,bg="steelblue",cex=3*d$Catch/max(d$Catch))
+  if(nrow(d)==0) this.sp.enough[s]=NA
+  
+  #Remove vessels for which coefficients cannot be estimated
+  if(This.sp%in%c("BW","WH","HZ","PN")) d=subset(d,!BOAT=='E67')
+  if(This.sp%in%c("GM")) d=subset(d,!BOAT=='E7')
+  if(This.sp%in%c("WW","WD")) d=subset(d,!BOAT=='F517')
+  
+  
+  #Manipulations for standardisation
+  d=d%>%
+    mutate(BOAT=as.factor(BOAT),
+           BLOCK=as.factor(BLOCK),
+           year=as.factor(year),
+           MESH=ifelse(!MESH_SIZE%in%c(6,6.5,7),'other',MESH_SIZE),
+           MESH=as.factor(MESH),
+           Mn=factor(Month,levels=1:12),
+           log.Effort=log(Effort))
+  
+  Store.dat[[s]]=d
+  
+  rm(d)
+}
+dev.off()
+
+this.sp.enough=subset(this.sp.enough,!is.na(this.sp.enough))
+Store.dat=Store.dat[match(this.sp.enough,names(Store.dat))]
+
+
+Stand.cpue=vector('list',length(this.sp.enough))
+names(Stand.cpue)=this.sp.enough
+
+formula.gam=formula("Catch~year+s(Month,k=12,bs='cc')+s(Mid.Long,Mid.Lat)+s(BOAT,bs='re')+offset(log.Effort)")
+formula.glm=formula("Catch~ year + BLOCK + BOAT + Mn + offset(log.Effort)")
+formula.glm=replicate(length(this.sp.enough),formula.glm,FALSE)
+names(formula.glm)=this.sp.enough
+formula.glm$PJ=formula("Catch~ year + BLOCK + BOAT + Mn + MESH + offset(log.Effort)")
+formula.glm$PN=formula.glm$WD=formula.glm$SR=
+      formula.glm$SH=formula("Catch~ year + BLOCK + BOAT  + offset(log.Effort)")
+formula.glm$WC=formula("Catch ~ year + Mn + offset(log.Effort)")
+formula.glm$WH=formula("Catch ~ year + BLOCK +  Mn + offset(log.Effort)")
+formula.glm$LG=formula("Catch ~ year + Mn + offset(log.Effort)")
+formula.glm$ER=formula("Catch ~ year + BOAT + Mn + offset(log.Effort)")
+formula.glm$TK=formula("Catch ~ year +  BOAT + Mn + offset(log.Effort)")
+formula.glm$GM=formula("Catch ~ year + BLOCK+   Mn + offset(log.Effort)")
+formula.glm$SH=formula("Catch ~ year +  BOAT + offset(log.Effort)")
+
+
+formula.glm.zero.zip=list(
+  BW=formula("Catch ~ year + BLOCK + Mn + MESH + offset(log.Effort) | 
+                      year + BOAT + Mn + MESH + offset(log.Effort)"),   #count part then zero part
+  TK=formula("Catch ~ year + BLOCK+ BOAT+ Mn+ offset(log.Effort) | 
+                      year + BLOCK+ BOAT + Mn + MESH + offset(log.Effort)"),
+  GM=formula("Catch ~ year  + BOAT + Mn + MESH + offset(log.Effort) | 
+                      year  + BOAT + offset(log.Effort)"),
+  WH=formula("Catch ~ year +  BOAT + Mn + MESH + offset(log.Effort) | 
+                       year + BLOCK + Mn + offset(log.Effort)"),
+  HZ=formula("Catch ~ year + BOAT + Mn + MESH + offset(log.Effort) | 
+                      year + BOAT + Mn  + MESH + offset(log.Effort)"),
+  LG=formula("Catch ~ year + BLOCK + BOAT + Mn + MESH + offset(log.Effort) | 
+                      year + BLOCK + BOAT  + Mn + offset(log.Effort)"),
+  WW=formula("Catch ~ year + Mn + offset(log.Effort) | 
+                      year + BOAT  + offset(log.Effort)"),
+  PN=formula("Catch ~ year + BOAT + Mn + offset(log.Effort) | 
+                      year + BOAT +  offset(log.Effort)"),
+  WD=formula("Catch ~ year +  BOAT + Mn + offset(log.Effort) | 
+                      year + BLOCK + offset(log.Effort)"),
+  PJ=formula("Catch ~ year + BLOCK + BOAT + Mn + MESH + offset(log.Effort) | 
+                      year + BLOCK + BOAT + Mn  + MESH + offset(log.Effort)"),
+  ER=formula("Catch ~ year + BLOCK + BOAT + Mn  + MESH + offset(log.Effort) | 
+                      year + BLOCK + BOAT  + MESH + offset(log.Effort)"),
+  AA=formula("Catch ~ year + BLOCK + BOAT + Mn + MESH + offset(log.Effort) | 
+                      year + BLOCK + Mn + MESH + offset(log.Effort)"),
+  SR=formula("Catch ~ year + BLOCK + BOAT  + offset(log.Effort) | 
+                      year + BLOCK + BOAT  + offset(log.Effort)"),
+  SH=formula("Catch ~ year + BLOCK + Mn + offset(log.Effort) | 
+                      year + BOAT  + offset(log.Effort)"),
+  WC=formula("Catch ~ year + Mn + offset(log.Effort) | 
+                      year  + offset(log.Effort)"))
+
+
+
+formula.glm.zero.znb=list(
+  BW=formula("Catch ~ year +  offset(log.Effort) | 
+                    year +  offset(log.Effort)"),
+  TK=formula("Catch ~ year + BLOCK+ BOAT+ Mn+ offset(log.Effort) | 
+                    year + BLOCK+ BOAT + Mn + offset(log.Effort)"),
+  GM=formula("Catch ~ year  + BOAT + Mn + offset(log.Effort) | 
+                      year  + BOAT + offset(log.Effort)"),
+  WH=formula("Catch ~ year + BOAT  + Mn + MESH + offset(log.Effort) | 
+                      year + offset(log.Effort)"),
+  HZ=formula("Catch ~ year + BOAT  + Mn + MESH + offset(log.Effort) | 
+                      BLOCK  + MESH + offset(log.Effort)"),
+  LG=formula("Catch ~ year + offset(log.Effort) | 
+                      year + BOAT + offset(log.Effort)"),
+  WW=formula("Catch ~ year  + offset(log.Effort) | 
+                      year + BOAT  + offset(log.Effort)"),
+  PN=formula("Catch ~ year + BOAT + Mn + offset(log.Effort) | 
+                      year + BOAT +  offset(log.Effort)"),
+  WD=formula("Catch ~ year +  BOAT + Mn + offset(log.Effort) | 
+                      year + BLOCK + offset(log.Effort)"),
+  PJ=formula("Catch ~ year + BLOCK + BOAT + Mn + MESH + offset(log.Effort) | 
+                      year + BLOCK + BOAT + offset(log.Effort)"),
+  ER=formula("Catch ~ year + BLOCK  + Mn  + offset(log.Effort) | 
+                      year + BOAT  + offset(log.Effort)"),
+  AA=formula("Catch ~ year + BLOCK  + offset(log.Effort) | 
+                      year + BOAT   + offset(log.Effort)"),
+  SR=formula("Catch ~ year + BLOCK + offset(log.Effort) | 
+                      year + BLOCK + BOAT + offset(log.Effort)"),
+  SH=formula("Catch ~ year + BLOCK + Mn + offset(log.Effort) | 
+                      year + BOAT  + offset(log.Effort)"),
+  WC=formula("Catch ~ year + Mn + offset(log.Effort) | 
+                      year  + offset(log.Effort)"))
+
+#Select  best model
+Select.best.mdl=FALSE
+if(Select.best.mdl)
+{
+  fn.stand=function(d,FORMULA,FORMULA.zero.zip,FORMULA.zero.znb)
+  {
+    pois=glm(FORMULA,data=d,family=poisson)
+    NB=glm.nb(FORMULA, data=d)
+    ZIP=zeroinfl(FORMULA.zero.zip, data=d)
+    ZINB=zeroinfl(FORMULA.zero.znb, dist = "negbin", data=d)
+    
+    #Fit.pois=gam(FORMULA,data=d,method = "REML",family=poisson)
+    #Fit.NB=gam(FORMULA, data=d,method = "REML",family = nb)
+    #Fit.ZIP=zipgam(lambda.formula=FORMULA,pi.formula=FORMULA,data=d)
+    #Fit.ZINB=zinbgam(mu.formula=FORMULA,pi.formula=FORMULA, data=d)
+    
+    return(list(data=d, pois=pois,NB=NB,ZIP=ZIP,ZINB=ZINB))
+    
+  }
+  system.time({for(s in 1:length(this.sp.enough))
+  {
+    
+    Stand.cpue[[s]]=fn.stand(d=Store.dat[[s]],
+                             FORMULA=formula.glm[[s]],
+                             FORMULA.zero.zip=formula.glm.zero.zip[[match(this.sp.enough[s],names(formula.glm.zero.zip))]],
+                             FORMULA.zero.znb=formula.glm.zero.znb[[match(this.sp.enough[s],names(formula.glm.zero.znb))]])
+  }})
+  
+  AIC.tab=vector('list',length(this.sp.enough))
+  for(s in 1:length(this.sp.enough))
+  {
+    pois=Stand.cpue[[s]]$pois
+    NB=Stand.cpue[[s]]$NB
+    ZIP=Stand.cpue[[s]]$ZIP
+    ZINB=Stand.cpue[[s]]$ZINB
+    AIC.tab[[s]]=data.frame(SP=names(Stand.cpue)[s],
+                            Pois=pois$aic,
+                            NB=NB$aic,
+                            ZIP=AIC(ZIP),
+                            ZNB=AIC(ZINB))
+    #logLik(pois)  
+    print(names(Stand.cpue)[s])
+    vuong(ZIP,pois)
+    vuong(ZIP,NB)
+    vuong(ZIP,ZINB)
+    vuong(ZINB,pois)
+    vuong(ZINB,NB) 
+    print("______________________________________________")
+  }
+  AIC.tab=do.call(rbind,AIC.tab)
+  
+}
+
+# Standardise using best model
+Best.model=list(
+  BW=list(formula=formula.glm$BW,
+          error='NB'),
+  TK=list(formula=formula.glm$TK,
+          error='NB'),
+  GM=list(formula=formula.glm$GM,
+          error='NB'),
+  WH=list(formula=formula.glm$WH,
+          error='NB'),
+  HZ=list(formula=formula.glm$HZ,
+          error='NB'),
+  LG=list(formula=formula.glm$LG,
+          error='NB'),
+  WW=list(formula=formula.glm$WW,
+          error='NB'),
+  PN=list(formula=formula.glm$PN,
+          error='NB'),
+  WD=list(formula=formula.glm$WD,
+          error='NB'),
+  PJ=list(formula=formula.glm$PJ,
+          error='NB'),
+  ER=list(formula=formula.glm$ER,
+          error='NB'),
+  AA=list(formula=formula.glm$AA,
+          error='NB'),
+  SR=list(formula=formula.glm$SR,
+          error='NB'),
+  SH=list(formula=formula.glm$SH,
+          error='NB'),
+  WC=list(formula=formula.glm$WC,
+          error='NB')
+  )
+
+fn.stand=function(d,FORMULA,error)
+{
+  if(error=="Pois") mod=glm(FORMULA,data=d,family=poisson)
+  if(error=='NB') mod=glm.nb(FORMULA, data=d)
+  if(error=='ZIP') mod=zeroinfl(FORMULA, data=d)
+  if(error=='ZNB') mod=zeroinfl(FORMULA, dist = "negbin", data=d)
+  
+  return(list(data=d, mod=mod))
+  
+}
+system.time({for(s in 1:length(this.sp.enough))
+{
+  Stand.cpue[[s]]=fn.stand(d=Store.dat[[s]],
+                           FORMULA=Best.model[[s]]$formula,
+                           error=Best.model[[s]]$error)
+}})
+
+#Predict year effect
+fn.factor=function(x)
+{
+  Tab=sort(table(x))
+  return(factor(names(Tab[length(Tab)]),levels=levels(x)))
+}
+
+pred.fn.boot=function(MOD,Dta,response,Formula)
+{
+  this=c(labels(terms(Formula)),'log.Effort')
+  this=unique(unlist(str_split(this, " +")))
+  this=subset(this,this%in%colnames(Dta))
+  this=this[-match(response,this)]
+  new.dat=Dta%>%
+          dplyr::select(all_of(this))%>%
+          mutate_if(is.factor, fn.factor)%>%
+          mutate_if(is.double,mean)%>%
+          distinct(!!sym(this[1]),.keep_all = T)
+  Pred.res=Dta%>%
+            dplyr::select(all_of(response))%>%
+            distinct(!!sym(response))%>%
+            arrange(!!sym(response))
+  new.dat=cbind(Pred.res,new.dat)
+
+  PREDS=predict(MOD,new.dat, type='response')
+  out=cbind(new.dat[response],Mean=PREDS)
+  out=out%>%
+    mutate(year=as.numeric(year))
+  
+  return(out)
+}
+pred.fn=function(MOD,Dta,response,Formula)
+{
+  this=c(labels(terms(Formula)),'log.Effort')
+  this=this[-match(response,this)]
+  new.dat=Dta%>%
+    dplyr::select(all_of(this))%>%
+    mutate_if(is.factor, fn.factor)%>%
+    mutate_if(is.double,mean)%>%
+    distinct(!!sym(this[1]),.keep_all = T)
+  Pred.res=Dta%>%
+    dplyr::select(all_of(response))%>%
+    distinct(!!sym(response))%>%
+    arrange(!!sym(response))
+  new.dat=cbind(Pred.res,new.dat)
+  
+  PREDS=predict(MOD,new.dat, type='response',se.fit = T)
+  out=cbind(new.dat[response],Mean=PREDS$fit,se=PREDS$se.fit)
+  out=out%>%
+    mutate(year=as.numeric(as.character(year)),
+           CV=se/Mean*100,
+           LOW.CI=Mean-1.96*se,
+           UP.CI=Mean+1.96*se,
+           LOW.CI=LOW.CI/mean(Mean),
+           UP.CI=UP.CI/mean(Mean),
+           Mean=Mean/mean(Mean))
+  return(out)
+}
+
+
+PREDS=vector('list',length(this.sp.enough))
+names(PREDS)=this.sp.enough
+n.boot=1000
+library(boot)
+system.time({ for(s in 1:length(this.sp.enough))
+{
+  if(Best.model[[s]]$error%in%c("Pois","NB"))
+  {
+    PREDS[[s]]=pred.fn(MOD=Stand.cpue[[s]]$mod,
+                            Dta=Stand.cpue[[s]]$data,
+                            response="year",
+                            Formula=Best.model[[s]]$formula)
+  }
+  if(Best.model[[s]]$error%in%c("ZIP","ZNB"))
+  {
+    set.seed(10)
+    prEds=vector('list',n.boot)
+    for(n in 1:n.boot)
+    {
+      #re-fit model
+      d=Store.dat[[s]]
+      ii=sample(1:nrow(d),nrow(d),replace = T)
+      
+      tryCatch({
+        mod=zeroinfl(Best.model[[s]]$formula, dist = "negbin",
+                     data=d[ii,],
+                     start = list(count=round(coef(Stand.cpue[[s]]$mod, "count"), 4),
+                                  zero=round(coef(Stand.cpue[[s]]$mod, "zero"), 4)))
+      }, error = function(e) 
+      {
+      })
+      
+      #preds
+      if(exists("mod"))
+      {
+        prEds[[n]]=pred.fn.boot(MOD=mod,
+                           Dta=d[ii,],
+                           response="year",
+                           Formula=Best.model[[s]]$formula)
+
+        remove(d,mod)  
+      }
+      
+    }
+    PREDS[[s]]=prEds
+  }
+  print(s)  
+
+}})    #takes 0.025 per iteration
+
+
+# Plot --------------------------------------------------------------------
+smart.par=function(n.plots,MAR,OMA,MGP) return(par(mfrow=n2mfrow(n.plots),mar=MAR,oma=OMA,las=1,mgp=MGP))
+
+fn.plt=function(d,nm)
+{
+  nm=unique(Dat_obs%>%filter(SPECIES==nm)%>%pull(Name))
+  plot(d$year,d$Mean,ylim=c(0,max(d$UP.CI)),pch=19,cex=1.5,ylab='',xlab='')
+  segments(d$year,d$LOW.CI,d$year,d$UP.CI,lwd=1.5)
+  mtext(nm,3)
+}
+tiff(file="Figure_Stand.CPUE.tiff",width = 2400, height = 2000,
+     units = "px", res = 300, compression = "lzw")    
+smart.par(n.plots=length(this.sp.enough),MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(.1, 0.5, 0))
+for(s in 1:length(this.sp.enough)) fn.plt(d=PREDS[[s]],nm=names(PREDS)[s])
+dev.off()
+
+
+# Export --------------------------------------------------------------------
