@@ -17,10 +17,7 @@ library(zigam)
 library(pscl)
 library(MASS)
 library(stringr)
-
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Smart_par.R")
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_Population.dynamics/Nominal_cpue_functions.R")
-
+library(yarrr)
 
 # 1. Data ---------------------------------------------------------
 
@@ -38,6 +35,9 @@ This.sp=c(Retained,Discarded)
 
 
 setwd('C:/Matias/Analyses/Catch and effort/Observer_TDGDLF')
+
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Smart_par.R")
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_Population.dynamics/Nominal_cpue_functions.R")
 
 # Manipulate species names ---------------------------------------------------------
 All.species.names=All.species.names%>%
@@ -258,6 +258,8 @@ formula.glm$ER=formula("Catch ~ year + BOAT + Mn + offset(log.Effort)")
 formula.glm$TK=formula("Catch ~ year +  BOAT + Mn + offset(log.Effort)")
 formula.glm$GM=formula("Catch ~ year + BLOCK+   Mn + offset(log.Effort)")
 formula.glm$SH=formula("Catch ~ year +  BOAT + offset(log.Effort)")
+formula.glm$WW=formula("Catch ~ year +  BOAT + Mn + offset(log.Effort)")
+formula.glm$WD=formula("Catch ~ year +  BOAT + Mn + offset(log.Effort)")
 
 
 formula.glm.zero.zip=list(
@@ -543,19 +545,95 @@ system.time({ for(s in 1:length(this.sp.enough))
 
 # Plot --------------------------------------------------------------------
 smart.par=function(n.plots,MAR,OMA,MGP) return(par(mfrow=n2mfrow(n.plots),mar=MAR,oma=OMA,las=1,mgp=MGP))
-
-fn.plt=function(d,nm)
+AXIS1=seq(10*round(min(Dat_obs$year)/10),10*round(max(Dat_obs$year)/10),by=5)
+AXIS2=seq(10*round(min(Dat_obs$year)/10),10*round(max(Dat_obs$year)/10),by=10)
+         
+fn.plt=function(d,nm,dat,size=.8)
 {
   nm=unique(Dat_obs%>%filter(SPECIES==nm)%>%pull(Name))
-  plot(d$year,d$Mean,ylim=c(0,max(d$UP.CI)),pch=19,cex=1.5,ylab='',xlab='')
-  segments(d$year,d$LOW.CI,d$year,d$UP.CI,lwd=1.5)
-  mtext(nm,3)
+  plot(d$year,d$Mean,ylim=c(0,max(d$UP.CI)),pch=19,cex=size,
+       xlim=c(min(AXIS2),max(AXIS2)),ylab='',xlab='',xaxt='n')
+  lines(d$year,d$Mean,lty=2,col=transparent("black",.5))
+  segments(d$year,d$LOW.CI,d$year,d$UP.CI,lwd=size)
+  mtext(nm,3,cex=.9)
+  axis(1,AXIS1,F)
+  axis(1,AXIS2,AXIS2)
+  
+  
+  # Nominal CPUE
+  out1 = dat %>%
+  group_by(year) %>%
+    summarise(My = mean(Catch),
+              Mx = mean(Effort),
+              Sy = sd(Catch),
+              Sx = sd(Effort),
+              r = cor(Catch, Effort),
+              n = length(Catch)) %>%
+    as.data.frame
+  out1$r[is.na(out1$r)] = 0
+  out1 = out1 %>%
+    mutate(mean=My/Mx,
+           se =  sqrt(1/n*(My^2*Sx^2/(Mx^4) + Sy^2/(Mx^2) - 2*My*r*Sx*Sy/(Mx^3))),
+           lowCL = mean - 1.96*se,
+           uppCL = mean + 1.96*se) %>%
+    as.data.frame%>%
+    mutate(lowCL=lowCL/mean(mean),
+           uppCL=uppCL/mean(mean),
+           mean=mean/mean(mean),
+           year=as.numeric(as.character(year)))
+  with(out1,points(year-.25,mean,col="grey70",pch=19,cex=size))
+  with(out1,lines(year,mean,lty=2,col=transparent("grey70",.6)))
+  with(out1,segments(year-.25,lowCL,year-.25,uppCL,lwd=size,col="grey70"))
+
+  
+  
+  #Arithmetic Mean CPUE
+  out2 = dat %>%
+    mutate(cpue=Catch/Effort)%>%
+    group_by(year) %>%
+    summarise(mean = mean(cpue),
+              n = length(cpue),
+              sd = sd(cpue)) %>%
+    mutate(lowCL = mean - 1.96*sd/sqrt(n),
+           uppCL = mean + 1.96*sd/sqrt(n)) %>%
+    as.data.frame %>%
+    mutate(lowCL=lowCL/mean(mean),
+           uppCL=uppCL/mean(mean),
+           mean=mean/mean(mean),
+           year=as.numeric(as.character(year)))
+  with(out2,points(year+.25,mean,col="steelblue",pch=19,cex=size))
+  with(out2,lines(year,mean,lty=2,col=transparent("steelblue",.6)))
+  with(out2,segments(year+.25,lowCL,year+.25,uppCL,lwd=size,col="steelblue"))
+  
 }
-tiff(file="Figure_Stand.CPUE.tiff",width = 2400, height = 2000,
-     units = "px", res = 300, compression = "lzw")    
-smart.par(n.plots=length(this.sp.enough),MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(.1, 0.5, 0))
-for(s in 1:length(this.sp.enough)) fn.plt(d=PREDS[[s]],nm=names(PREDS)[s])
+tiff(file="Figure_Stand.CPUE.tiff",width = 2400, height = 1600,
+     units = "px", res = 300, compression = "lzw")  
+par(cex.axis=.85)
+smart.par(n.plots=length(this.sp.enough),MAR=c(1,1.5,1.5,.5),OMA=c(2,2,.1,.1),MGP=c(.1, 0.5, 0))
+for(s in 1:length(this.sp.enough)) fn.plt(d=PREDS[[s]],nm=names(PREDS)[s],dat=Stand.cpue[[s]]$data)
+plot.new()
+legend("top",c("Standardised","Nominal","Arithmetic mean"),
+       col=c("black","grey70","steelblue"),bty='n',pch=19,cex=1.5)
+mtext("Relative cpue",2,outer=T,las=3,line=0.5)
+mtext("Year",1,outer=T,line=0.5)
 dev.off()
 
+# b=Store.dat[[s]]%>%
+#   mutate(year=factor(year))
+# ggplot(data=b,aes(Mid.Long,Mid.Lat))+
+#   geom_point() +
+#   geom_point(data=subset(b,Catch>0),aes(Mid.Long,Mid.Lat,color=year))
 
 # Export --------------------------------------------------------------------
+hndl="C:/Matias/Analyses/Data_outs"
+for(s in 1:length(this.sp.enough))
+{
+  nm=unique(Dat_obs%>%filter(SPECIES==names(PREDS)[s])%>%pull(Name))
+  nm.original=nm
+  if(nm%in%c("Cobbler wobbegong","Western wobbegong","Banded wobbegong")) nm='Wobbegongs'
+  out=PREDS[[s]]%>%
+    dplyr::select(-se)
+  write.csv(out,paste(hndl,'/',nm,'/',nm.original,".CPUE_Observer_TDGDLF.csv",sep=""),row.names=F)
+  rm(nm,out)
+}
+
