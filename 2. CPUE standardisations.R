@@ -5,59 +5,7 @@
 #       To update SOI and Mean Freo Sealevel each year, run "Get.SOI.Freo.R"  in C:\Matias\Data\Oceanography
 #       To update Temperature, run "SST.r"   in C:\Matias\Data\Oceanography
 
-##############--- HEADER ---###################
-
-#Index:  #----1. DATA SECTION-----#  
-#           1.1 Import data
-#           1.2 Control what parts of script are activated
-#	            1.2.1 Data controls
-#	            1.2.2 Procedure controls
-#	            1.2.3 Reporting controls
-
-#----2. PARAMETERS SECTION-----#
-
-#----3. FUNCTIONS SECTION-----#
-
-#----4. PROCEDURE SECTION-----#
-#           4.1 Deal with zone1-zone2 Boundary blocks to a zone
-#           4.2 Extract number of vessels per species range
-#           4.3 Data fixes
-#           4.4 Remove NA effort
-#           4.5 Create useful vars
-#           4.6 Proportion of dusky and copper shark
-#           4.7 Define indicative vessels and blocks 
-#           4.8 Put data into a list
-#           4.9 Compare nominal all records VS 'good reporters' only
-#           4.10 Construct wide database for analysis
-#           4.12 Drop first years of sandbar data because vessels don't meet selection 
-#           4.14 Identify targeting behaviour
-#           4.15 Table of sensitivity scenarios
-#           4.16 Compute foly and nominal index for exporting
-#           4.17 Evaluate balance of data subset based on QL
-#           4.18 Show gummy monthly cpue effect of using km gn d or km g h
-#           4.19 Export data to ainslie
-#           4.20 Output data tables
-#           4.21 Check outliers in catch and effort for removing nonsense values 
-#           4.22 Construct index of abundance 
-#               4.22.1 Explore data used for standardisation
-#               4.22.2 Show applied effort creep
-#               4.22.3 Select model structure
-#               4.22.4 Run standardisation
-#               4.22.5 Export deviance explained
-#               4.22.6 Run sensitivity tests
-#               4.22.7 Fit diagnostics
-#               4.22.8 Plot base case and nominal 
-#               4.22.9 Influence plots 
-#               4.22.10 Show month and block effects
-#               4.22.11 Construct spatial standardised catch rates
-#               4.22.12 Export catch rates
-
-
-#----5. EXPORT INDICES-----#
-
-#----6. REPORT SECTION FROM 1.Manipulate data.R-----#
-
-
+# HEADER -----------------------------------------------------------------------
 rm(list=ls(all=TRUE))
 
 #library(glmmADMB)
@@ -108,8 +56,7 @@ library(ggpubr)
 library(broom)  #nice display of model fit
 library(mgcViz)
 
-options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)   
-
+options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240,dplyr.summarise.inform = FALSE)   
 
 
 setwd("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other")
@@ -125,8 +72,8 @@ source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
 
 
 
-##############--- 1. DATA SECTION ---###################
 
+# DATA SECTION -----------------------------------------------------------------------
 setwd('C:/Matias/Analyses/Data_outs')
 Data.daily.original=fread("Data.daily.original.csv",data.table=FALSE)
 Data.monthly.GN=fread("Data.monthly.GN.csv",data.table=FALSE)
@@ -149,10 +96,12 @@ BlOCK_10=fread("C:/Matias/Data/Mapping/Blocks_10NM.csv",data.table=FALSE)
 names(BlOCK_10)=c("block10","LAT","LONG")
 Metro_BlOCK_10=subset(BlOCK_10, LAT>(-33) & LAT<=(-31) & LONG<116)
 
-#Southern Oscillation Index
+#Southern Oscillation Index (index of La Niña, El Niño events)
+#note: negative values of SOI below −7 indicate El Niño episodes
+#      positive values of SOI above +7 are typical of La Niña episode
 SOI=fread("C:/Matias/Data/Oceanography/SOI.csv",data.table=FALSE)
 
-#Mean Freo sea level
+#Mean Freo sea level (index of Leeuwin Current)
 Freo=fread("C:/Matias/Data/Oceanography/Freo_mean_sea_level.csv",data.table=FALSE)  
 
 #SST
@@ -250,7 +199,7 @@ Use.Qualif.level=FALSE
 do_cluster="NO"
 
 #Control if doing PCA analysis of daily data                    
-do_pca="NO"   
+do_pca="YES"   
 
 #Control if doing sensitivity tests
 if(Model.run=="First") do.sensitivity="YES"
@@ -284,8 +233,8 @@ plot.cpue.paper.figures="NO"
 use.blok.area='NO'
 
 
-##############--- 2. PARAMETERS SECTION ---###################
 
+# PARAMETERS SECTION -----------------------------------------------------------------------
 #Criteria for keeping species for analysis
 N.keep=5      #in years
 Min.kg=100   #in kg
@@ -302,7 +251,7 @@ Max.km.gn.h.daily=24*Net.max/1000
 Shark.species=5001:24900
 Indicator.sp=c(17001,17003,18003,18007)
 Greynurse.protection='1999-00'
-TARGETS.name=c("SHARK, WHISKERY","SHARK, GUMMY","SHARK, BRONZE WHALER","SHARK, THICKSKIN (SANDBAR)")
+TARGETS.name=c("SHARK, WHISKERY","SHARK, GUMMY","SHARK, DUSKY WHALER","SHARK, THICKSKIN (SANDBAR)")
 TARGETS=list(17003,17001,18003,18007)
 names(TARGETS)=TARGETS.name
 N.species=length(TARGETS)
@@ -409,8 +358,8 @@ Inc.per=1.05
 
 
 
-##############--- 3. PROCEDURE SECTION ---###################
 
+# BASIC MANIPULATIONS -----------------------------------------------------------------------
 #Reset BLOCKX to 4 digits as some have 5 digits
 Data.monthly.GN$BLOCKX=as.integer(substr(Data.monthly.GN$BLOCKX,1,4))
 Effort.monthly$BLOCKX=as.integer(substr(Effort.monthly$BLOCKX,1,4))
@@ -570,13 +519,19 @@ Data.monthly.GN=Data.monthly.GN%>%
                      RSCommonName=ifelse(SPECIES==19004,"Smooth Hammerhead Shark",RSCommonName))
 
 
-#Put data into species list (keep species with at least 'N.keep' years of catches of at least 'Min.kg')
+
+# SELECT SPECIES (at least 'N.keep' years of catches of at least 'Min.kg') and put into species list -----------------------------------------------------------------------
+
+  #1. First Criteria: minimum catch for a minimum number of years
 A=Data.monthly.GN%>%filter(SPECIES%in%Shark.species) %>%
         group_by(SPECIES,FINYEAR) %>%
         summarise(Weight=round(sum(LIVEWT.c))) %>%
         spread(FINYEAR, Weight)%>%
         data.frame()
+
 A=A %>% mutate_at(.vars = names(A)[-match("SPECIES",names(A))], function(x)(ifelse(x>=Min.kg, 1, 0)))
+B=as.data.frame(A)
+
 Anm=A$SPECIES
 A=rowSums(A[,-1],na.rm=T)
 names(A)=Anm
@@ -590,6 +545,69 @@ SpiSis=SpiSis$SPECIES
 names(SpiSis)=nms
 SpiSis=SpiSis[-match(c(22999),SpiSis)]
 
+if(do.Exploratory=="YES")
+{
+  fn.choose.sp=function(d,crit,Titl)
+  {
+    d=d%>%filter(!SPECIES==22999)
+    Tab=table(d$SPECIES)
+    Tab=Tab[Tab>50]
+    this.sp=names(Tab)
+    d=d%>%filter(SPECIES%in%this.sp)
+    
+    
+    s=d%>%
+      mutate(N=1,
+             YR=as.numeric(substr(FINYEAR,1,4)),
+             key=!!as.name(crit),
+             dummy=paste(key,SPECIES,FINYEAR))%>%
+      distinct(dummy,.keep_all = T)
+    s1=s%>%
+      group_by(SPECIES,YR)%>%
+      summarise(n=sum(N))
+    
+    s2=s%>%distinct(key,.keep_all = T)%>%group_by(YR)%>%tally()%>%rename(Shots=n)
+    
+    s1=left_join(s1,s2,by='YR')%>%
+      mutate(Presence=100*n/Shots,
+             Absence=100*(Shots-n)/Shots)%>%
+      dplyr::select(-c(n,Shots))
+    
+    s3=s1%>%gather("pos","n",-SPECIES,-YR)%>%arrange(SPECIES,YR)
+    p=s3%>%
+      ggplot(aes(x = YR,y = n)) + 
+      geom_bar(aes(fill = pos), position = "stack", stat="identity")+
+      facet_wrap(~SPECIES)+ ylab("Percentage") + labs(fill = "")+
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ 
+      ggtitle(Titl)
+    print(p)
+  }
+  pdf('C:/Matias/Analyses/Catch and effort/Outputs/Species selection/Selection.pdf')
+  fn.choose.sp(d=Data.monthly.GN%>%filter(SPECIES%in%Shark.species),
+               crit='Same.return',Titl='Monthly')
+  
+  fn.choose.sp(d=Data.daily.GN%>%filter(SPECIES%in%Shark.species),
+               crit='Same.return.SNo',Titl='Daily')
+  
+  B%>%
+    gather('Year','Pass',-SPECIES)%>%
+    mutate(Year=as.numeric(substr(Year,2,5)),
+           Pass=ifelse(!Pass==1,NA,Pass),
+           Col=ifelse(SPECIES%in%SpiSis,"full","empty"))%>%
+    ggplot(aes(Year,Pass),colour=Col)+
+    geom_point(aes(bg=factor(Col)),shape=21)+
+    facet_wrap(~SPECIES)+
+    ylab("Pass criteria")+
+    theme(legend.position = "none",
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ 
+    scale_fill_manual(breaks = c("full", "empty"),
+                      values=c("green", "transparent"))+
+    ggtitle(paste("Criteria:",N.keep,"years with at least",Min.kg,"kg per year"))
+  dev.off()
+}
+
+
+  #2. Second criteria. Minimum proportion of zero catch records
 #Get proportion of 0 catch by year
 Prop.ktch=vector('list',length(SpiSis))
 names(Prop.ktch)=SpiSis
@@ -683,11 +701,11 @@ First.year.catch.daily=First.year.catch.daily[match(unlist(SP.list),names(First.
 
 nnn=1:length(SP.list)
 
-#get Effective area (90% of catch) and raster
+# EFFECTIVE AREA (90% of catch) AND RASTER -----------------------------------------------------------------------
 fn.scale=function(x,scaler) ((x/max(x,na.rm=T))^0.5)*scaler
 
 Core=SP.list
-pdf('C:/Matias/Analyses/Catch and effort/species core areas/cores.pdf')
+pdf('C:/Matias/Analyses/Catch and effort/Species core areas/cores.pdf')
 for(s in nnn)
 {
   Kr=core.per
@@ -786,22 +804,28 @@ if(Model.run=="First")
   dev.off()
 }
 
-#adjust core areas following McAuley and Simpfendorfer
+#adjust core areas following Rory McAuley 
 Dusky.range=c(-28,120)
 Sandbar.range=c(-26,118)
 Whiskery.range=c(-28,129)
 Gummy.range=c(116,129) 
+change.core.manually=FALSE
+if(change.core.manually)
+{
+  Core$"Dusky Whaler"$Lat[2]=Dusky.range[1]
+  Core$"Dusky Whaler"$Long[2]=Dusky.range[2]
+  
+  Core$"Sandbar Shark"$Long[2]=Sandbar.range[2]
+  
+  Core$"Whiskery Shark"$Lat[2]=Whiskery.range[1]
+  Core$"Whiskery Shark"$Long[2]=Whiskery.range[2]
+  
+  Core$"Gummy Shark"$Long=Gummy.range
+}
 
-# Core$"Dusky Whaler"$Lat[2]=Dusky.range[1]
-# Core$"Dusky Whaler"$Long[2]=Dusky.range[2]
 
-# Core$"Sandbar Shark"$Long[2]=Sandbar.range[2]
 
-# Core$"Whiskery Shark"$Lat[2]=Whiskery.range[1]
-# Core$"Whiskery Shark"$Long[2]=Whiskery.range[2]
-
-# Core$"Gummy Shark"$Long=Gummy.range
-
+# FURTHER DATA MANIPULATIONS -----------------------------------------------------------------------
 
 #put date back in Daily data set
 get.dates=subset(Effort.daily,Same.return.SNo%in%unique(Data.daily.GN$Same.return.SNo),select=c(Same.return.SNo,date))
@@ -867,36 +891,40 @@ Data.daily.GN$Same.return=with(Data.daily.GN,paste(FINYEAR,MONTH,VESSEL,METHOD,B
 Eff.daily$Km.Gillnet.Hours_shot.c=with(Eff.daily,Km.Gillnet.Hours.c*shots.c)
 
 
+# ADD ENVIRONMENTAL VARIABLES -----------------------------------------------------------------------
+
 # Add T and T residuals 
 Lat.rng=seq(min(Data.monthly.GN$LAT),max(Data.monthly.GN$LAT),1)
 Long.rng=seq(min(Data.monthly.GN$LONG),max(Data.monthly.GN$LONG),1)
 SST=SST%>%filter(Lat%in%Lat.rng & Long%in%Long.rng)%>%
           rename(Temperature=value)
-  
+
   #Monthly
 Data.monthly.GN=Data.monthly.GN %>%
                   left_join(SST,by=c("YEAR.c"="year","MONTH"="month","LONG"="Long","LAT"="Lat"))%>% 
                   arrange(YEAR.c,MONTH,LAT,LONG)%>%
                   mutate(Temperature=ifelse(is.na(Temperature),na.approx(Temperature),Temperature))%>%
-                  group_by(MONTH)%>%
-                  mutate(Temp.res=Temperature/mean(Temperature,na.rm=T))
-
+                  group_by(MONTH,BLOCKX)%>%
+                  mutate(Temp.res=Temperature-mean(Temperature,na.rm=T))%>%   #temperature anomaly
+                  data.frame
 #Daily
 Data.daily.GN=Data.daily.GN %>%
                   mutate(LAT.round=-floor(abs(LAT)),LONG.round=floor(LONG)) %>%
                   left_join(SST,by=c("YEAR.c"="year","MONTH"="month","LONG.round"="Long","LAT.round"="Lat"))%>% 
                   arrange(YEAR.c,MONTH,LAT.round,LONG.round)%>%
                   mutate(Temperature=ifelse(is.na(Temperature),na.approx(Temperature),Temperature))%>%
-                  group_by(MONTH)%>%
-                  mutate(Temp.res=Temperature/mean(Temperature,na.rm=T))%>%
-                  dplyr::select(-c(LONG.round,LAT.round))
+                  group_by(MONTH,BLOCKX)%>%
+                  mutate(Temp.res=Temperature-mean(Temperature,na.rm=T))%>%
+                  dplyr::select(-c(LONG.round,LAT.round))%>%   
+                  data.frame
   
-
-
-# Add SOI, Freo and Moon (the later to daily only) 
-Freo=Freo%>%rename(Freo=MeanSeaLevel)%>%
-            mutate(Freo_lag6=lag(Freo,6),
-                   Freo_lag12=lag(Freo,12))
+# Add SOI, Freo and Moon (the latter to daily only) 
+#SOI is already an anomaly
+Freo=Freo%>%
+  mutate(MeanSeaLevel=MeanSeaLevel-mean(MeanSeaLevel,na.rm=T))%>% #Fit Freo as an anomaly
+  rename(Freo=MeanSeaLevel)%>%
+  mutate(Freo_lag6=lag(Freo,6),
+         Freo_lag12=lag(Freo,12))
 
   #Monthly
 Data.monthly.GN=Data.monthly.GN%>%left_join(SOI,by=c("YEAR.c"="Year","MONTH"="Month"))%>%
@@ -908,7 +936,7 @@ Data.daily.GN=Data.daily.GN%>%left_join(SOI,by=c("YEAR.c"="Year","MONTH"="Month"
                               mutate(Lunar=lunar.illumination(date),
                                      Lunar.phase=lunar.phase(date,name=T))
 
-#replace 0 depth with mean of block10
+#Replace 0 depth with mean of block10
 Eff.daily=Eff.daily %>% 
   group_by(block10) %>%
   mutate(Mean.depth= replace(Mean.depth, Mean.depth<5, mean(Mean.depth, na.rm=TRUE)),
@@ -922,8 +950,7 @@ Eff.daily=Eff.daily%>%
          Eff.Reporter=ifelse(Mean.depth>120,'bad',Eff.Reporter))  
 
 
-#Create species data sets
-
+# CREATE SPECIES DATA SETS FOR STANDARDISATIONS ----------------------------------------------
 fn.cpue.data=function(Dat,EffrrT,sp)
 {
   TAB=with(subset(Dat,SPECIES%in%sp),unique(YEAR.c))
@@ -1037,23 +1064,96 @@ system.time({Species.list.daily=foreach(s=nnn,.packages=c('dplyr','doParallel'))
 names(Species.list.daily)=names(SP.list) 
 stopCluster(cl)
 
-#Remove variables not used after prelim analysis
-for(s in nnn)
+
+#Unbalanced raw data
+get.raw=TRUE
+if(get.raw)
 {
-  if(!is.null(Species.list[[s]])) Species.list[[s]] = Species.list[[s]] %>%  dplyr::select(-c(LIVEWT,Boundary.blk,Km.Gillnet.Hours_shot.c,
-                              TYPE.DATA,Sch.or.DogS,Freo_lag6,Freo_lag12,mesh,
-                              NETLEN.c, BDAYS.c,HOURS.c))
-  if(!is.null(Species.list.daily[[s]])) Species.list.daily[[s]] = Species.list.daily[[s]] %>%  dplyr::select(-c(LIVEWT,Km.Gillnet.Days.inv,
-                                Km.Gillnet.Hours.inv,Km.Gillnet.Hours_shot.c,netlen.c,hours.c,
-                                bdays.c,TYPE.DATA,LIVEWT,nfish,Freo_lag6,Freo_lag12))
+  #Monthly
+  cl <- makeCluster(detectCores()-1)
+  registerDoParallel(cl)
+  system.time({Species.list.raw=foreach(s= 1:length(Tar.sp),.packages=c('dplyr','doParallel')) %dopar%
+    {
+      a=fn.cpue.data(Dat=Data.monthly.GN,EffrrT=Eff,sp=SP.list[[Tar.sp[s]]])%>%
+        filter(SPECIES==SP.list[[Tar.sp[s]]])%>%
+        dplyr::select(FINYEAR,SPECIES,LIVEWT.c,Km.Gillnet.Hours.c)
+      return(a)
+    }
+  })
+  names(Species.list.raw)=names(SP.list)[Tar.sp] 
+  
+  #Daily 
+  registerDoParallel(cl)
+  system.time({Species.list.daily.raw=foreach(s= 1:length(Tar.sp),.packages=c('dplyr','doParallel')) %dopar%
+    {
+      a=fn.cpue.data.daily(Dat=Data.daily.GN,EffrrT=Eff.daily,sp=SP.list[[Tar.sp[s]]])%>%
+        filter(SPECIES==SP.list[[Tar.sp[s]]])%>%
+        dplyr::select(FINYEAR,SPECIES,LIVEWT.c,Km.Gillnet.Hours.c)
+      return(a)
+    }
+  })
+  names(Species.list.daily.raw)=names(SP.list)[Tar.sp] 
+  stopCluster(cl) 
 }
 
-#Keep vessel characteristics from vessel survey for vessels that have fished      
+#Remove irrelevant variables (not used after prelim analysis)
+for(s in nnn)
+{
+  if(!is.null(Species.list[[s]]))
+  {
+    Species.list[[s]] = Species.list[[s]] %>%
+      dplyr::select(-c(LIVEWT,Boundary.blk,Km.Gillnet.Hours_shot.c,
+                       TYPE.DATA,Sch.or.DogS,Freo_lag6,Freo_lag12,mesh,
+                       NETLEN.c, BDAYS.c,HOURS.c))
+    
+  }
+  if(!is.null(Species.list.daily[[s]]))
+  {
+    Species.list.daily[[s]] = Species.list.daily[[s]] %>%
+      dplyr::select(-c(LIVEWT,Km.Gillnet.Days.inv,
+                       Km.Gillnet.Hours.inv,Km.Gillnet.Hours_shot.c,netlen.c,hours.c,
+                       bdays.c,TYPE.DATA,LIVEWT,nfish,Freo_lag6,Freo_lag12))
+  }
+
+}
+
+# PROPORTION OF DUSKY AND COPPER SHARKS ----------------------------------------------
+Combine.dusky.copper="NO"
+if(Combine.dusky.copper=="YES")
+{
+  fn.fig("proportion of dusky and copper shark_TDGLDF",2000,2400)
+  par(mfcol=c(2,1),las=1,mai=c(.8,.85,.1,.1),mgp=c(2.5,.8,0))
+  #monthly
+  All.dusky=aggregate(LIVEWT.c~FINYEAR,subset(Species.list[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18003),sum)
+  All.copper=aggregate(LIVEWT.c~FINYEAR,subset(Species.list[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18001),sum)
+  All.dusky=All.dusky[match(All.copper$FINYEAR,All.dusky$FINYEAR),]
+  Prop.copper_dusky=data.frame(FINYEAR=All.dusky$FINYEAR,proportion=All.copper$LIVEWT.c/All.dusky$LIVEWT.c)
+  plot(1:nrow(Prop.copper_dusky),Prop.copper_dusky$proportion,xaxt='n',
+       ylab="",xlab="",pch=19,col=2,cex=1.75,cex.lab=1.5,ylim=c(0,.25))
+  axis(1,1:nrow(Prop.copper_dusky),Prop.copper_dusky$FINYEAR)
+  legend("topright","Monthly returns",bty='n',cex=1.5)
+  
+  #daily
+  All.dusky=aggregate(LIVEWT.c~FINYEAR,subset(Species.list.daily[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18003),sum)
+  All.copper=aggregate(LIVEWT.c~FINYEAR,subset(Species.list.daily[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18001),sum)
+  All.dusky=All.dusky[match(All.copper$FINYEAR,All.dusky$FINYEAR),]
+  Prop.copper_dusky=data.frame(FINYEAR=All.dusky$FINYEAR,proportion=All.copper$LIVEWT.c/All.dusky$LIVEWT.c)
+  plot(1:nrow(Prop.copper_dusky),Prop.copper_dusky$proportion,xaxt='n',
+       ylab="",xlab="Financial year",pch=19,col=2,cex=1.75,cex.lab=1.5,ylim=c(0,.25))
+  axis(1,1:nrow(Prop.copper_dusky),Prop.copper_dusky$FINYEAR)
+  legend("topright","Daily logbooks",bty='n',cex=1.5)
+  
+  mtext("Bronze whaler shark catch / Dusky shark catch",2,-1.5,las=3,outer=T,cex=1.75)
+  dev.off()
+  
+}
+
+# VESSELS & BLOCKS----------------------------------------------
+# Keep vessel characteristics from vessel survey for vessels that have fished      
 if(exists("TDGDLF.survey"))  TDGDLF.survey=subset(TDGDLF.survey, BOATREGO%in%
                                     unique(c(Data.monthly.GN$VESSEL,Data.daily.GN$VESSEL)))   
 
-
-#4.2 Extract number of vessels reporting catch of species per species range
+# Extract number of vessels reporting catch of species per species range
 N.VES=matrix(rep(NA,length(nnn)),ncol=length(nnn))
 colnames(N.VES)=names(SP.list)
 for(i in nnn)
@@ -1068,7 +1168,7 @@ hndl=paste(getwd(),"/Outputs/Paper/",sep="")
 write.csv(N.VES,paste(hndl,"All.Vessels.by.species.csv",sep=""),row.names=T)
 
 
-#4.2.1 Extract number of blocks where sharks have been caught within core (effective) area
+# Extract number of blocks where sharks have been caught within core (effective) area
 Tol.blks=SP.list
 for(i in nnn)
 {
@@ -1081,7 +1181,7 @@ Blks.by.species=do.call(c,Tol.blks)
 write.csv(Blks.by.species,paste(hndl,"All.Blks.by.species.csv",sep=""),row.names=T)
 
 
-#4.2.2 Block weights   
+# Block weights   
 if(use.blok.area=="YES")
 {
   AREA.W=vector('list',length=N.species)
@@ -1129,7 +1229,7 @@ if(use.blok.area=="YES")
 }
 
 
-#4.5 Create useful vars
+# Create useful vars
 FINYEAR.monthly=as.character(unique(Data.monthly.GN$FINYEAR))
 FINYEAR.monthly=sort(FINYEAR.monthly)
 N.yrs=length(FINYEAR.monthly)
@@ -1143,39 +1243,7 @@ FINYEAR.ALL=sort(FINYEAR.ALL)
 N.yrs.ALL=length(FINYEAR.ALL)
 
 
-#4.6 Proportion of dusky and copper shark
-Combine.dusky.copper="NO"
-if(Combine.dusky.copper=="YES")
-{
-  fn.fig("proportion of dusky and copper shark_TDGLDF",2000,2400)
-  par(mfcol=c(2,1),las=1,mai=c(.8,.85,.1,.1),mgp=c(2.5,.8,0))
-  #monthly
-  All.dusky=aggregate(LIVEWT.c~FINYEAR,subset(Species.list[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18003),sum)
-  All.copper=aggregate(LIVEWT.c~FINYEAR,subset(Species.list[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18001),sum)
-  All.dusky=All.dusky[match(All.copper$FINYEAR,All.dusky$FINYEAR),]
-  Prop.copper_dusky=data.frame(FINYEAR=All.dusky$FINYEAR,proportion=All.copper$LIVEWT.c/All.dusky$LIVEWT.c)
-  plot(1:nrow(Prop.copper_dusky),Prop.copper_dusky$proportion,xaxt='n',
-       ylab="",xlab="",pch=19,col=2,cex=1.75,cex.lab=1.5,ylim=c(0,.25))
-  axis(1,1:nrow(Prop.copper_dusky),Prop.copper_dusky$FINYEAR)
-  legend("topright","Monthly returns",bty='n',cex=1.5)
-  
-  #daily
-  All.dusky=aggregate(LIVEWT.c~FINYEAR,subset(Species.list.daily[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18003),sum)
-  All.copper=aggregate(LIVEWT.c~FINYEAR,subset(Species.list.daily[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18001),sum)
-  All.dusky=All.dusky[match(All.copper$FINYEAR,All.dusky$FINYEAR),]
-  Prop.copper_dusky=data.frame(FINYEAR=All.dusky$FINYEAR,proportion=All.copper$LIVEWT.c/All.dusky$LIVEWT.c)
-  plot(1:nrow(Prop.copper_dusky),Prop.copper_dusky$proportion,xaxt='n',
-       ylab="",xlab="Financial year",pch=19,col=2,cex=1.75,cex.lab=1.5,ylim=c(0,.25))
-  axis(1,1:nrow(Prop.copper_dusky),Prop.copper_dusky$FINYEAR)
-  legend("topright","Daily logbooks",bty='n',cex=1.5)
-  
-  mtext("Bronze whaler shark catch / Dusky shark catch",2,-1.5,las=3,outer=T,cex=1.75)
-  dev.off()
-  
-}
-
-
-#4.7 Determine indicative vessels and blocks        
+# Determine indicative vessels and blocks        
 #steps: 1. select vessels that meet criteria (fishing for at least Threshold.n.yrs or Threshold.n.yrs.daily
 #         and catching at least MIN.ktch)
 #       2. for those vessels, select blocks with at least MIN.obs.BLK years of observations
@@ -1497,8 +1565,7 @@ if(Remove.blk.by=="blk_only")
   dev.off()
 }
 
-
-# Illustrate folly effect: mean Vs sum
+# ILLUSTRATE FOLLY EFFECT (MEAN vs SUM) AND CATCH RATE VARIABILITY---------------------------
 if(Show.folly.eg=="YES")
 {
   setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper/MeanVsSum")
@@ -1555,8 +1622,6 @@ if(Show.folly.eg=="YES")
   # dev.off()
   
 }
-
-#Show example of variability in catch rates and need for standardisation
 if(Show.variability.cpue.eg=="YES")
 {
   setwd("C:/Matias/Analyses/Catch and effort/Outputs")
@@ -1622,8 +1687,7 @@ if(Show.variability.cpue.eg=="YES")
   dev.off()
 }
 
-
-#4.10 Construct wide database for analysis 
+# CONSTRUCT WIDE DATABASE FOR STANDARDISATIONS ----------------------------------------------
 #steps: 
 #   1. select "Good" records (the variable "Reporter" includes good/bad catch and effort reporters)
 #   2. Construct a single row for each record (i.e. 'year-month-vessel-block-gear' for monthly
@@ -1823,7 +1887,6 @@ for(i in nnn)
   }
 }
 
-
   #daily 
 These.efforts.daily=c("FINYEAR","date","TSNo","Km.Gillnet.Hours.c","Km.Gillnet.Days.c",
                       "zone","MONTH","BLOCKX","block10","VESSEL","mesh",
@@ -1844,13 +1907,11 @@ for(i in nnn)
   }
 }
 
-
-#Export proportions with Catch
+# EXPORT PROPORTIONS WITH CATCH ----------------------------------------------
 write.csv(Prop.Catch,paste(hndl,"Prop.records.with.catch.monthly.csv",sep=""),row.names=T)
 write.csv(Prop.Catch.daily,paste(hndl,"Prop.records.with.catch.daily.csv",sep=""),row.names=T)
 
-
-#Calculate block corners for gam
+# CALCULATE BLOCK CORNERS FOR GAM ----------------------------------------------
 for(s in nnn)
 {
   if(!is.null(DATA.list.LIVEWT.c[[s]])) DATA.list.LIVEWT.c[[s]] = DATA.list.LIVEWT.c[[s]] %>%  
@@ -1861,11 +1922,11 @@ for(s in nnn)
                        LONG10.corner=100+as.numeric(substr(block10,4,5))+10*(as.numeric(substr(block10,6,6)))/60)
 }
 
-#Define target species index
-Tar.sp=match(TARGETS,SP.list)
+# DEFINE TARGET SPECIES INDEX ----------------------------------------------
+Tar.sp=match(TARGETS,SP.list)    
 
-
-#4.12 Drop first years of sandbar data because vessels don't meet selection criteria and no positive catch
+# REMOVE YEARS WITHOUT SANDBAR SHARK CODE ----------------------------------------------
+#note: Dropping these years because vessels don't meet selection criteria and no positive catch
 fn.sel.yrs.used=function(DD,ThrShld.n.vess)
 {
   a=with(DD,table(FINYEAR,VESSEL))
@@ -1880,15 +1941,14 @@ San.Yrs=fn.sel.yrs.used(DD,ThrShld.n.vess=5)
 rm(DD)
 DATA.list.LIVEWT.c$"Sandbar Shark"=subset(DATA.list.LIVEWT.c$"Sandbar Shark",FINYEAR%in%San.Yrs)
 
-#fix some species names
+# FIX SOME SPECIES NAMES ----------------------------------------------
 Nms.sp=capitalize(tolower(names(SP.list)))  
 Nms.sp[match(c("Smooth hammerhead shark","Dusky whaler"),Nms.sp)]=c("Smooth hammerhead","Dusky shark")
 
-
-
-#4.14  Identify targeting behaviour   (FYI: more code in 2.CPUE standardisations_delta.R)
-#note: this uses all species accounting for 95% of catch
-HndL.Species_targeting="C:/Matias/Analyses/Catch and effort/Outputs/Paper/Species_targeting/"
+# IDENTIFY TARGETING BEHAVIOUR ----------------------------------------------
+#note:  more code in 2.CPUE standardisations_delta.R)
+#      this uses all species accounting for 95% of catch
+HndL.Species_targeting="C:/Matias/Analyses/Catch and effort/Outputs/Species targeting/"
 if(Model.run=="First")
 {
   theme_set(theme_pubr())
@@ -1999,9 +2059,9 @@ if(do_cluster=="YES")
   }
   
   #add cluster to original data for use in standardisations
-  for(i in Tar.sp)
+  for(s in Tar.sp)
   {
-    DATA.list.LIVEWT.c.daily[[i]]=left_join(DATA.list.LIVEWT.c.daily[[i]],Store.cluster[[i]],by=c("Same.return.SNo"))
+    DATA.list.LIVEWT.c.daily[[s]]=left_join(DATA.list.LIVEWT.c.daily[[s]],Store.cluster[[s]],by=c("Same.return.SNo"))
   }
   rm(Store.cluster)
   
@@ -2009,7 +2069,7 @@ if(do_cluster=="YES")
   fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_cluster.boxplot",sep=""),2400,2400)
   par(mfcol=c(2,2),mar=c(1,3,3,1),oma=c(2,1,.1,.5),las=1,mgp=c(2,.6,0))
   for(i in Tar.sp) boxplot((Catch.Target/Km.Gillnet.Hours.c)~cluster_clara,DATA.list.LIVEWT.c.daily[[i]],
-                           main=names(DATA.list.LIVEWT.c.daily)[i],ylab="cpue")
+                           main=names(DATA.list.LIVEWT.c.daily)[i],ylab="cpue",ylim=c(0,30))
   dev.off()
   
   
@@ -2039,15 +2099,17 @@ if(do_pca=="YES")
     target=paste("Proportion.",names(SP.list)[Tar.sp[i]],sep="")
     
     a=Species.list.daily[[Tar.sp[i]]]%>%
-      filter(Same.return.SNo%in%unique(DATA.list.LIVEWT.c.daily[[Tar.sp[i]]]$Same.return.SNo))
+      filter(Same.return.SNo%in%unique(DATA.list.LIVEWT.c.daily[[Tar.sp[i]]]$Same.return.SNo))%>%
+      filter(!SPECIES%in%31000)%>%
+      mutate(SPECIES=ifelse(SPECIES==19004,19000,SPECIES))
     TOP.ktch=a%>%group_by(SPECIES)%>%
       summarise(Catch=sum(LIVEWT.c))%>%
       arrange(-Catch)%>%
       mutate(Cum.ktch=cumsum(Catch),
              Quantiles=Cum.ktch/sum(Catch))
     top.sp=TOP.ktch$SPECIES[1:which.min(abs(TOP.ktch$Quantiles-95/100))]
-    a=a%>%mutate(SPECIES=ifelse(!SPECIES%in%top.sp,999999,SPECIES))%>%
-      #  a=a%>%filter(SPECIES%in%top.sp)%>%
+    #a=a%>%mutate(SPECIES=ifelse(!SPECIES%in%top.sp,999999,SPECIES))%>%
+      a=a%>%filter(SPECIES%in%top.sp)%>%
       group_by(Same.return.SNo,SPECIES)%>%
       summarise(LIVEWT.c=sum(LIVEWT.c,na.rm=T),
                 Km.Gillnet.Hours.c=max(Km.Gillnet.Hours.c))%>%
@@ -2061,7 +2123,7 @@ if(do_pca=="YES")
     a=a/rowSums(a,na.rm = T)
     
     #square root
-    a=a*a              
+    #a=a*a              
     
     #check correlation
     if(Model.run=="First")
@@ -2129,18 +2191,22 @@ if(do_pca=="YES")
     
   }
   
-  #check cpue by cluster group
+  #check cpue by PCA dimension
   if(Model.run=="First")
   {
-    fn.fig(paste(HndL.Species_targeting,"PCA/PCA.boxplot",sep=""),2400,2400)
+    fn.fig(paste(HndL.Species_targeting,"PCA/Cpue_dim.1",sep=""),2400,2400)
     par(mfcol=c(2,2),mar=c(1,3,3,1),oma=c(2,1,.1,.5),las=1,mgp=c(2,.6,0))
-    for(i in Tar.sp) with(DATA.list.LIVEWT.c.daily[[i]],plot((Catch.Target/Km.Gillnet.Hours.c)~Dim.1, 
-                                                             main=names(DATA.list.LIVEWT.c.daily)[i],ylab="cpue"))
-    dev.off()
+    for(s in Tar.sp)
+    {
+      with(DATA.list.LIVEWT.c.daily[[s]],plot((Catch.Target/Km.Gillnet.Hours.c)~Dim.1, 
+                                              main=names(DATA.list.LIVEWT.c.daily)[s],ylab="cpue"))
+      
+    }
+     dev.off()
   }
 }
 
-#4.15 Table of sensitivity scenarios       
+# TABLE OF SENSITIVITY SCENARIOS ----------------------------------------------
 Tab.Sensi=data.frame(Scenario=c("Base case","Nominal","All vessels & blocks","No efficiency"),
                      Standardisation=c("Yes","No",rep("Yes",2)),
                      Records_used=c("Reliable only","All",rep("Reliable only",2)),
@@ -2156,8 +2222,42 @@ fn.word.table(WD=getwd(),TBL=Tab.Sensi,Doc.nm="Sensitivity tests",caption=NA,par
 
 
 
+# COMPUTE RAW UNBALANCED INDEX FOR PAPER ----------------------------------------------
+Raw.index=vector('list',length(Species.list.raw))
+names(Raw.index)=names(Species.list.raw)
+Raw.index.daily=Raw.index
+for(s in 1:length(Species.list.raw))
+{
+  #Monthly
+  
+  Raw.index[[s]]=Species.list.raw[[s]] %>%
+                  mutate(cpue=LIVEWT.c/Km.Gillnet.Hours.c)%>%
+                  group_by(FINYEAR) %>%
+                  summarise(mean = mean(cpue),
+                            n = length(cpue),
+                            sd = sd(cpue)) %>%
+                  mutate(lowCL = mean - 1.96*sd/sqrt(n),
+                         uppCL = mean + 1.96*sd/sqrt(n)) %>%
+                  as.data.frame%>%
+                  dplyr::select(-c(n,sd))
+  
+  #Daily
+  Raw.index.daily[[s]]=Species.list.daily.raw[[s]] %>%
+                mutate(cpue=LIVEWT.c/Km.Gillnet.Hours.c)%>%
+                group_by(FINYEAR) %>%
+                summarise(mean = mean(cpue),
+                          n = length(cpue),
+                          sd = sd(cpue)) %>%
+                mutate(lowCL = mean - 1.96*sd/sqrt(n),
+                       uppCL = mean + 1.96*sd/sqrt(n)) %>%
+                as.data.frame%>%
+                dplyr::select(-c(n,sd))
+}
 
-#4.16 Compute foly and nominal index for exporting  
+
+
+
+# COMPUTE FOLLY AND NOMINAL INDICES FOR EXPORTING ----------------------------------------------
 
   #--Effective
 #note: As done by Rory, the Effective (ie Foly) index has all records (good  & bad reporters) from all blocks 
@@ -2482,7 +2582,7 @@ suppressWarnings(for(s in nnn)
   }
 })
 
-#4.17 Evaluate balance of data subset for QL  
+# EVALUATE BALANCE OF DATA FOR QL ----------------------------------------------
 #note: remove vessels with less than Min.Vess.yr (monthly) and Min.Vess.yr.d (daily)
 #      for those vessels, keep blocks with more than Min.Vess.yr / Min.Vess.yr.d
 if(!exists('BLKS.used.indi'))
@@ -2629,8 +2729,7 @@ dev.off()
 
 setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper")
 
-
-#4.18 Show gummy monthly cpue effect of using km gn d or km g h
+# SHOW EFFECT OF USING km gn d VS km g h for gummy ----------------------------------------------
 Show.gummy.hour=FALSE
 if(Show.gummy.hour)
 {
@@ -2763,8 +2862,7 @@ if(Show.gummy.hour)
   dev.off()
 }
 
-
-#4.19 Export data to ainslie
+# EXPORT DATA FOR AINSLIE ----------------------------------------------
 Exprt_Ainslie="NO"
 if(Exprt_Ainslie=="YES")
 {
@@ -2775,8 +2873,7 @@ if(Exprt_Ainslie=="YES")
   }
 }
 
-
-#4.20 Output data tables  
+# OUTPUT DATA TABLES ----------------------------------------------
 #Output table with number of records available in effective area and numbers used in standardisation
 Export.tbl=function(WD,Tbl,Doc.nm,caption,paragph,HdR.col,HdR.bg,Hdr.fnt.sze,Hdr.bld,
                     body.fnt.sze,Zebra,Zebra.col,Grid.col,Fnt.hdr,Fnt.body,
@@ -2887,30 +2984,149 @@ Export.tbl(WD=getwd(),Tbl=Table.nsamp,Doc.nm="Sample_sizes",caption=NA,paragph=N
            HDR.2nd=c("","",rep(c("Dusky","Gummy","Sandbar","Whiskery"),3)))
 
 
-#4.22 Construct index of abundance     
-ZONES=c("West","Zone1","Zone2")
-Response="catch.target"    #cpue and positive catch are calculated inside functions
-Eff.vars=c("km.gillnet.hours.c")
-
-Categorical=c("finyear","vessel","blockx","shots.c")
-
-Covariates.monthly=c("MONTH","LONG10.corner","LAT10.corner","Freo","Temp.res","SOI")
-Targeting.vars=c("Dim.1","Dim.2","Dim.3")
-Covariates.daily=c(Covariates.monthly,"Mean.depth","Lunar","mesh","nlines.c")
-if(do_pca=="YES") Covariates.daily=c(Covariates.daily,Targeting.vars)
-
-Predictors_monthly=c(Categorical,Covariates.monthly)
-Predictors_daily=c(Categorical,Covariates.daily)
 
 
-
-#   4.22.1 Explore data used for standardisation
+# EXPLORATORY ANALYSES -----------------------------------------------------------------------
 #note: This applies cede() exploration, and checks for outliers in catch and effort
 #         max monthly ktch, effort (~ 40 tonnes, ~ 5800 km gn h (@ 30 days X 24 h X 8000 m), respectively) 
 #         max trip (daily kg) ktch, effort (~ 15 tonnes, ~ 1900 km gn h (@ 10 days X 24 h X 8000 m), respectively) 
 #      Also does GAM exploratory stuff
 
-    
+#Temperature
+explore.Oceanographic=FALSE
+if(explore.Oceanographic)
+{
+  pdf('C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/Oceanographic variables/Temperature.pdf')
+  SST%>%
+    group_by(Long,Lat,year)%>%
+    summarise(Temperature=mean(Temperature))%>%
+    ggplot(aes(x = Long, y = Lat)) +
+    labs(x = "Long", y = "Lat", fill = "Value") +
+    geom_raster(aes(fill = Temperature))+
+    facet_wrap(vars(year))
+  #ggsave("C:/Matias/Analyses/Catch and effort/Outputs/Temperature/Spatio_temporal.tiff", width = 12,height = 10,compression = "lzw")
+  
+  
+  SST%>%
+    filter(Lat<(-29) & Lat>=(-31))%>%
+    group_by(year,month)%>%
+    summarise(mean=mean(Temperature,na.rm=T),
+              sd=sd(Temperature,na.rm=T),
+              n=length(Temperature))%>%
+    mutate(lowCL = mean - 1.96*sd/sqrt(n),
+           uppCL = mean + 1.96*sd/sqrt(n))%>%
+    ggplot(aes(x = year, y = mean)) +
+    geom_point()+
+    geom_smooth(method = "lm")+
+    geom_errorbar(aes(ymin=lowCL, ymax=uppCL), width=.2,
+                  position=position_dodge(.9)) +
+    labs(x = "Year", y = "Temperature (+/- 95% CI)") +
+    ggtitle("Mean temperature 29 to 31  S")+
+    facet_wrap(vars(month))
+  
+  SST%>%
+    filter(Lat<(-31))%>%
+    group_by(year,month)%>%
+    summarise(mean=mean(Temperature,na.rm=T),
+              sd=sd(Temperature,na.rm=T),
+              n=length(Temperature))%>%
+    mutate(lowCL = mean - 1.96*sd/sqrt(n),
+           uppCL = mean + 1.96*sd/sqrt(n))%>%
+    ggplot(aes(x = year, y = mean)) +
+    geom_point()+
+    geom_smooth(method = "lm")+
+    geom_errorbar(aes(ymin=lowCL, ymax=uppCL), width=.2,
+                  position=position_dodge(.9)) +
+    labs(x = "Year", y = "Temperature (+/- 95% CI)") +
+    ggtitle("Mean temperature South of 31  S")+
+    facet_wrap(vars(month))
+  
+  SST%>%
+    filter(Lat<(-29) & month%in%c(6:9))%>%
+    group_by(year)%>%
+    summarise(mean=mean(Temperature,na.rm=T),
+              sd=sd(Temperature,na.rm=T),
+              n=length(Temperature))%>%
+    mutate(lowCL = mean - 1.96*sd/sqrt(n),
+           uppCL = mean + 1.96*sd/sqrt(n))%>%
+    ggplot(aes(x = year, y = mean)) +
+    geom_point()+
+    geom_smooth(method = "lm")+
+    geom_errorbar(aes(ymin=lowCL, ymax=uppCL), width=.2,
+                  position=position_dodge(.9)) +
+    labs(x = "Year", y = "Temperature (+/- 95% CI)") +
+    ggtitle("June to September.  Mean temperature south of 29 S")
+  
+  SST%>%
+    filter(Lat<(-29) & month%in%c(12,1:4))%>%
+    group_by(year)%>%
+    summarise(mean=mean(Temperature,na.rm=T),
+              sd=sd(Temperature,na.rm=T),
+              n=length(Temperature))%>%
+    mutate(lowCL = mean - 1.96*sd/sqrt(n),
+           uppCL = mean + 1.96*sd/sqrt(n))%>%
+    ggplot(aes(x = year, y = mean)) +
+    geom_point()+
+    geom_smooth(method = "lm")+
+    geom_errorbar(aes(ymin=lowCL, ymax=uppCL), width=.2,
+                  position=position_dodge(.9)) +
+    labs(x = "Year", y = "Temperature (+/- 95% CI)") +
+    ggtitle("December to April.  Mean temperature south of 29 S")
+  
+  SST%>%
+    filter(Lat<(-29) & Lat>=(-31))%>%
+    mutate(Temperature=Temperature-mean(Temperature,na.rm=T))%>%
+    group_by(year)%>%
+    summarise(Anomaly=mean(Temperature,na.rm=T))%>%
+    mutate(Sign=as.factor(ifelse(Anomaly<0,'neg','pos')))%>%
+    ggplot(aes(x = year, y = Anomaly, fill = Sign)) +
+    geom_bar(stat = "identity", show.legend = FALSE)  +
+    ggtitle("Temperature anomalies.  29 to 31  S")+
+    scale_fill_manual("legend", values = c("neg" = "blue", "pos" = "red"))
+  
+  SST%>%
+    filter(Lat<(-31))%>%
+    mutate(Temperature=Temperature-mean(Temperature,na.rm=T))%>%
+    group_by(year)%>%
+    summarise(Anomaly=mean(Temperature,na.rm=T))%>%
+    mutate(Sign=as.factor(ifelse(Anomaly<0,'neg','pos')))%>%
+    ggplot(aes(x = year, y = Anomaly, fill = Sign)) +
+    geom_bar(stat = "identity", show.legend = FALSE)  +
+    ggtitle("Temperature anomalies.  South of 31  S")+
+    scale_fill_manual("legend", values = c("neg" = "blue", "pos" = "red"))
+  dev.off()
+}
+#SOI
+if(explore.Oceanographic)
+{
+  pdf('C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/Oceanographic variables/SOI.pdf')
+  SOI%>%
+    mutate(year=Year+Month/13,
+           Sign=as.factor(ifelse(SOI<0,'neg','pos')))%>%
+    ggplot(aes(x = year, y = SOI, fill = Sign)) +
+    geom_bar(stat = "identity", show.legend = FALSE)  +
+    ggtitle("SOI")+
+    scale_fill_manual("legend", values = c("neg" = "blue", "pos" = "red"))+
+    geom_hline(yintercept=-7,linetype="dashed", color = "blue")+
+    annotate("text", x = min(SOI$Year)+.75, y = -8, label = "El Niño", size = 5)+
+    geom_hline(yintercept=7,linetype="dashed", color = "red")+
+    annotate("text", x =min(SOI$Year)+.75 , y = 8, label = "La Niña", size = 5)
+  dev.off()
+}
+#Freo
+if(explore.Oceanographic)
+{
+  pdf('C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/Oceanographic variables/Freo.pdf')
+  Freo%>%
+    mutate(year=Year+Month/13,
+           Sign=as.factor(ifelse(Freo<0,'neg','pos')))%>%
+    ggplot(aes(x = year, y = Freo, fill = Sign)) +
+    geom_bar(stat = "identity", show.legend = FALSE)  +
+    ggtitle("Freo")+
+    scale_fill_manual("legend", values = c("neg" = "blue", "pos" = "red"))
+  dev.off()
+}
+
 cfac=function(x,breaks=NULL)    #function for converting continuous var to factor
 {
   if(is.null(breaks)) breaks=unique(quantile(x,probs = seq(0, 1, 0.1),na.rm = T))
@@ -3169,31 +3385,31 @@ if(do.Exploratory=="YES")
     for(s in Tar.sp)
     {
       #monthly
-    pdf(paste(hndl.expl,names(SP.list)[s],"_monthly.pdf",sep="")) 
-    if(!is.null(Store_nom_cpues_monthly[[s]]))
-    {
-      dummy=subset(Store_nom_cpues_monthly[[s]]$QL_dat,vessel%in%VES.used[[s]])
-      dummy=subset(dummy,blockx%in%BLKS.used[[s]])
-      fn.expl.cede(d=dummy,PREDS=Predictors_monthly,kg=TRUE,Do.ggplts=F)
-    }
-    if(!is.null(DATA.list.LIVEWT.c[[s]])) fn.box.plt.year(d=subset(DATA.list.LIVEWT.c[[s]],Catch.Target>0))
-    if(!is.null(Store_nom_cpues_monthly[[s]])) check.cpue(Store_nom_cpues_monthly[[s]]$QL_dat,paste("monthly",names(DATA.list.LIVEWT.c)[s]),4)
-    if(names(SP.list)[s]=="Whiskery Shark") fn.pred.effect(DATA=DATA.list.LIVEWT.c[[s]],PREDS=Predictors_monthly)
-    dev.off()
-    
+      pdf(paste(hndl.expl,names(SP.list)[s],"_monthly.pdf",sep="")) 
+      if(!is.null(Store_nom_cpues_monthly[[s]]))
+      {
+        dummy=subset(Store_nom_cpues_monthly[[s]]$QL_dat,vessel%in%VES.used[[s]])
+        dummy=subset(dummy,blockx%in%BLKS.used[[s]])
+        fn.expl.cede(d=dummy,PREDS=Predictors_monthly,kg=TRUE,Do.ggplts=F)
+      }
+      if(!is.null(DATA.list.LIVEWT.c[[s]])) fn.box.plt.year(d=subset(DATA.list.LIVEWT.c[[s]],Catch.Target>0))
+      if(!is.null(Store_nom_cpues_monthly[[s]])) check.cpue(Store_nom_cpues_monthly[[s]]$QL_dat,paste("monthly",names(DATA.list.LIVEWT.c)[s]),4)
+      if(names(SP.list)[s]=="Whiskery Shark") fn.pred.effect(DATA=DATA.list.LIVEWT.c[[s]],PREDS=Predictors_monthly)
+      dev.off()
+      
       #daily
-    pdf(paste(hndl.expl,names(SP.list)[s],"_daily.pdf",sep=""))
-    if(!is.null(Store_nom_cpues_daily[[s]]))
-    {
-      dummy=subset(Store_nom_cpues_daily[[s]]$QL_dat,vessel%in%VES.used.daily[[s]])
-      dummy=subset(dummy,blockx%in%BLKS.used.daily[[s]])
-      fn.expl.cede(d=dummy,PREDS=Predictors_daily,kg=TRUE,Do.ggplts=T)
+      pdf(paste(hndl.expl,names(SP.list)[s],"_daily.pdf",sep=""))
+      if(!is.null(Store_nom_cpues_daily[[s]]))
+      {
+        dummy=subset(Store_nom_cpues_daily[[s]]$QL_dat,vessel%in%VES.used.daily[[s]])
+        dummy=subset(dummy,blockx%in%BLKS.used.daily[[s]])
+        fn.expl.cede(d=dummy,PREDS=Predictors_daily,kg=TRUE,Do.ggplts=T)
+      }
+      if(!is.null(DATA.list.LIVEWT.c.daily[[s]])) fn.box.plt.year(d=subset(DATA.list.LIVEWT.c.daily[[s]],Catch.Target>0))
+      if(!is.null(Store_nom_cpues_daily[[s]])) check.cpue(Store_nom_cpues_daily[[s]]$QL_dat,paste("daily",names(DATA.list.LIVEWT.c)[s]),4) 
+      if(names(SP.list)[s]=="Whiskery Shark") fn.pred.effect(DATA=DATA.list.LIVEWT.c.daily[[s]],PREDS=subset(Predictors_daily,!Predictors_daily%in%c('mesh','nlines.c')))
+      dev.off()
     }
-    if(!is.null(DATA.list.LIVEWT.c.daily[[s]])) fn.box.plt.year(d=subset(DATA.list.LIVEWT.c.daily[[s]],Catch.Target>0))
-    if(!is.null(Store_nom_cpues_daily[[s]])) check.cpue(Store_nom_cpues_daily[[s]]$QL_dat,paste("daily",names(DATA.list.LIVEWT.c)[s]),4) 
-    if(names(SP.list)[s]=="Whiskery Shark") fn.pred.effect(DATA=DATA.list.LIVEWT.c.daily[[s]],PREDS=subset(Predictors_daily,!Predictors_daily%in%c('mesh','nlines.c')))
-    dev.off()
-  }
   })    #takes 2 mins
   
   # GAM exploratory analyses 
@@ -3329,21 +3545,21 @@ if(do.Exploratory=="YES")
     plot(coef(Mod1)[-1],coef(Mod2)[-1],pch=19,cex=2,xlab="coef mod1",ylab="coef mod2")
     lines(coef(Mod1)[-1],coef(Mod1)[-1],lwd=2,col=2)
     
-
+    
     #Model year as an autocorrelated continuous variable
-      #pos part
+    #pos part
     Mod1=gam(ln.cpue~s(year.c,bs='gp'),dat=d.pos,method="REML")  #specify a gaussian process
     Mod2=gam(ln.cpue~s(year.c),dat=d.pos,method="REML")
     Mod3=gam(ln.cpue~finyear,dat=d.pos,method="REML")
     
-      #bi part
+    #bi part
     Mod1.bi=gam(catch.target~s(year.c,bs='gp')+offset(ln.effort),dat=d.bi,family=binomial,method="REML")  #specify a gaussian process
     Mod2.bi=gam(catch.target~s(year.c)+offset(ln.effort),dat=d.bi,family=binomial,method="REML")
     Mod3.bi=gam(catch.target~finyear+offset(ln.effort),dat=d.bi,family=binomial,method="REML")
     
     
     par(mfcol=c(3,2),mar=c(3,4,1,1))
-      #pos part
+    #pos part
     fn.mod.plt(Mod1,"Mod1 s(year,bs='gp')","cpue",FALSE,'pos')
     fn.mod.plt(Mod2,"Mod2 s(year)","cpue",FALSE,'pos')
     fn.mod.plt(Mod3,"Mod2 s(year)","cpue",TRUE,'pos')
@@ -3366,13 +3582,13 @@ if(do.Exploratory=="YES")
     grid.newpage()
     grid.table(AIC.tab)
     
-      #bi part
+    #bi part
     par(mfcol=c(3,2),mar=c(3,4,1,1))
     fn.mod.plt(Mod1.bi,"Mod1.bi s(year,bs='gp')","catch",FALSE,'bi')
     fn.mod.plt(Mod2.bi,"Mod2.bi s(year)","catch",FALSE,'bi')
     fn.mod.plt(Mod3.bi,"Mod2.bi s(year)","catch",TRUE,'bi')
     legend('top',"Mod3.bi finyear",bty='n',cex=1.5)
- 
+    
     New.d=data.frame(finyear=factor(levels(d.bi$finyear)))%>%
       mutate(year.c=as.numeric(substr(finyear,1,4)),
              ln.effort=mean(d.bi$ln.effort))
@@ -3393,12 +3609,12 @@ if(do.Exploratory=="YES")
     
     
     #Model month as smoothing term
-      #pos part
+    #pos part
     Mod1=gam(ln.cpue~s(month,k=12,bs='cc'),dat=d.pos,method="REML")  
     Mod2=gam(ln.cpue~s(month,k=12),dat=d.pos,method="REML")
     Mod3=gam(ln.cpue~month.as.factor,dat=d.pos,method="REML")
     
-      #bi part
+    #bi part
     Mod1.bi=gam(catch.target~s(month,k=12,bs='cc')+offset(ln.effort),dat=d.bi,family=binomial,method="REML")
     Mod2.bi=gam(catch.target~s(month,k=12)+offset(ln.effort),dat=d.bi,family=binomial,method="REML")
     Mod3.bi=gam(catch.target~month.as.factor+offset(ln.effort),dat=d.bi,family=binomial,method="REML")
@@ -3452,24 +3668,24 @@ if(do.Exploratory=="YES")
     class(AIC.tab) <- "data.frame"
     grid.newpage()
     grid.table(AIC.tab)
- 
-
+    
+    
     #Model vessel as random effect
-
-      #pos part
+    
+    #pos part
     Mod1=gam(ln.cpue~finyear+s(vessel,bs='re'),dat=d.pos,method="REML")  
     Mod2=gam(ln.cpue~finyear+vessel,dat=d.pos,method="REML")
-
-      #bi part
+    
+    #bi part
     Mod1.bi=bam(catch.target~finyear+s(vessel,bs='re')+offset(ln.effort),dat=d.bi,family=binomial,method="fREML")
     Mod2.bi=bam(catch.target~finyear+vessel+offset(ln.effort),dat=d.bi,family=binomial,method="fREML")
- 
+    
     par(mfcol=c(2,1),mar=c(3,4,1,1))
     New.d=data.frame(finyear=factor(levels(d.pos$finyear)))%>%
       mutate(vessel=factor(names(sort(-table(d.pos$vessel)))[1],levels=levels(d.pos$vessel)))
     fn.pred.plt(mod=Mod1,newD=New.d,Y=as.numeric(substr(New.d$finyear,1,4)))
     fn.pred.plt(mod=Mod2,newD=New.d,Y=as.numeric(substr(New.d$finyear,1,4)))
-
+    
     AIC.tab=AICtab(Mod1,Mod2)
     class(AIC.tab) <- "data.frame"
     grid.newpage()
@@ -3482,7 +3698,7 @@ if(do.Exploratory=="YES")
              ln.effort=mean(d.bi$ln.effort))
     fn.pred.plt(mod=Mod1.bi,newD=New.d,Y=as.numeric(substr(New.d$finyear,1,4)))
     fn.pred.plt(mod=Mod2.bi,newD=New.d,Y=as.numeric(substr(New.d$finyear,1,4)))
-   
+    
     AIC.tab=AICtab(Mod1.bi,Mod2.bi)
     class(AIC.tab) <- "data.frame"
     grid.newpage()
@@ -3491,12 +3707,12 @@ if(do.Exploratory=="YES")
     dev.off()
     
     
-      #plotting stuff
+    #plotting stuff
     #plot(Mod, rug = TRUE, residuals = TRUE, pch = 1, cex = 1) # see residuals
     #plot(Mod, seWithMean = TRUE, shift = coef(Mod)[1])  #shows the partial effect and intercept uncertainty (better approach) in an interpretable scale
     #plot(Mod,main="Mod", page=1, all.terms = TRUE, rug = TRUE, shade = TRUE,shade.col = "pink")
     
-      #better summary tables
+    #better summary tables
     #tidy(Mod)
     #glance(Mod)
     #augment(Mod)
@@ -3504,31 +3720,46 @@ if(do.Exploratory=="YES")
   system.time({
     for(s in Tar.sp)
     {
-    NM=names(DATA.list.LIVEWT.c.daily)[s]
-    
-    #Daily
-    print(paste("------",NM,"-daily"))
-    Covars=c('YEAR.c','MONTH','LAT10.corner','LONG10.corner',
-             'Temperature','Temp.res','Freo','SOI','Lunar','nlines.c',
-             'mesh','Mean.depth','Dim.1','Dim.2','Dim.3')
-    if(do_pca=="YES") Covars=c(Covars,Targeting.vars)
-    
-    fn.explr.gam.rel(d=DATA.list.LIVEWT.c.daily[[s]],
-                     Fktrs=c('FINYEAR','month.as.factor','VESSEL','shots.c'),
-                     Covars=Covars,
-                     OUT=paste(names(DATA.list.LIVEWT.c.daily)[s],'_daily',sep=''))
-    
-    #Monthly
-    print(paste("------",NM,"-monthly"))
-    fn.explr.gam.rel(d=DATA.list.LIVEWT.c[[s]],
-                     Fktrs=c('FINYEAR','month.as.factor','VESSEL','shots.c'),
-                     Covars=c('YEAR.c','MONTH','LAT10.corner','LONG10.corner',
-                              'Temperature','Temp.res','Freo','SOI'),
-                     OUT=paste(names(DATA.list.LIVEWT.c)[s],'_monthly',sep=''))
-  }
+      NM=names(DATA.list.LIVEWT.c.daily)[s]
+      
+      #Daily
+      print(paste("------",NM,"-daily"))
+      Covars=c('YEAR.c','MONTH','LAT10.corner','LONG10.corner',
+               'Temperature','Temp.res','Freo','SOI','Lunar','nlines.c',
+               'mesh','Mean.depth','Dim.1','Dim.2','Dim.3')
+      if(do_pca=="YES") Covars=c(Covars,Targeting.vars)
+      
+      fn.explr.gam.rel(d=DATA.list.LIVEWT.c.daily[[s]],
+                       Fktrs=c('FINYEAR','month.as.factor','VESSEL','shots.c'),
+                       Covars=Covars,
+                       OUT=paste(names(DATA.list.LIVEWT.c.daily)[s],'_daily',sep=''))
+      
+      #Monthly
+      print(paste("------",NM,"-monthly"))
+      fn.explr.gam.rel(d=DATA.list.LIVEWT.c[[s]],
+                       Fktrs=c('FINYEAR','month.as.factor','VESSEL','shots.c'),
+                       Covars=c('YEAR.c','MONTH','LAT10.corner','LONG10.corner',
+                                'Temperature','Temp.res','Freo','SOI'),
+                       OUT=paste(names(DATA.list.LIVEWT.c)[s],'_monthly',sep=''))
+    }
   })    #takes 9 mins
-
+  
 }
+
+# CONSTRUCT STANDARDISED ABUNDANCE INDEX----------------------------------------------
+ZONES=c("West","Zone1","Zone2")
+Response="catch.target"    #cpue and positive catch are calculated inside functions
+Eff.vars=c("km.gillnet.hours.c")
+Categorical=c("finyear","vessel","blockx","shots.c")
+
+Covariates.monthly=c("MONTH","LONG10.corner","LAT10.corner","Freo","Temp.res","SOI")
+
+Targeting.vars=c("Dim.1","Dim.2","Dim.3")
+Covariates.daily=c(Covariates.monthly,"Mean.depth","Lunar","mesh","nlines.c")
+if(do_pca=="YES") Covariates.daily=c(Covariates.daily,Targeting.vars)
+
+Predictors_monthly=c(Categorical,Covariates.monthly)
+Predictors_daily=c(Categorical,Covariates.daily)
 
   #check data properties and degrees of freedom   
 if(Model.run=="First")
@@ -3555,7 +3786,7 @@ if(Model.run=="First")
 }
 
 
-#   4.22.2 Show applied effort creep
+#-- Show applied effort creep
 Fish.pow.inc=FINYEAR.ALL
 names(Fish.pow.inc)=FINYEAR.ALL
 Fish.pow.inc=as.numeric(substr(Fish.pow.inc,1,4))
@@ -3577,21 +3808,21 @@ if(Model.run=="First")
 Eff.creep=data.frame(finyear=FINYEAR.ALL,effort.creep=Fish.pow.inc)
 
 
-#   4.22.3 Select model structure  
+#-- Select model structure  
 
     #remove predictors identified as highly correlated
 cNSTNT=Categorical[!Categorical=="block10"] 
 cNSTNT.daily=Categorical[!Categorical=="blockx"]
 
-      #4.22.3.1 extract best model   
+    #extract best model   
 Best.Model=vector('list',length(SP.list)) 
 names(Best.Model)=names(SP.list)
 Best.Model.daily=Best.Model.daily.gam=Best.Model_delta=Best.Model.daily.gam_delta=Best.Model.daily_delta=
 Store.Best.Model=Store.Best.Model.daily=Best.Model
-if(Def.mod.Str=="YES")     #takes 16 minutes
+if(Def.mod.Str=="YES")     
 {
   hndl.modl.sel="C:/Matias/Analyses/Catch and effort/Outputs/Model Selection/"
-  if(Use.Tweedie)
+  if(Use.Tweedie)       #takes 3.5 hours
   {
     cl <- makeCluster(detectCores()-1)
     registerDoParallel(cl)
@@ -4013,30 +4244,32 @@ if(Def.mod.Str=="NO")
 {
   if(Use.Tweedie)
   {
-      #Monthly
+    #Monthly
     for(s in nnn) Best.Model[[s]]=formula(cpue~finyear + blockx + s(vessel,bs='re') + s(month,k=12,bs='cc'))
     Best.Model['Bronze Whaler']=list(NULL)
     Best.Model$`Tiger Shark`=formula(cpue~finyear + blockx + vessel + s(month,k=12,bs='cc'))
+    Best.Model$`Dusky Whaler`=Best.Model$`Whiskery Shark`=formula(cpue~finyear + blockx + s(vessel,bs='re'))
     
-      #Daily
+    #Daily
     Best.Model.daily$`Sandbar Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                               s(long10.corner,lat10.corner)+s(mean.depth))
-    Best.Model.daily$`Whiskery Shark`=formula(cpue~finyear+shots.c+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                                s(long10.corner,lat10.corner)+s(mean.depth))
-    Best.Model.daily$`Gummy Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                             s(long10.corner,lat10.corner))
-    Best.Model.daily$`Dusky Whaler`=formula(cpue~finyear+shots.c+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                              s(long10.corner,lat10.corner)+s(temp.res)+s(mean.depth))
+                                               s(long10.corner,lat10.corner)+s(mean.depth)+
+                                               s(dim.1)+s(dim.2))
+    Best.Model.daily$`Whiskery Shark`=formula(cpue~finyear+s(month,k=12,bs='cc')+
+                                                s(long10.corner,lat10.corner)+s(mean.depth)+shots.c+
+                                                s(dim.1)+s(dim.2)+s(dim.3))
+    Best.Model.daily$`Gummy Shark`=formula(cpue~finyear+s(month,k=12,bs='cc')+
+                                             s(long10.corner,lat10.corner)+s(dim.1)+s(dim.2))
+    
+    
+    Best.Model.daily$`Dusky Whaler`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
+                                              s(long10.corner,lat10.corner)+s(mean.depth)+
+                                              s(dim.1)+s(dim.2)+s(dim.3))
     
     Best.Model.daily$`Smooth Hammerhead Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
                                                          s(long10.corner,lat10.corner)+s(mean.depth))
     Best.Model.daily$`Tiger Shark`=Best.Model.daily$`Spinner Shark`=
-    Best.Model.daily$`Bronze Whaler`=Best.Model.daily$`Smooth Hammerhead Shark`
+      Best.Model.daily$`Bronze Whaler`=Best.Model.daily$`Smooth Hammerhead Shark`
     
-    # Best.Model.daily$`Shortfin Mako`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-    #                                            s(long10.corner,lat10.corner))
-    # Best.Model.daily$`Pencil Shark`=Best.Model.daily$`Tiger Shark`=Best.Model.daily$`Spinner Shark`=
-    # Best.Model.daily$`Common Sawshark`=Best.Model.daily$`Bronze Whaler`=Best.Model.daily$`Smooth Hammerhead Shark`
   }
   
   if(Use.Delta)
@@ -4121,8 +4354,7 @@ if(Def.mod.Str=="NO")
 }
 
 
-
-#Export table of term levels
+# Export table of term levels
 if(Model.run=="First")
 {
   fn.table.terms=function(d,PREDS)
@@ -4179,7 +4411,7 @@ if(Model.run=="First")
                 Fnt.hdr= "Times New Roman",Fnt.body= "Times New Roman")
 }
 
-#Show proportion of 0 catch records
+# Show proportion of 0 catch records
 fn.sel.yrs.used.glm=function(DD)
 {
   a=with(DD,table(finyear,vessel))
@@ -4228,7 +4460,7 @@ if(Model.run=="First")
 }
 
 
-#   4.22.4 Run standardisation  
+#-- Run standardisation on selected model 
 
 cl <- makeCluster(detectCores()-1)
 registerDoParallel(cl)
@@ -4891,7 +5123,7 @@ stopCluster(cl)
 #    DATA.list.LIVEWT.c_all_reporters)
 
 
-#   4.22.5 Run sensitivity tests     
+#-- Run sensitivity tests     
 if(Model.run=="First")      
 {
   sens=Tab.Sensi%>%filter(!Scenario=='Nominal')
@@ -5377,7 +5609,7 @@ if(Model.run=="First")
 }   
 
 
-#   4.22.7 Deviance explained 
+#-- Deviance explained 
 if(Model.run=="First")  #takes 4 mins
 {
   if(Use.Delta)  
@@ -5724,7 +5956,7 @@ if(Model.run=="First")  #takes 4 mins
 }
 
 
-#   4.22.8 Fit diagnostics  
+#-- Fit diagnostics  
 #par(mfrow = c(2,2))
 #gam.check(gam_y)  #to see gam fit
 if(Model.run=="First") 
@@ -5849,7 +6081,7 @@ if(Model.run=="First")
 }
 
 
-#   4.22.8 Plot base case, unstandardised and nominal   
+#-- Plot base case, unstandardised and nominal   
 
 #Extract comparable unstandardised cpue
 Unstandardised=vector('list',length(SP.list)) 
@@ -6516,7 +6748,7 @@ if(Use.Delta)
   
   if(show.how=='together')
   {
-    fn.fig("Figure 3.Annual_Index",1800, 2400)  
+    fn.fig("Annual_Index",1800, 2400)  
     par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
     for(s in Tar.sp)
     {
@@ -6534,7 +6766,7 @@ if(Use.Delta)
   }
   if(show.how=='separate')
   {
-    fn.fig("Figure 3.Annual_Index",2000, 2400)   
+    fn.fig("Annual_Index",2000, 2400)   
     par(mfrow=c(4,2),mar=c(1,1,1.5,2),oma=c(2.5,3,.1,.2),las=1,mgp=c(1.9,.7,0))
     for(s in Tar.sp)
     {
@@ -6613,7 +6845,7 @@ if(Use.Tweedie)
     }
     if(!is.null(ADD.nomnl))
     {
-      CL.b=c("grey80","white")
+      CL.b=c("white","grey70")
       tc2=c(.1,-.1)
       for(l in 1:length(ADD.nomnl))
       {
@@ -6631,7 +6863,7 @@ if(Use.Tweedie)
   
   if(show.how=='together')
   {
-    fn.fig("Figure 3.Annual_Index",1800, 2400)  
+    fn.fig("Annual_Index",1800, 2400)  
     par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
     for(s in Tar.sp)
     {
@@ -6761,31 +6993,69 @@ if(Use.Delta)
 
 if(Use.Tweedie)     
 {
-  if(show.how=='together')
+  if(show.how=='together') 
   {
-    fn.fig("Figure 3.Annual_Index_normalised",1800, 2400)  
-    par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
-    for(s in Tar.sp)
+    show.nominal.effective=FALSE
+    if(show.nominal.effective)
     {
-      Plot.cpue(cpuedata=list(Standardised=Pred.normlzd[[s]]),
-                cpuedata.daily=list(Standardised=Pred.daily.normlzd[[s]]),
-                CL=CLs,CxS=CxS,Yvar="finyear",add.lines="YES",firstyear=1975,
-                ADD.nomnl=list(nominal=rbind(Unstandardised.normlzd[[s]],Unstandardised.daily.normlzd[[s]]),
-                               effective=rbind(Effective.normlzd[[s]],Effective.daily.normlzd[[s]])),
-                Add.CI.nominal=FALSE)
-      legend("topright",Nms.sp[s],bty='n',cex=1.75)
+      fn.fig("Figure 3.Annual_Index_normalised",1800, 2400)  
+      par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
+      for(s in Tar.sp)
+      {
+        Plot.cpue(cpuedata=list(Standardised=Pred.normlzd[[s]]),
+                  cpuedata.daily=list(Standardised=Pred.daily.normlzd[[s]]),
+                  CL=CLs,CxS=CxS,Yvar="finyear",add.lines="YES",firstyear=1975,
+                  ADD.nomnl=list(nominal=rbind(Unstandardised.normlzd[[s]],Unstandardised.daily.normlzd[[s]]),
+                                 effective=rbind(Effective.normlzd[[s]],Effective.daily.normlzd[[s]])),
+                  Add.CI.nominal=FALSE)
+        legend("topright",Nms.sp[s],bty='n',cex=1.75)
+      }
+      legend("bottomleft",c("Standardised","Nominal","Effective"),bty='n',pch=21,
+             pt.bg=c(CLs[1],"white","grey70"),cex=1.45)
+      mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+      mtext("Relative catch rate",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
+      dev.off()
     }
-    legend("bottomleft",c("Standardised","Nominal","Effective"),bty='n',pch=21,
-           pt.bg=c(CLs[1],"grey80","white"),cex=1.45)
-    mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
-    mtext("Relative catch rate",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
-    dev.off()
+    
+    show.raw=TRUE
+    if(show.raw)
+    {
+      fn.fig("Figure 3.Annual_Index_normalised",1800, 2400)  
+      par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
+      for(s in Tar.sp)
+      {
+        nm=match(names(Pred.normlzd)[s],names(Raw.index))
+        dummy.raw=Raw.index[[nm]]%>%
+          mutate(lower.CL=lowCL/mean(mean),
+                 upper.CL=uppCL/mean(mean),
+                 response=mean/mean(mean))%>%
+          rename(finyear=FINYEAR)%>%
+          filter(finyear%in%Pred.normlzd[[s]]$finyear)
+        dummy.raw.daily=Raw.index.daily[[nm]]%>%
+          mutate(lower.CL=lowCL/mean(mean),
+                 upper.CL=uppCL/mean(mean),
+                 response=mean/mean(mean))%>%
+          rename(finyear=FINYEAR)
+        
+        Plot.cpue(cpuedata=list(Standardised=Pred.normlzd[[s]]),
+                  cpuedata.daily=list(Standardised=Pred.daily.normlzd[[s]]),
+                  CL=CLs,CxS=CxS,Yvar="finyear",add.lines="YES",firstyear=1975,
+                  ADD.nomnl=list(raw=rbind(dummy.raw,dummy.raw.daily)),
+                  Add.CI.nominal=FALSE)
+        legend("topright",Nms.sp[s],bty='n',cex=1.75)
+      }
+      legend("bottomleft",c("Standardised","Nominal"),bty='n',pch=21,
+             pt.bg=c(CLs[1],"white"),cex=1.45)
+      mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+      mtext("Relative catch rate",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
+      dev.off()
+    }
+
   }
 }
 
 
-#ACA
-# Sensitivity tests comparing Tweedie, Lognormal and Delta-lognormal
+# -- Sensitivity tests comparing Tweedie, Lognormal and Delta-lognormal
 if(Use.Tweedie)
 {
   if(Model.run=="First") 
@@ -7022,7 +7292,7 @@ if(Use.Tweedie)
       
     }
     CL.sens=c("black","grey50","white")
-    fn.fig("Figure 3.Annual_Index_normalised_Tweedie_Delta_lognormal",1800, 2400)  
+    fn.fig("Annual_Index_normalised_Tweedie_Delta_lognormal",1800, 2400)  
     par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
     for(s in Tar.sp)
     {
@@ -7044,7 +7314,7 @@ if(Use.Tweedie)
   }
 }
 
-#Get glm predictions for daily and compare to gam
+#-- Sensitivty test for Delta. Get glm predictions for daily and compare to gam
 if(Use.Delta)
 {
   if(Model.run=="First")
@@ -7093,9 +7363,7 @@ if(Use.Delta)
   }
 }
 
-
-
-#Plot Other species normalised
+#-- Plot Other species normalised
 if(Use.Delta)
 {
   Plot.cpue.other=function(cpuedata,ADD.LGND,whereLGND,COL,CxS,Yvar,All.yrs)    #plot cpues other species
@@ -7175,14 +7443,14 @@ if(Use.Tweedie)
     legend("topleft",Nms.sp[s],bty='n',cex=1.25)
   }
   legend("bottomleft",c("Standardised","Nominal"),bty='n',pch=21,
-         pt.bg=c(CLs[1],"grey80"),cex=1)
+         pt.bg=c(CLs[1],"white"),cex=1)
   mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.25,outer=T)
   mtext("Relative CPUE",side=2,line=1.15,font=1,las=0,cex=1.25,outer=T)
   dev.off()
 }
 
 
-#boxplots of factors
+#-- Boxplots of factors
 if(Use.Delta)
 {
   if(Model.run=="First")
@@ -7205,8 +7473,8 @@ if(Use.Delta)
   }
 }
 
-
-#   4.22.9 Show effects for other terms 
+#ACA
+# -- Show effects for other terms 
 if(Model.run=="First")
 {
   
@@ -7775,7 +8043,8 @@ if(Model.run=="First")
 }
 
 
-#   4.22.10 Influence plots  (Bentley et al 2012; not useful for delta-MC method)   
+# INFLUENCE PLOTS ---------------------------------------------------------
+# Bentley et al 2012; not useful for delta-MC method   
 if(do.influence=="YES")
 {
   Influence.fn=function(MOD,DAT,Term.type,termS,add.Influence,SCALER)  
@@ -8121,7 +8390,7 @@ if(do.influence=="YES")
 }
 
 
-#   4.22.11 Construct spatial standardised catch rates    
+# CONSTRUCT SPATIAL STANDARDISED INDEX ---------------------------------------------------------
 if(Use.Delta)  
 { system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))  
     {
@@ -8494,7 +8763,7 @@ if(Use.Tweedie)
 
 }
 
-#   4.22.12 Explore smooth hammerhead
+# EXPLORE SMOOTH HAMMERHEAD ---------------------------------------------------------
 Explore.smooth.HH=FALSE
 if(Explore.smooth.HH)
 {
@@ -8794,7 +9063,7 @@ if(Explore.smooth.HH)
   
 }
 
-#   4.22.13 Explore why dusky and sandbar daily so uncertain
+# EXPLORE DUSKY AND SANDBAR UNCERTAINTY IN DAILY DATA--------------------------------------------
 Explore.why.dusky.sandbar.uncertain=FALSE
 if(Explore.why.dusky.sandbar.uncertain)
 {
@@ -8903,8 +9172,7 @@ if(Explore.why.dusky.sandbar.uncertain)
 }
 
 
-##############--- 4. EXPORT INDICES---###################
-
+# EXPORT INDICES -----------------------------------------------------------------------
 setwd("C:/Matias/Analyses/Data_outs")
 Sel.vars=c("finyear","response","CV","lower.CL","upper.CL")
 nams.Sel.vars=c("Finyear","Mean","CV","LOW.CI","UP.CI")
@@ -9035,7 +9303,8 @@ for (s in nnn[-sort(Tar.sp)])
 
 
 
-##############--- 5. REPORT SECTION FROM 1.Manipulate data.R---###################
+
+# REPORT SECTION FROM 1.Manipulate data.R -----------------------------------------------------------------------
 if (plot.cpue.paper.figures=="YES")
 {
   setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper")
