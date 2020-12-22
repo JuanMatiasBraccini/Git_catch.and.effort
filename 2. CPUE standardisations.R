@@ -199,7 +199,7 @@ Use.Qualif.level=FALSE
 do_cluster="NO"
 
 #Control if doing PCA analysis of daily data                    
-do_pca="YES"   
+do_pca="NO"   
 
 #Control if doing sensitivity tests
 if(Model.run=="First") do.sensitivity="YES"
@@ -701,6 +701,9 @@ First.year.catch.daily=First.year.catch.daily[match(unlist(SP.list),names(First.
 
 nnn=1:length(SP.list)
 
+# DEFINE TARGET SPECIES INDEX ----------------------------------------------
+Tar.sp=match(TARGETS,SP.list)
+
 # EFFECTIVE AREA (90% of catch) AND RASTER -----------------------------------------------------------------------
 fn.scale=function(x,scaler) ((x/max(x,na.rm=T))^0.5)*scaler
 
@@ -1015,7 +1018,7 @@ fn.cpue.data.daily=function(Dat,EffrrT,sp)
     Ids=match(c("BLOCKX","FINYEAR","MONTH","LAT","LONG","VESSEL","block10"),names(EffrrT))
     Dat=Dat%>%left_join(EffrrT[,-Ids],by=c("Same.return.SNo"))
     
-    #consider effor reporter
+    #consider effort reporter
     Dat$Reporter=with(Dat,ifelse(Eff.Reporter=="bad","bad",Reporter))  
     
     #remove records with NA effort
@@ -1104,14 +1107,14 @@ for(s in nnn)
     Species.list[[s]] = Species.list[[s]] %>%
       dplyr::select(-c(LIVEWT,Boundary.blk,Km.Gillnet.Hours_shot.c,
                        TYPE.DATA,Sch.or.DogS,Freo_lag6,Freo_lag12,mesh,
-                       NETLEN.c, BDAYS.c,HOURS.c))
+                       NETLEN.c, BDAYS.c))
     
   }
   if(!is.null(Species.list.daily[[s]]))
   {
     Species.list.daily[[s]] = Species.list.daily[[s]] %>%
       dplyr::select(-c(LIVEWT,Km.Gillnet.Days.inv,
-                       Km.Gillnet.Hours.inv,Km.Gillnet.Hours_shot.c,netlen.c,hours.c,
+                       Km.Gillnet.Hours.inv,Km.Gillnet.Hours_shot.c,netlen.c,
                        bdays.c,TYPE.DATA,LIVEWT,nfish,Freo_lag6,Freo_lag12))
   }
 
@@ -1717,7 +1720,7 @@ Effort.data.fun=function(DATA,target,ktch)
     Match.these.eff=match(These.efforts,names(DATA))
     Effort.data1=DATA[,Match.these.eff]
     Effort.data=Effort.data1%>%
-      group_by(zone,FINYEAR,Same.return,MONTH,BLOCKX,SHOTS.c)%>%
+      group_by(zone,FINYEAR,Same.return,MONTH,BLOCKX,SHOTS.c,HOURS.c)%>%
       summarise(Km.Gillnet.Days.c = max(Km.Gillnet.Days.c),
                 Km.Gillnet.Hours.c = max(Km.Gillnet.Hours.c))%>%
       data.frame()
@@ -1860,7 +1863,7 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
     #Add mesh size, shots, depth and nlines for each session
     if(Aggregtn=="SNo")
     {
-      d=subset(DATA,select=c(Same.return.SNo,VESSEL,mesh,nlines.c,Mean.depth))
+      d=subset(DATA,select=c(Same.return.SNo,VESSEL,mesh,nlines.c,Mean.depth,hours.c))
       d=d[!duplicated(paste(d$Same.return.SNo,d$VESSEL)),]
       dat=dat%>%left_join(d,by=c("Same.return.SNo","VESSEL"))
     }
@@ -1876,12 +1879,14 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
 
   #monthly  
 These.efforts=c("FINYEAR","Same.return","Km.Gillnet.Hours.c","Km.Gillnet.Days.c",
-                "zone","MONTH","BLOCKX","SHOTS.c")
+                "zone","MONTH","BLOCKX","SHOTS.c","HOURS.c")
 for(i in nnn)
 {
   if(!(is.null(Species.list[[i]])))
   {
-    dummy=Effort.data.fun(subset(Species.list[[i]],Reporter=="good"),SP.list[[i]],"LIVEWT.c")  
+    dummy=Effort.data.fun(DATA=subset(Species.list[[i]],Reporter=="good"),
+                          target=SP.list[[i]],
+                          ktch="LIVEWT.c")  
     DATA.list.LIVEWT.c[[i]]=dummy$dat
     Prop.Catch[i]=dummy$prop.with.catch 
   }
@@ -1890,7 +1895,8 @@ for(i in nnn)
   #daily 
 These.efforts.daily=c("FINYEAR","date","TSNo","Km.Gillnet.Hours.c","Km.Gillnet.Days.c",
                       "zone","MONTH","BLOCKX","block10","VESSEL","mesh",
-                      "Same.return.SNo","nlines.c","shots.c")
+                      "Same.return.SNo","nlines.c","shots.c",
+                      "hours.c")
 for(i in nnn)
 {
   if(!is.null(Species.list.daily[[i]]))
@@ -1900,8 +1906,10 @@ for(i in nnn)
     # Species.list.daily[[i]]$Avrg.w=Species.list.daily[[i]]$LIVEWT.c/Species.list.daily[[i]]$nfish
     # Species.list.daily[[i]]$Reporter=with(Species.list.daily[[i]],
     #                                       ifelse((Avrg.w>Max.weight[i]| Avrg.w<Min.weight[i]) & SPECIES==SPvec[i],"bad",Reporter))                    
-    dummy=Effort.data.fun.daily(subset(Species.list.daily[[i]],Reporter=="good"),SP.list[[i]],
-                                ktch="LIVEWT.c",Aggregtn="SNo")
+    dummy=Effort.data.fun.daily(DATA=subset(Species.list.daily[[i]],Reporter=="good"),
+                                target=SP.list[[i]],
+                                ktch="LIVEWT.c",
+                                Aggregtn="SNo")
     DATA.list.LIVEWT.c.daily[[i]]=dummy$dat
     Prop.Catch.daily[i]=dummy$prop.with.catch   
   }
@@ -1922,8 +1930,7 @@ for(s in nnn)
                        LONG10.corner=100+as.numeric(substr(block10,4,5))+10*(as.numeric(substr(block10,6,6)))/60)
 }
 
-# DEFINE TARGET SPECIES INDEX ----------------------------------------------
-Tar.sp=match(TARGETS,SP.list)    
+  
 
 # REMOVE YEARS WITHOUT SANDBAR SHARK CODE ----------------------------------------------
 #note: Dropping these years because vessels don't meet selection criteria and no positive catch
@@ -2730,15 +2737,17 @@ dev.off()
 setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper")
 
 # SHOW EFFECT OF USING km gn d VS km g h for gummy ----------------------------------------------
-Show.gummy.hour=FALSE
+Show.gummy.hour=FALSE     
 if(Show.gummy.hour)
 {
   Get.Mns=function(d,grp,Vars,LGND,add.arrow)
   {
+    do.efforts=FALSE
+    
     d=d[,match(c(grp,Vars),names(d))]
     d$cpue.d=d$Catch.Target/d$Km.Gillnet.Days.c
     d$cpue.h=d$Catch.Target/d$Km.Gillnet.Hours.c
-    d$cpue.h_shot=d$Catch.Target/(d$Km.Gillnet.Hours_shot.c)
+    #d$cpue.h_shot=d$Catch.Target/(d$Km.Gillnet.Hours_shot.c)
     for(v in 1:length(Vars))
     {
       if(Vars[v]=="HOURS.c")
@@ -2798,17 +2807,24 @@ if(Show.gummy.hour)
         box()
         
       }
-      if(!Vars[v]%in%c("HOURS.c","SHOTS.c")){
+      if(do.efforts)if(!Vars[v]%in%c("HOURS.c","SHOTS.c")){
+        # B= d[,match(c(grp,Vars[v]),names(d))] %>%
+        #   na.omit()%>%
+        #   group_by(FINYEAR) %>%
+        #   summarise_all(funs(mean=mean,sd=sd,n=length)) %>%
+        #   mutate(lowCL = mean - 1.96*sd/sqrt(n),
+        #          uppCL = mean + 1.96*sd/sqrt(n)) %>%
+        #   as.data.frame
         B= d[,match(c(grp,Vars[v]),names(d))] %>%
           na.omit()%>%
           group_by(FINYEAR) %>%
-          summarise_all(funs(mean=mean,sd=sd,n=length)) %>%
-          mutate(lowCL = mean - 1.96*sd/sqrt(n),
-                 uppCL = mean + 1.96*sd/sqrt(n)) %>%
+          summarise_all(funs(mean=sum)) %>%
           as.data.frame
+        
         B$yr=as.numeric(substr(B$FINYEAR,1,4))
-        plot(B$yr,B$mean,xlab="",ylab=LGND[v],pch=19,col=1,ylim=c(min(B$lowCL),max(B$uppCL)))
-        arrows(x0=B$yr, y0=B$lowCL,x1=B$yr, y1=B$uppCL,code=3, angle=90, length=0.05, col=1)
+        plot(B$yr,B$mean,xlab="",ylab=LGND[v],pch=19,col=1)
+        #plot(B$yr,B$mean,xlab="",ylab=LGND[v],pch=19,col=1,ylim=c(min(B$lowCL),max(B$uppCL)))
+        #arrows(x0=B$yr, y0=B$lowCL,x1=B$yr, y1=B$uppCL,code=3, angle=90, length=0.05, col=1)
         #    if(add.arrow[v])
         #    {
         #     Is=(nrow(B)-5):nrow(B)
@@ -2836,28 +2852,29 @@ if(Show.gummy.hour)
              uppCL = mean + 1.96*sd/sqrt(n)) %>%
       as.data.frame
     B$yr=as.numeric(substr(B$FINYEAR,1,4))
-    plot(B$yr,B$mean,xlab="",ylab="",pch=19,col='grey50',axes=F,ylim=c(min(B$lowCL),max(B$uppCL)))
-    arrows(x0=B$yr, y0=B$lowCL,x1=B$yr, y1=B$uppCL,code=3, angle=90, length=0.05, col='grey50')
+    plot(B$yr+.5,B$mean,xlab="",ylab="",pch=19,col='grey50',axes=F,ylim=c(min(B$lowCL),max(B$uppCL)))
+    arrows(x0=B$yr+.5, y0=B$lowCL,x1=B$yr+.5, y1=B$uppCL,code=3, angle=90, length=0.05, col='grey50')
     
     
-    B= d[,match(c(grp,"cpue.h_shot"),names(d))]%>%group_by(FINYEAR) %>% summarise_all(funs(mean=mean,sd=sd,n=length))%>%
-      mutate(lowCL = mean - 1.96*sd/sqrt(n),
-             uppCL = mean + 1.96*sd/sqrt(n)) %>%
-      as.data.frame
-    B$yr=as.numeric(substr(B$FINYEAR,1,4))
-    arrows(x0=B$yr+.5, y0=B$lowCL,x1=B$yr+.5, y1=B$uppCL,code=3, angle=90, length=0.05, col='black')
-    points(B$yr+.5,B$mean,xlab="",ylab="",pch=21,col='black',bg="white")
+    # B= d[,match(c(grp,"cpue.h_shot"),names(d))]%>%group_by(FINYEAR) %>% summarise_all(funs(mean=mean,sd=sd,n=length))%>%
+    #   mutate(lowCL = mean - 1.96*sd/sqrt(n),
+    #          uppCL = mean + 1.96*sd/sqrt(n)) %>%
+    #   as.data.frame
+    # B$yr=as.numeric(substr(B$FINYEAR,1,4))
+    # arrows(x0=B$yr+.5, y0=B$lowCL,x1=B$yr+.5, y1=B$uppCL,code=3, angle=90, length=0.05, col='black')
+    # points(B$yr+.5,B$mean,xlab="",ylab="",pch=21,col='black',bg="white")
     axis(side = 4,col="grey50",col.axis = "grey50")
-    mtext("CPUE (kg gn h)",4,line=1.5,col="grey50",cex=1)
-    legend("top",c("kg/km gillnet days","kg/km gillnet hours","kg/km gillnet hours_shot"),
-           bty='n',col=c("black","grey50","black"),cex=1.35,pt.bg=c("black","grey50","white"),pch=21)
+    mtext("CPUE (kg gn h)",4,line=1.5,col="grey50",cex=1,las=3)
+    legend("top",c("kg/km gillnet days","kg/km gillnet hours"),
+           bty='n',col=c("black","grey50"),cex=1.35,
+           pt.bg=c("black","grey50"),pch=21)
   }
-  fn.fig("Appendix5_Gummy_km.gn.d_VS_km.gn.h",2400,2400)
-  par(mfrow=c(4,2),mar=c(1,3,2,1),oma=c(2,.5,.5,1.75),mgp=c(1.5,.5,0),cex.lab=1.5)
+  fn.fig("Appendix 2_Gummy_km.gn.d_VS_km.gn.h",1600,2400)
+  par(mfrow=c(3,1),mar=c(1,3,2,1),oma=c(2,.5,.5,1.75),mgp=c(1.5,.5,0),cex.lab=1.5,las=1)
   Get.Mns(d=DATA.list.LIVEWT.c$"Gummy Shark",grp="FINYEAR",
-          Vars=c("HOURS.c","SHOTS.c",'Km.Gillnet.Days.c','Km.Gillnet.Hours.c','Km.Gillnet.Hours_shot.c','Catch.Target'),
+          Vars=c("HOURS.c","SHOTS.c",'Km.Gillnet.Days.c','Km.Gillnet.Hours.c','Catch.Target'),
           LGND=c("Hours fished per day","Number of shots",
-                 'km gillnet days','km gillnet hours','km gillnet hours shot','Catch (kg)'),
+                 'km gillnet days','km gillnet hours','Catch (kg)'),
           add.arrow=c(rep(TRUE,5),FALSE))
   dev.off()
 }
@@ -3831,55 +3848,60 @@ if(Def.mod.Str=="YES")
     system.time({foreach(s=Tar.sp,.packages=c('cede','dplyr','mgcv','doParallel')) %do%
         {
           #Monthly
-          d=DATA.list.LIVEWT.c[[s]]%>%
-            filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]])
-          if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
-          if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
-          Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
-          Continuous=Covariates.monthly
-          Fmula=list(Year.block="cpue~finyear+blockx",
-                     Shots="cpue~finyear+blockx+shots.c",
-                     Month="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')",
-                     Temp.res="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')+s(temp.res)",
-                     Vessel="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(vessel,bs='re')")
-          Family='tw'
-          FILE=paste(names(DATA.list.LIVEWT.c.daily)[s],"_GAM_monthly",sep="")
-          colnames(d)=tolower(colnames(d))
-          Terms=tolower(Terms)
-          Continuous=tolower(Continuous)
-          Factors=Terms[!Terms%in%Continuous]
-          d=d%>%
-            dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
-            mutate(cpue=catch.target/km.gillnet.hours.c)
-          d <- makecategorical(Factors,d)
-          MODS=foreach(i=1:length(Fmula),.packages=c('cede','dplyr','mgcv','doParallel')) %dopar%
-            {
-              mod<-gam(formula(Fmula[[i]]),data=d,family=Family,select=TRUE,method="REML")
-              return(mod)
-            }
-          names(MODS)=names(Fmula)
-          pdf(paste(hndl.modl.sel,FILE,".pdf",sep=''))
-          mod.sumery=vector('list',length(MODS))
-          Explained.dev=mod.sumery
-          for(x in 1:length(MODS))
+          do.monthly=FALSE
+          if(do.monthly)
           {
-            plot(MODS[[x]],all.terms = TRUE, shade = TRUE,shade.col = "orange",scale=0,pages=1)
-            mod.sumery[[x]]=tidy(MODS[[x]])
-            if(length(mod.sumery[[x]])>0)
+            d=DATA.list.LIVEWT.c[[s]]%>%
+              filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]])
+            if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
+            if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
+            Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
+            Continuous=Covariates.monthly
+            Fmula=list(Year.block="cpue~finyear+blockx",
+                       Shots="cpue~finyear+blockx+shots.c",
+                       Month="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')",
+                       Temp.res="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')+s(temp.res)",
+                       Vessel="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(vessel,bs='re')")
+            Family='tw'
+            FILE=paste(names(DATA.list.LIVEWT.c.daily)[s],"_GAM_monthly",sep="")
+            colnames(d)=tolower(colnames(d))
+            Terms=tolower(Terms)
+            Continuous=tolower(Continuous)
+            Factors=Terms[!Terms%in%Continuous]
+            d=d%>%
+              dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+              mutate(cpue=catch.target/km.gillnet.hours.c)
+            d <- makecategorical(Factors,d)
+            MODS=foreach(i=1:length(Fmula),.packages=c('cede','dplyr','mgcv','doParallel')) %dopar%
+              {
+                mod<-gam(formula(Fmula[[i]]),data=d,family=Family,select=TRUE,method="REML")
+                return(mod)
+              }
+            names(MODS)=names(Fmula)
+            pdf(paste(hndl.modl.sel,FILE,".pdf",sep=''))
+            mod.sumery=vector('list',length(MODS))
+            Explained.dev=mod.sumery
+            for(x in 1:length(MODS))
             {
-              grid.newpage()
-              class(mod.sumery[[x]]) <- "data.frame"
-              grid.table(mod.sumery[[x]])
+              plot(MODS[[x]],all.terms = TRUE, shade = TRUE,shade.col = "orange",scale=0,pages=1)
+              mod.sumery[[x]]=tidy(MODS[[x]])
+              if(length(mod.sumery[[x]])>0)
+              {
+                grid.newpage()
+                class(mod.sumery[[x]]) <- "data.frame"
+                grid.table(mod.sumery[[x]])
+              }
+              Explained.dev[[x]]=summary(MODS[[x]])$dev.expl*100  
             }
-            Explained.dev[[x]]=summary(MODS[[x]])$dev.expl*100  
+            Explained.dev=data.frame(Model=names(Fmula),
+                                     Percent.deviance.explained.by.model=do.call(rbind,Explained.dev))%>%
+              mutate(Percent.explained.by.term=Percent.deviance.explained.by.model-lag(Percent.deviance.explained.by.model,1))
+            grid.newpage()
+            class(Explained.dev) <- "data.frame"
+            grid.table(Explained.dev)
+            dev.off()
+            
           }
-          Explained.dev=data.frame(Model=names(Fmula),
-                                   Percent.deviance.explained.by.model=do.call(rbind,Explained.dev))%>%
-            mutate(Percent.explained.by.term=Percent.deviance.explained.by.model-lag(Percent.deviance.explained.by.model,1))
-          grid.newpage()
-          class(Explained.dev) <- "data.frame"
-          grid.table(Explained.dev)
-          dev.off()
           
           
           #Daily
@@ -3893,11 +3915,14 @@ if(Def.mod.Str=="YES")
                      Temp.res="cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)",
                      Depth=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)",
                      Lunar=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)",
-                     PCA.1=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)",
-                     PCA.2=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)+s(dim.2)",
-                     PCA.3=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)+s(dim.2)+s(dim.3)",
-                     Lat.long="cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)+s(dim.2)+s(dim.3)+s(long10.corner,lat10.corner)",
-                     Vessel=  "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)+s(dim.2)+s(dim.3)+s(long10.corner,lat10.corner)+s(vessel,bs='re')")
+                     Lat.long="cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(long10.corner,lat10.corner)",
+                     Vessel=  "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(long10.corner,lat10.corner)+s(vessel,bs='re')"
+                     #PCA.1=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)",
+                     #PCA.2=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)+s(dim.2)",
+                     #PCA.3=   "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)+s(dim.2)+s(dim.3)",
+                     #Lat.long="cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)+s(dim.2)+s(dim.3)+s(long10.corner,lat10.corner)",
+                     #Vessel=  "cpue~finyear+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(mean.depth)+s(lunar)+s(dim.1)+s(dim.2)+s(dim.3)+s(long10.corner,lat10.corner)+s(vessel,bs='re')"
+                     )
           Family='tw'
           FILE=paste(names(DATA.list.LIVEWT.c.daily)[s],"_GAM_daily",sep="")
           colnames(d)=tolower(colnames(d))
@@ -4240,11 +4265,11 @@ if(Def.mod.Str=="YES")
   }
   
 }   
-if(Def.mod.Str=="NO")
+if(Def.mod.Str=="NO")   
 {
   if(Use.Tweedie)
   {
-    #Monthly
+    #Monthly        
     for(s in nnn) Best.Model[[s]]=formula(cpue~finyear + blockx + s(vessel,bs='re') + s(month,k=12,bs='cc'))
     Best.Model['Bronze Whaler']=list(NULL)
     Best.Model$`Tiger Shark`=formula(cpue~finyear + blockx + vessel + s(month,k=12,bs='cc'))
@@ -4252,18 +4277,13 @@ if(Def.mod.Str=="NO")
     
     #Daily
     Best.Model.daily$`Sandbar Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                               s(long10.corner,lat10.corner)+s(mean.depth)+
-                                               s(dim.1)+s(dim.2))
-    Best.Model.daily$`Whiskery Shark`=formula(cpue~finyear+s(month,k=12,bs='cc')+
-                                                s(long10.corner,lat10.corner)+s(mean.depth)+shots.c+
-                                                s(dim.1)+s(dim.2)+s(dim.3))
-    Best.Model.daily$`Gummy Shark`=formula(cpue~finyear+s(month,k=12,bs='cc')+
-                                             s(long10.corner,lat10.corner)+s(dim.1)+s(dim.2))
-    
-    
+                                               s(long10.corner,lat10.corner)+s(mean.depth))
+    Best.Model.daily$`Whiskery Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
+                                                s(long10.corner,lat10.corner)+s(mean.depth))
+    Best.Model.daily$`Gummy Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
+                                             s(long10.corner,lat10.corner))
     Best.Model.daily$`Dusky Whaler`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                              s(long10.corner,lat10.corner)+s(mean.depth)+
-                                              s(dim.1)+s(dim.2)+s(dim.3))
+                                              s(long10.corner,lat10.corner)+s(mean.depth))
     
     Best.Model.daily$`Smooth Hammerhead Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
                                                          s(long10.corner,lat10.corner)+s(mean.depth))
@@ -5029,7 +5049,7 @@ if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
           FF=names(sort(-table(vv)))[1]
           FixedVar[,l]=factor(FF,levels(vv))
         }else
-          FixedVar[,l]=mean(vv)
+          FixedVar[,l]=mean(vv,na.rm=T)
         
         rm(vv)
       }
@@ -5545,7 +5565,7 @@ if(Model.run=="First")
         if(!is.null(cpuedata[[l]]))
         {
           aaa=cpuedata[[l]]%>%mutate(finyear=as.numeric(substr(finyear,1,4)))
-          msn=Yrs[which(!Yrs%in%c(aaa$finyear,aaa.daily$finyear))]
+          msn=Yrs[which(!Yrs%in%c(aaa$finyear,aaa.daily$finyear))]    
           if(length(msn)>0)
           {
             ad=aaa[length(msn),]
@@ -5592,6 +5612,10 @@ if(Model.run=="First")
                     All.preds.creep$`All vessels & blocks`$daily[[s]],
                     All.preds.creep$`No efficiency`$daily[[s]])
       names(Da.daily)=sens$Scenario
+      aaa.daily=Stand.out.daily[[Tar.sp[s]]]$DATA%>%mutate(finyear=as.numeric(substr(finyear,1,4)))
+      
+      
+      
       Plot.cpue.tweedie(cpuedata=Da.daily,CL=c("black","forestgreen","red"),
                         CxS=1.15,Yvar="finyear",
                         add.lines="YES",firstyear=2006,
@@ -5943,11 +5967,24 @@ if(Model.run=="First")  #takes 4 mins
       }
     })
     
+    
+    #add power parameter
+    for(s in 1:length(Tar.sp))
+    {
+      #Monthly
+      Dev.monthly[[s]]$power.p=summary(Stand.out[[Tar.sp[s]]]$res.gam)[11]$family$family
+      
+      #Daily
+      Dev.daily[[s]]$power.p=summary(Stand.out.daily[[Tar.sp[s]]]$res.gam)[11]$family$family
+      
+    }
+    
     Tab.Dev.Exp=rbind(do.call(rbind,Dev.monthly),do.call(rbind,Dev.daily))
     colnames(Tab.Dev.Exp)=NULL
     
     stopCluster(cl)
   }
+  
   fn.word.table(WD=getwd(),TBL=as.matrix(Tab.Dev.Exp),Doc.nm="ANOVA_table",caption=NA,paragph=NA,
                 HdR.col='black',HdR.bg='white',Hdr.fnt.sze=10,Hdr.bld='normal',body.fnt.sze=10,
                 Zebra='NO',Zebra.col='grey60',Grid.col='black',
@@ -6884,7 +6921,10 @@ if(Use.Tweedie)
 }
 
 
-  #Plot Target and nominal (and effective) normalised    
+  #Plot Target and nominal (and effective) normalised   
+show.nominal.effective=FALSE
+show.raw=TRUE
+
 Pred.normlzd=Pred.creep
 Pred.daily.normlzd=Pred.daily.creep
 Unstandardised.normlzd=Unstandardised.creep
@@ -6995,7 +7035,6 @@ if(Use.Tweedie)
 {
   if(show.how=='together') 
   {
-    show.nominal.effective=FALSE
     if(show.nominal.effective)
     {
       fn.fig("Figure 3.Annual_Index_normalised",1800, 2400)  
@@ -7016,8 +7055,6 @@ if(Use.Tweedie)
       mtext("Relative catch rate",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
       dev.off()
     }
-    
-    show.raw=TRUE
     if(show.raw)
     {
       fn.fig("Figure 3.Annual_Index_normalised",1800, 2400)  
@@ -7050,7 +7087,6 @@ if(Use.Tweedie)
       mtext("Relative catch rate",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
       dev.off()
     }
-
   }
 }
 
@@ -7473,7 +7509,7 @@ if(Use.Delta)
   }
 }
 
-#ACA
+
 # -- Show effects for other terms 
 if(Model.run=="First")
 {
@@ -7571,13 +7607,17 @@ if(Model.run=="First")
     {
       s=Tar.sp[i]
       d=Stand.out.daily[[s]]$DATA
-      a=pred.fun(Stand.out.daily[[s]]$res.gam,biascor="NO",PRED='vessel')%>%
-        arrange(response)
-      Mn=mean(a$response)
-      Store.vessel[[i]]=a%>%
-                          mutate(response=response/Mn,
-                                 lower.CL=lower.CL/Mn,
-                                 upper.CL=upper.CL/Mn)
+      if(length(grep("vessel",attr(terms(Best.Model.daily[[s]]), "term.labels")))>0)
+      {
+        a=pred.fun(Stand.out.daily[[s]]$res.gam,biascor="NO",PRED='vessel')%>%
+          arrange(response)
+        Mn=mean(a$response)
+        Store.vessel[[i]]=a%>%
+          mutate(response=response/Mn,
+                 lower.CL=lower.CL/Mn,
+                 upper.CL=upper.CL/Mn)
+      }
+
     }
   }
   
@@ -7923,6 +7963,7 @@ if(Model.run=="First")
       axis(side = 2, at = n, labels = abs(n),las=2,tcl =-0.3)
     }
     South.WA.lat=c(-36,-25)
+    #South.WA.lat=c(-35,-25)
     South.WA.long=c(112,129)
     data(worldLLhigh)
     PLATE=c(.01,.9,.075,.9)
@@ -7930,8 +7971,10 @@ if(Model.run=="First")
                Gummy=Core$`Gummy Shark`,
                Dusky=Core$`Dusky Whaler`,
                Sandbar=Core$`Sandbar Shark`)
+    for(l in 1:length(LISta)) LISta[[l]]$Lat[1]=-35.25
     Full.long=apply(cbind(rep(c(.83,.67,.5,.33,.17,0),length(113:129)),rep(113:129,each=6)),1,sum)
-    Full.lat=-apply(cbind(rep(c(.83,.67,.5,.33,.17,0),length(35:26)),rep(35:26,each=6)),1,sum)
+    Full.lat=-apply(cbind(rep(c(.83,.67,.5,.33,.17,0),length(abs(South.WA.lat[1]):26)),
+                          rep(abs(South.WA.lat[1]):26,each=6)),1,sum)
     
     Store.spatial=vector('list',length(Tar.sp))
     for(i in 1:length(Tar.sp))
@@ -7949,21 +7992,31 @@ if(Model.run=="First")
   if(Use.Tweedie)
   {
     CX.t=1.35
+    show.vessel=TRUE
     
-    fn.fig("Figure 2.Other terms effect",2400, 2400)    
-    par(mfrow=c(4,4),mar=c(2.5,2,1.2,1),oma=c(1,2.5,.5,.2),las=1,mgp=c(1.9,.65,0),cex.axis=1.25)
+    fn.fig("Figure 2.Other terms effect",2400, 2400)    #ACA
+    if(show.vessel) 
+    {
+      par(mfrow=c(4,4),mar=c(2.5,2,1.2,1),oma=c(1,2.5,.5,.2),las=1,mgp=c(1.9,.65,0),cex.axis=1.25)
+    }else
+    {
+      par(mfrow=c(3,4),mar=c(2.5,2,1.2,1),oma=c(1,2.5,.5,.2),las=1,mgp=c(1.9,.65,0),cex.axis=1.25)
+    }
     
     #Vessel effect
-    for(i in 1:length(Tar.sp))
+    if(show.vessel)
     {
-      s=Tar.sp[i]
-      a=Store.vessel[[i]]
-      plot(1:nrow(a),a$response,pch=19,cex=1.5,ylim=c(min(a$lower.CL),max(a$upper.CL)),
-           ylab='',xlab='')
-      arrows(1:nrow(a), a$lower.CL,1:nrow(a), a$upper.CL,code=3, angle=90, length=0.05)
-      mtext(Nms.sp[s],3,0.15,cex=1.25)
-      if(i==2) mtext("                             Vessel",
-                     side=1,line=2,font=1,las=0,cex=CX.t)
+      for(i in 1:length(Tar.sp))
+      {
+        s=Tar.sp[i]
+        a=Store.vessel[[i]]
+        plot(1:nrow(a),a$response,pch=19,cex=1.5,ylim=c(min(a$lower.CL),max(a$upper.CL)),
+             ylab='',xlab='')
+        arrows(1:nrow(a), a$lower.CL,1:nrow(a), a$upper.CL,code=3, angle=90, length=0.05)
+        mtext(Nms.sp[s],3,0.15,cex=1.25)
+        if(i==2) mtext("                             Vessel",
+                       side=1,line=2,font=1,las=0,cex=CX.t)
+      }
     }
 
     #Month effect    
@@ -7983,6 +8036,7 @@ if(Model.run=="First")
                        c(Upper,rev(Lower)),
                        col=rgb(.1,.1,.1,alpha=.2),border=rgb(.1,.1,.1,alpha=.4))
            })
+      if(!show.vessel) mtext(Nms.sp[s],3,0.15,cex=1.25)
       if(i==2) mtext("                             Month",
                      side=1,line=2,font=1,las=0,cex=CX.t)
       if(i==1) mtext("Relative catch rate",side=2,line=2.5,font=1,las=0,cex=CX.t)
