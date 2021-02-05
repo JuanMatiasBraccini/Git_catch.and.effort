@@ -8,6 +8,7 @@ library(lubridate)
 library(gganimate)
 library(gapminder)
 library(tidyr)
+library(dplyr)
 source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R")
 
 #note:  TDGDLF is defined as METHOD= "GN" or "LL" and non-estuaries and south of 26 S. 
@@ -55,6 +56,7 @@ Results.pre.2013=read.csv("Results.pre.2013.csv")
 
 
 
+All.species.names=read.csv("C:/Matias/Data/Species.code.csv")
 Ray.species=25000:31000
 Elasmo.species=5001:31000
 Gummy=17001;Dusky_whaler=c(18003,18001);Whiskery=17003;Sandbar=18007;Hammerheads=19000;
@@ -111,6 +113,35 @@ if(!file.exists(handle.Sofar))dir.create(handle.Sofar)
 
 Display.current.yr=paste(substr(Current.yr,1,4),"/",substr(Current.yr,6,7),sep="")
 Ind.spe.list=list(Gummy=17001,Whiskery=17003,Bronzy.Dusky=c(18001,18003),sandbar=18007)
+
+#Create data for TDGDLF Ecological Risk Assessment  ACA
+era.yrs=as.numeric(substr(Current.yr,1,4))
+era.yrs1=seq(era.yrs-3,era.yrs+1)
+era.yrs=seq(era.yrs-4,era.yrs)
+era.yrs=paste(era.yrs,substr(era.yrs1,3,4),sep='-')
+ERA=subset(Data.monthly,METHOD%in%c("GN","LL") & Estuary=="NO" &
+             LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])%>%
+        filter(FINYEAR%in%era.yrs)%>%
+        dplyr::select(FINYEAR,SPECIES,LIVEWT.c)%>%
+        group_by(FINYEAR,SPECIES)%>%
+        summarise(Tons=sum(LIVEWT.c)/1000)%>%
+        group_by(SPECIES)%>%
+        mutate(Average.catch=mean(Tons))%>%
+        spread(FINYEAR,Tons,fill = 0)%>%
+        arrange(-Average.catch)%>%
+        ungroup()%>%
+        mutate(Percent.of.total.retained=round(100*Average.catch/sum(Average.catch),1))%>%
+        left_join(All.species.names%>%
+                    distinct(CAES_Code,.keep_all=T)%>%
+                    dplyr::select(CAES_Code,COMMON_NAME,SCIENTIFIC_NAME), 
+                   by=c('SPECIES'='CAES_Code'))%>%
+        mutate(Percent.of.total.retained=ifelse(Percent.of.total.retained<0.1,
+                                                '<0.1',Percent.of.total.retained))%>%
+      filter(!is.na(COMMON_NAME))%>%
+      dplyr::select(COMMON_NAME,SCIENTIFIC_NAME,all_of(era.yrs),Average.catch,Percent.of.total.retained)%>%
+      mutate(across(where(is.numeric), round, 0),
+             COMMON_NAME=ifelse(COMMON_NAME=="Skates and rays, other","Other skates and rays",COMMON_NAME))
+  
 
 
 #Create current year data set for TDGDLF
@@ -516,6 +547,9 @@ TEPS[is.na(TEPS)] = ""
 
 
 #Export tables
+
+#ERA
+write.csv(ERA,"ERA_table.retained.species.csv",row.names=F)
 
 #Main features
 FIN.yr.slash=paste(substr(Current.yr,1,4),"/",substr(Current.yr,6,7),sep="")
