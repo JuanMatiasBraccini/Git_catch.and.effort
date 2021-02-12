@@ -937,7 +937,7 @@ LL.equiv.Eff.days.total=LL.equiv.Eff.days.zone%>%
 d=Total.effort.days.monthly%>%
   mutate(Total=Total-LL.equiv.Eff.days.total$Total,
          Data="Gillnet")
-jpeg(file="ERA_Effort_Gillnet and longline equivalent.jpg",width=2400,height=2400,units="px",res=300)
+jpeg(file="ERA_Effort_Gillnet and longline equivalent.jpeg",width=2400,height=2400,units="px",res=300)
 rbind(d,LL.equiv.Eff.days.total)%>%
   mutate(Year=as.numeric(substr(FINYEAR,1,4)))%>%
   ggplot(aes(Year,Total))+
@@ -995,7 +995,7 @@ LL.effort=rbind(LL.effort.monthly,LL.effort.daily)%>%
   mutate(Yr=as.numeric(substr(FINYEAR,1,4)))
 
 coeff=30
-jpeg(file="ERA_Effort_Gillnet and longline.jpg",width=2400,height=2400,units="px",res=300)
+jpeg(file="ERA_Effort_Gillnet and longline.jpeg",width=2400,height=2400,units="px",res=300)
 full_join(d%>%mutate(Yr=as.numeric(substr(FINYEAR,1,4)))%>%dplyr::select(-Data),
               LL.effort,by=c('FINYEAR','Yr'))%>%
       mutate(thousand.hook.days=ifelse(is.na(thousand.hook.days),0,thousand.hook.days))%>%
