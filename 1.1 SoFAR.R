@@ -142,8 +142,9 @@ ERA=subset(Data.monthly,METHOD%in%c("GN","LL") & Estuary=="NO" &
                                                 '<0.1',Percent.of.total.retained))%>%
       filter(!is.na(COMMON_NAME))%>%
       dplyr::select(COMMON_NAME,SCIENTIFIC_NAME,all_of(era.yrs),Average.catch,Percent.of.total.retained)%>%
-      mutate(across(where(is.numeric), round, 0),
-             COMMON_NAME=ifelse(COMMON_NAME=="Skates and rays, other","Other skates and rays",COMMON_NAME))
+      mutate(across(where(is.numeric), round, 2),
+             COMMON_NAME=ifelse(COMMON_NAME=="Skates and rays, other","Other skates and rays",COMMON_NAME))%>%
+      filter(Average.catch>0)
   
 
 
