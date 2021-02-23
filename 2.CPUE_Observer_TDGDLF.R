@@ -28,15 +28,26 @@ source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Source_Shark_bio.R")
 # Species names
 All.species.names=read.csv("C:/Matias/Data/Species_names_shark.only.csv") #for catch
 
-# Criteria to define species to analyse
-Min.yrs=5
-Min.obs.per.yr=10
-
-
 setwd('C:/Matias/Analyses/Catch and effort/Observer_TDGDLF')
 
 source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Smart_par.R")
 source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_Population.dynamics/Nominal_cpue_functions.R")
+
+# Parameters section ---------------------------------------------------------
+
+# Criteria to define species to analyse
+Min.yrs1=3
+Min.obs.per.yr=10
+
+#Standardisation criteria
+Min.yr.blks=2             #at least this number of observations per year-block of positive catches
+core.per=90               #core area defined as 90% of catch
+use.core.area=FALSE
+Min.boat= 5                 #use boats with at least these number of records
+Min.yrs=Min.obs.per.yr      #at least 10 positive records per year
+Min.yrs.data=Min.yrs1            #do standardisation for species with > 3 years of data
+this.var=c('SHEET_NO','Effort','date','Month','Finyear','BOAT','zone','BLOCK','Mid.Lat','Mid.Long','MESH_SIZE')
+
 
 # Manipulate species names ---------------------------------------------------------
 All.species.names=All.species.names%>%
@@ -103,7 +114,7 @@ This.sp=Dat_obs%>%
   mutate(n=ifelse(n<Min.obs.per.yr,0,1))%>%
   group_by(SPECIES)%>%
   summarise(n=sum(n))%>%
-  filter(n>=Min.yrs)%>%
+  filter(n>Min.yrs1)%>%
   pull(SPECIES)
 
 
@@ -166,13 +177,6 @@ dev.off()
 
 
 # Standardised cpue  ---------------------------------------------------------
-Min.yr.blks=2   #at least this number of observations per year-block of positive catches
-core.per=90     #core area defined as 90% of catch
-use.core.area=FALSE
-Min.boat= 2     #use boats with at least these number of records
-Min.yrs=Min.obs.per.yr      #at least 10 positive records per year
-this.var=c('SHEET_NO','Effort','date','Month','Finyear','BOAT','zone','BLOCK','Mid.Lat','Mid.Long','MESH_SIZE')
-
 #Check which species have enough records
 this.sp.enough=This.sp
 Store.dat=vector('list',length(This.sp))
@@ -264,6 +268,8 @@ for(s in 1:length(This.sp))
              log.Effort=log(Effort))
     Store.dat[[s]]=d
   }
+  
+  if(nrow(d)>0 & length(table(d$Finyear))<=Min.yrs.data) this.sp.enough[s]=NA
   rm(d)
 }
 dev.off()
@@ -274,8 +280,6 @@ this.sp.enough=subset(this.sp.enough,!this.sp.enough%in%c("AA","SR","WB","SH")) 
 Store.dat=Store.dat[match(this.sp.enough,names(Store.dat))]
 
 #Select  best model
-Select.best.mdl=FALSE
-
 Stand.cpue=vector('list',length(this.sp.enough))
 names(Stand.cpue)=this.sp.enough
 
@@ -283,6 +287,8 @@ formula.gam=formula(Catch ~ Finyear + BLOCK + s(BOAT,bs="re") + s(Month, bs = "c
 formula.gam=replicate(length(this.sp.enough),formula.gam,FALSE)
 names(formula.gam)=this.sp.enough
 formula.gam$GN=formula.gam$SD=formula(Catch ~ Finyear + BLOCK + s(BOAT,bs="re") + offset(log.Effort))
+#formula.gam$SD=formula(Catch ~ Finyear + BLOCK + offset(log.Effort))
+#formula.gam$WC=formula(Catch ~ Finyear + s(Month, bs = "cc") + offset(log.Effort))
 
 fn.stand=function(d,FORMULA)
 {
@@ -292,9 +298,7 @@ fn.stand=function(d,FORMULA)
 }
 system.time({for(s in 1:length(this.sp.enough))
 {
-  
-  Stand.cpue[[s]]=fn.stand(d=Store.dat[[s]],
-                           FORMULA=formula.gam[[s]])
+  Stand.cpue[[s]]=fn.stand(d=Store.dat[[s]],FORMULA=formula.gam[[s]])
 }})
 
 do.glm=FALSE
@@ -457,7 +461,6 @@ AIC.tab$Best.mod=colnames(AIC.tab)[apply(AIC.tab[,-1],1,which.min)+1]
 Best.model=vector('list',length=nrow(AIC.tab))
 names(Best.model) <- AIC.tab$SP
 for(s in 1:nrow(AIC.tab)) Best.model[[s]]=list(formula=formula.gam[[s]],error=AIC.tab$Best.mod[s])
-
 
 fn.stand=function(d,FORMULA,error)
 {
@@ -664,11 +667,11 @@ fn.plt=function(d,nm,dat,size=.8)
 tiff(file="Figure_Stand.CPUE.tiff",width = 2400, height = 2000,
      units = "px", res = 300, compression = "lzw")  
 par(cex.axis=.85)
-smart.par(n.plots=length(this.sp.enough),MAR=c(1,1.5,1.5,.5),OMA=c(2,2,.1,.1),MGP=c(.1, 0.5, 0))
+smart.par(n.plots=length(this.sp.enough),MAR=c(1,1.5,1.5,.5),OMA=c(2,2,.15,.1),MGP=c(.1, 0.5, 0))
 for(s in 1:length(this.sp.enough)) fn.plt(d=PREDS[[s]],nm=names(PREDS)[s],dat=Stand.cpue[[s]]$data)
 plot.new()
-legend("top",c("Standardised","Nominal","Arithmetic mean"),
-       col=c("black","grey70","steelblue"),bty='n',pch=19,cex=1.5)
+legend("bottomright",c("Standardised","Nominal","Arithmetic mean"),
+       col=c("black","grey70","steelblue"),bty='n',pch=19,cex=1.25)
 mtext("Relative cpue",2,outer=T,las=3,line=0.5)
 mtext("Financial year",1,outer=T,line=0.5)
 dev.off()
