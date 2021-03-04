@@ -72,13 +72,14 @@ library(ggplot2)
 require(animation) # NB, must install ImageMagick
 library(dplyr)
 library(tidyr)
+library(rgdal)
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240,dplyr.summarise.inform = FALSE) 
 par.default=par()
 
 source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
 source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R")
-#source("C:/Matias/Analyses/SOURCE_SCRIPTS/send.emails.R")
+source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/send.emails.R")
 source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_Population.dynamics/fn.fig.R")
 source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Smart_par.R")
 fn.scale=function(x,scaler) ((x/max(x,na.rm=T))^0.5)*scaler
@@ -90,10 +91,12 @@ setwd("C:/Matias/Data/Catch and Effort")  # working directory
 First.run="NO"    #turn to 'yes' when new year's data is included
 #First.run="YES"
 
-Current.yr="2018-19"    #Set current financial year 
+Current.yr="2019-20"    #Set current financial year 
 Current.yr.dat=paste(substr(Current.yr,1,4),substr(Current.yr,6,7),sep="_")
 
-
+#Email addresses
+Email.data.checks="Paul.Fildes@dpird.wa.gov.au"
+Email.FishCube="Paul.Fildes@dpird.wa.gov.au"
 
 #Monthly records 
 
@@ -243,6 +246,25 @@ Conditions=read.csv("C:/Matias/Data/Catch and Effort/Conditions.csv")
 Rory_Alex_net_val=read.csv("C:/Matias/Data/Catch and Effort/Rory_Alex_net/Book2.csv",stringsAsFactors=F)
 
 
+#ASL block10 closures
+ASL_exclusions_block10_JASDGDLF=list(
+  Twilight_cove=c(321255,321260,321261,322255,322260),
+  Esperance=c(335222:335225,335230,335232,333235,333240,333241,
+              334235,334240,334241,335235,335240,335241,340215,
+              340220:340225,340230:340235,340240,341215,341220:341225,
+              341230:341235,341240,342215,342220,342232:342234,
+              343215,343220),
+  Albany_east=c(343184,344183,344184),
+  Hopetoun_west=c(340194,340195,341193,341194,342192:342194),
+  Hopetoun_east=c(335203:335205,340201:340205,340210,341202:341205))
+
+ASL_exclusions_block10_WCDGDLF=list(
+  Geraldton=c(283133:283135,283140,284133:284135,284140,285134,285135,
+              285140,290134,290135,290140),
+  JurienBay_north=c(293144,293145,294144,294145,295144,295145,300144,
+                    300145,301144,301145),
+  JurienBay_south=c(303145,303150,304145,304150))
+
 
 
 ##################--- PARAMETERS SECTION ---#######################
@@ -324,6 +346,7 @@ do.ASL.action.2018="NO"
 do.financial.ass="NO"
 do.annual.TEPS.extraction="NO"
 do.Paul.Rogers_ASL="NO"
+do.ASL.closure_effort_overlap="NO"
 
 #Spatial range TDGDLF
 TDGDLF.lat.range=c(-26,-40)
@@ -1062,7 +1085,7 @@ if(Inspect.New.dat=="YES")
   }
   rm(A,a,b,guarda)
 }
-Data.daily=subset(Data.daily,!(species%in%c(22997,22998)))
+Data.daily=subset(Data.daily,!(species%in%c(22997,22998))) #remove fins & livers to avoid double counting when scaling carcass to whole 
 if(nrow(Data.daily.incomplete))Data.daily.incomplete=subset(Data.daily.incomplete,!(species%in%c(22997,22998)))
 if(nrow(Data.daily.FC.2005_06))Data.daily.FC.2005_06=subset(Data.daily.FC.2005_06,!(species%in%c(22997,22998)))
 
@@ -1319,9 +1342,12 @@ if(Inspect.New.dat=="YES")
   #note:this compares average weights from returns to the range of possible weights by species.
   #     for some species there's no Wei.range info.
   
-    #Check if there's numbers data but no weights      
+    #Check if there's numbers data but no livewt  (this gets ammended further down)   
   check.nfish.weight=subset(Current.data, !is.na(nfish) | !nfish==0)
-  check.nfish.weight=subset(check.nfish.weight,is.na(livewt) | livewt==0)
+  check.nfish.weight=subset(check.nfish.weight,is.na(livewt) | livewt==0)%>%
+    dplyr::select(vessel,BoatName,date,DSNo,TSNo,species,sname1,nfish,landwt,
+                  livewt)%>%
+    arrange(vessel,date)
   if(nrow(check.nfish.weight)>0)
   {
     par(bg=2)
@@ -1331,8 +1357,19 @@ if(Inspect.New.dat=="YES")
     par(bg="white")
     #stop("records with nfish but no weight")
   }
-  write.csv(check.nfish.weight,file=paste(handle,"/Check.no_live.weight.csv",sep=""),row.names=F)
-  
+  write.csv(check.nfish.weight%>%mutate(livewt=ifelse(is.na(livewt),'',livewt)),
+            file=paste(handle,"/Check.no_live.weight.csv",sep=""),row.names=F)
+  send.email(TO=Email.data.checks,
+             Subject="TDGDLF data validation check blank livewt",
+             Body= "Hi,
+              I’ve started the data validation process for the new year data stream.
+              I’ll be sending a series of emails with queries
+              In the attached, I extracted records where ‘livewt’ is blank but there are 
+              values for ‘nfish’ and ‘landwt’.
+              Is this a typo or there’s a legit reason for not having a ‘livewt’ value?
+              Cheers
+              Matias",  
+             Attachment=paste(handle,"/Check.no_live.weight.csv",sep=""))
 
     #calculate average weight for each species
   Current.data$Avg.wt=with(Current.data,livewt/nfish)
@@ -1393,10 +1430,18 @@ if(Inspect.New.dat=="YES")
               species,sname1,flagtype,conditn,nfish,landwt,livewt,Avg.wt,TW.min,TW.max))
   idd=match(c("landwt","livewt","Avg.wt","TW.min","TW.max"),names(check.weights))
   check.weights[,idd]=round(check.weights[,idd],2)
-  check.weights=check.weights[order(check.weights$finyear,check.weights$month,check.weights$TSNo,
-                                    check.weights$DSNo),]
+  check.weights=check.weights%>%
+    arrange(vessel,TSNo,DSNo,species)
   write.csv(check.weights[,-match(c("Avg.wt","TW.min","TW.max"),names(check.weights))],
             file=paste(handle,"/Check.nfish.weight.typo.csv",sep=""),row.names=F)
+  send.email(TO=Email.data.checks,
+             Subject="TDGDLF data validation check nfish and livewt",
+             Body= "For the attached file, could you please check that there are no typos in the ‘nfish’ and 
+                    ‘livewt’ columns as the average weight resulting from these two columns are outside the 
+                    range for the species 
+                    Cheers
+                    Matias",
+             Attachment=paste(handle,"/Check.nfish.weight.typo.csv",sep=""))
 
   Avg.wt.list.ind=vector('list',length=length(Indicator.species))
   names(Avg.wt.list.ind)=names(Indicator.species)
@@ -1525,7 +1570,9 @@ Data.daily=Data.daily %>%
             group_by(species) %>% 
             mutate(livewt= ifelse((is.na(livewt)|livewt==0|conditn=="SC") & nfish>0, 
                         mean(livewt, na.rm=TRUE)/mean(nfish, na.rm=TRUE), livewt)) %>%
-            as.data.frame()
+            as.data.frame() %>%
+            mutate(livewt=ifelse(is.na(livewt) & !is.na(landwt) & !is.na(nfish),
+                                 landwt,livewt))
 
 
 #Aggregate daily nfish
@@ -4244,43 +4291,47 @@ Data.daily=subset(Data.daily,!is.na(LIVEWT.reap))
 
 #by zone
 Hndl="C:/Matias/Analyses/Catch and effort/Compare_to_previous_approach/"
-fun.compare.weight=function(SPEC)
+if(First.run=="YES")
 {
-  dat=subset(Data.monthly,SPECIES==SPEC & zone%in%c("West","Zone1","Zone2"))
-  dat1=subset(dat,Spec.old==SPEC)
-  spe=unique(dat$SNAME)[1]
-  tab1=aggregate(LIVEWT~FINYEAR+zone,dat1,sum,na.rm=T)
-  tab2=aggregate(LIVEWT.reap~FINYEAR+zone,dat,sum,na.rm=T)
-  wide1 <- reshape(tab1, v.names ="LIVEWT" , idvar = "FINYEAR",timevar = "zone", direction = "wide")
-  wide2 <- reshape(tab2, v.names ="LIVEWT.reap" , idvar = "FINYEAR",timevar = "zone", direction = "wide")
-  Yer=1:length(wide1$FINYEAR)
-  Yer2=1:length(wide2$FINYEAR)
-  if(length(Yer)<length(Yer2))wide2=wide2[match(wide1$FINYEAR,wide2$FINYEAR),]
-  Yer2=1:length(wide2$FINYEAR)
-  plot(Yer,wide1$LIVEWT.West/1000,col=2,ylim=c(0,max(c(tab1$LIVEWT/1000,tab2$LIVEWT.reap/1000))),
-       ylab="",xlab="",xaxt='n',main=spe,pch=19,cex.axis=1.25)
-  lines(Yer2,wide2$LIVEWT.reap.West/1000,col=2,pch=19)
-  #points(Yer2,wide2$LIVEWT.reap.West,col=2,pch=21)
-  points(Yer,wide1$LIVEWT.Zone1/1000,col=3,pch=19)
-  lines(Yer2,wide2$LIVEWT.reap.Zone1/1000,col=3)
-  #points(Yer2,wide2$LIVEWT.reap.Zone1,col=3,pch=21)
-  points(Yer,wide1$LIVEWT.Zone2/1000,col=4,pch=19)
-  lines(Yer2,wide2$LIVEWT.reap.Zone2/1000,col=4)
-  #points(Yer2,wide2$LIVEWT.reap.Zone2,col=4,pch=21)
-  axis(1,Yer,labels=F,tck=-0.015)
-  axis(1,seq(1,length(Yer),by=5),labels=wide1$FINYEAR[seq(1,length(Yer),by=5)],tck=-0.03,cex.axis=1.25)
+  fun.compare.weight=function(SPEC)
+  {
+    dat=subset(Data.monthly,SPECIES==SPEC & zone%in%c("West","Zone1","Zone2"))
+    dat1=subset(dat,Spec.old==SPEC)
+    spe=unique(dat$SNAME)[1]
+    tab1=aggregate(LIVEWT~FINYEAR+zone,dat1,sum,na.rm=T)
+    tab2=aggregate(LIVEWT.reap~FINYEAR+zone,dat,sum,na.rm=T)
+    wide1 <- reshape(tab1, v.names ="LIVEWT" , idvar = "FINYEAR",timevar = "zone", direction = "wide")
+    wide2 <- reshape(tab2, v.names ="LIVEWT.reap" , idvar = "FINYEAR",timevar = "zone", direction = "wide")
+    Yer=1:length(wide1$FINYEAR)
+    Yer2=1:length(wide2$FINYEAR)
+    if(length(Yer)<length(Yer2))wide2=wide2[match(wide1$FINYEAR,wide2$FINYEAR),]
+    Yer2=1:length(wide2$FINYEAR)
+    plot(Yer,wide1$LIVEWT.West/1000,col=2,ylim=c(0,max(c(tab1$LIVEWT/1000,tab2$LIVEWT.reap/1000))),
+         ylab="",xlab="",xaxt='n',main=spe,pch=19,cex.axis=1.25)
+    lines(Yer2,wide2$LIVEWT.reap.West/1000,col=2,pch=19)
+    #points(Yer2,wide2$LIVEWT.reap.West,col=2,pch=21)
+    points(Yer,wide1$LIVEWT.Zone1/1000,col=3,pch=19)
+    lines(Yer2,wide2$LIVEWT.reap.Zone1/1000,col=3)
+    #points(Yer2,wide2$LIVEWT.reap.Zone1,col=3,pch=21)
+    points(Yer,wide1$LIVEWT.Zone2/1000,col=4,pch=19)
+    lines(Yer2,wide2$LIVEWT.reap.Zone2/1000,col=4)
+    #points(Yer2,wide2$LIVEWT.reap.Zone2,col=4,pch=21)
+    axis(1,Yer,labels=F,tck=-0.015)
+    axis(1,seq(1,length(Yer),by=5),labels=wide1$FINYEAR[seq(1,length(Yer),by=5)],tck=-0.03,cex.axis=1.25)
+  }
+  tiff(file=paste(Hndl,"Compare.reapKtch_zone.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+  par(mfcol=c(2,2),mar=c(3,4,1,4),oma=c(2.5,.6,.1,.1),las=1)
+  fun.compare.weight(17001)
+  legend("topleft",c("LiveWT","LiveWt.reap"),bty='n',pch=c(21,NA),lty=c(0,1),pt.bg=c("black","white"))
+  fun.compare.weight(17003)
+  legend("topright",c("West","Zn1","Zn2"),bty='n',lty=1,col=c(2,3,4))
+  fun.compare.weight(18003)
+  fun.compare.weight(18007)
+  mtext("Tonnes",2,outer=T,cex=1.75,line=-1.5,las=3)
+  mtext("Financial year",1,outer=T,cex=1.75)
+  dev.off()
 }
-tiff(file=paste(Hndl,"Compare.reapKtch_zone.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
-par(mfcol=c(2,2),mar=c(3,4,1,4),oma=c(2.5,.6,.1,.1),las=1)
-fun.compare.weight(17001)
-legend("topleft",c("LiveWT","LiveWt.reap"),bty='n',pch=c(21,NA),lty=c(0,1),pt.bg=c("black","white"))
-fun.compare.weight(17003)
-legend("topright",c("West","Zn1","Zn2"),bty='n',lty=1,col=c(2,3,4))
-fun.compare.weight(18003)
-fun.compare.weight(18007)
-mtext("Tonnes",2,outer=T,cex=1.75,line=-1.5,las=3)
-mtext("Financial year",1,outer=T,cex=1.75)
-dev.off()
+
 
   #C.8 Add 5% to catch records prior to 1990  as per instructed by Rory                                              
 Data.monthly$LIVEWT.c=with(Data.monthly,ifelse(YEAR.c<1990 & LAT<=(-26),LIVEWT.reap*Inc.per,LIVEWT.reap))
@@ -4335,230 +4386,242 @@ Data.daily=subset(Data.daily,LAT<=(-26))
 
 
 # C.9.1 Northern and Southern catches
-fun.compare.weight.NORTH.tot=function(DAT,SPEC)
+if(First.run=="YES")
 {
-  dat=subset(DAT,SPECIES==SPEC)
-  dat1=subset(dat,Spec.old==SPEC)
-  spe=unique(dat$SNAME)[1]
-  tab1=aggregate(LIVEWT~FINYEAR,dat1,sum,na.rm=T)
-  tab2=aggregate(LIVEWT.reap~FINYEAR,dat,sum,na.rm=T)
-  wide1 <- tab1
-  wide2 <- tab2
-  Yer=1:length(wide1$FINYEAR)
-  Yer2=1:length(wide2$FINYEAR)
-  if(length(Yer)<length(Yer2))wide2=wide2[match(wide1$FINYEAR,wide2$FINYEAR),]
-  Yer2=1:length(wide2$FINYEAR)
-  plot(Yer,wide1$LIVEWT/1000,col=2,ylim=c(0,max(c(tab1$LIVEWT/1000,tab2$LIVEWT.reap/1000))),ylab="Tons",xlab="FinYr",
-       xaxt='n',main=spe,pch=19)
-  lines(Yer2,wide2$LIVEWT.reap/1000,col=3,pch=19)
-  axis(1,Yer,labels=F,tck=-0.015)
-  axis(1,seq(1,length(Yer),by=5),labels=wide1$FINYEAR[seq(1,length(Yer),by=5)],tck=-0.03)
-  legend("topleft",c("LiveWT","LiveWt.reap"),bty='n',pch=c(21,NA),col=c(2,3),lty=c(0,1),pt.bg=c("red","white"))
-}
-
+  fun.compare.weight.NORTH.tot=function(DAT,SPEC)
+  {
+    dat=subset(DAT,SPECIES==SPEC)
+    dat1=subset(dat,Spec.old==SPEC)
+    spe=unique(dat$SNAME)[1]
+    tab1=aggregate(LIVEWT~FINYEAR,dat1,sum,na.rm=T)
+    tab2=aggregate(LIVEWT.reap~FINYEAR,dat,sum,na.rm=T)
+    wide1 <- tab1
+    wide2 <- tab2
+    Yer=1:length(wide1$FINYEAR)
+    Yer2=1:length(wide2$FINYEAR)
+    if(length(Yer)<length(Yer2))wide2=wide2[match(wide1$FINYEAR,wide2$FINYEAR),]
+    Yer2=1:length(wide2$FINYEAR)
+    plot(Yer,wide1$LIVEWT/1000,col=2,ylim=c(0,max(c(tab1$LIVEWT/1000,tab2$LIVEWT.reap/1000))),ylab="Tons",xlab="FinYr",
+         xaxt='n',main=spe,pch=19)
+    lines(Yer2,wide2$LIVEWT.reap/1000,col=3,pch=19)
+    axis(1,Yer,labels=F,tck=-0.015)
+    axis(1,seq(1,length(Yer),by=5),labels=wide1$FINYEAR[seq(1,length(Yer),by=5)],tck=-0.03)
+    legend("topleft",c("LiveWT","LiveWt.reap"),bty='n',pch=c(21,NA),col=c(2,3),lty=c(0,1),pt.bg=c("red","white"))
+  }
+  
   #North
-Show.north="NO"  #change to YES if doing catch reapportions for NSF
-if(Show.north=="YES")
-{  
-  tiff(file=paste(Hndl,"Compare.reapKtch.North.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
-  par(mfcol=c(2,2),las=1)
-  fun.compare.weight.NORTH.tot(subset(Data.monthly.north,!is.na(LIVEWT.reap)),17001)
-  fun.compare.weight.NORTH.tot(subset(Data.monthly.north,!is.na(LIVEWT.reap)),17003)
-  fun.compare.weight.NORTH.tot(subset(Data.monthly.north,!is.na(LIVEWT.reap)),18003)
-  fun.compare.weight.NORTH.tot(subset(Data.monthly.north,!is.na(LIVEWT.reap)),18007)
-  dev.off()
-}
-
+  Show.north="NO"  #change to YES if doing catch reapportions for NSF
+  if(Show.north=="YES")
+  {  
+    tiff(file=paste(Hndl,"Compare.reapKtch.North.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+    par(mfcol=c(2,2),las=1)
+    fun.compare.weight.NORTH.tot(subset(Data.monthly.north,!is.na(LIVEWT.reap)),17001)
+    fun.compare.weight.NORTH.tot(subset(Data.monthly.north,!is.na(LIVEWT.reap)),17003)
+    fun.compare.weight.NORTH.tot(subset(Data.monthly.north,!is.na(LIVEWT.reap)),18003)
+    fun.compare.weight.NORTH.tot(subset(Data.monthly.north,!is.na(LIVEWT.reap)),18007)
+    dev.off()
+  }
+  
   #South
-tiff(file=paste(Hndl,"Compare.reapKtch.South.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
-par(mfcol=c(2,2),las=1)
-fun.compare.weight.NORTH.tot(Data.monthly,17001)
-fun.compare.weight.NORTH.tot(Data.monthly,17003)
-fun.compare.weight.NORTH.tot(Data.monthly,18003)
-fun.compare.weight.NORTH.tot(Data.monthly,18007)
-dev.off()
+  tiff(file=paste(Hndl,"Compare.reapKtch.South.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+  par(mfcol=c(2,2),las=1)
+  fun.compare.weight.NORTH.tot(Data.monthly,17001)
+  fun.compare.weight.NORTH.tot(Data.monthly,17003)
+  fun.compare.weight.NORTH.tot(Data.monthly,18003)
+  fun.compare.weight.NORTH.tot(Data.monthly,18007)
+  dev.off()
+  
+}
 
 
 #Compare with Rory's previous summaries
-fn.check=function(dat,WHAT)
+if(First.run=="YES")
 {
-  FInYEAR=unique(Results.pre.2013$FINYEAR)
-  NN=length(FInYEAR)
-  if(WHAT=="LIVEWT") this=aggregate(LIVEWT~FINYEAR,dat,sum)
-  if(WHAT=="LIVEWT.reap") this=aggregate(LIVEWT.reap~FINYEAR,dat,sum)
-  if(WHAT=="LIVEWT.c") this=aggregate(LIVEWT.c~FINYEAR,dat,sum)
+  fn.check=function(dat,WHAT)
+  {
+    FInYEAR=unique(Results.pre.2013$FINYEAR)
+    NN=length(FInYEAR)
+    if(WHAT=="LIVEWT") this=aggregate(LIVEWT~FINYEAR,dat,sum)
+    if(WHAT=="LIVEWT.reap") this=aggregate(LIVEWT.reap~FINYEAR,dat,sum)
+    if(WHAT=="LIVEWT.c") this=aggregate(LIVEWT.c~FINYEAR,dat,sum)
+    
+    plot(Results.pre.2013$TDGDLF.tot.sk.live.wt,type='l',ylim=c(0,2000),ylab="Total shark catch",xaxt='n',main=WHAT)
+    lines(this[,2]/1000,col=2)
+    axis(1,at=1:NN,labels=F,tck=-0.01)
+    axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
+    legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
+    
+  }
+  tiff(file=paste(Hndl,"Compare.Rory.current.ktch.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+  fn.check(subset(Data.monthly,SPECIES%in%Elasmo.species & METHOD%in%c("GN","LL") &
+                    !(CONDITN %in% c("DR","LI","FI")) & LAT<=(-26)),"LIVEWT.c")
+  dev.off()
   
-  plot(Results.pre.2013$TDGDLF.tot.sk.live.wt,type='l',ylim=c(0,2000),ylab="Total shark catch",xaxt='n',main=WHAT)
-  lines(this[,2]/1000,col=2)
-  axis(1,at=1:NN,labels=F,tck=-0.01)
-  axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
-  legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
   
+  #by zone 
+  fn.check.zn=function(dat,WHAT)
+  {
+    if(WHAT=="LIVEWT")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=dat,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }
+    if(WHAT=="LIVEWT.reap")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=dat,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }
+    if(WHAT=="LIVEWT.c")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=dat,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }
+    
+    plot(Results.pre.2013$WC.tot.sk.live.wt,type='l',ylim=c(0,1200),ylab="Total shark catch",main=WHAT)
+    lines(Results.pre.2013$Z1.tot.sk.live.wt,lty=2)
+    lines(Results.pre.2013$Z2.tot.sk.live.wt,lty=3)
+    LTY=1:3;COL=2:4
+    for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
+    
+    legend("topleft",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
+  }
+  tiff(file=paste(Hndl,"Compare.Rory.current.ktch.Zone.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+  fn.check.zn(subset(Data.monthly,SPECIES%in%Elasmo.species & METHOD%in%c("GN","LL") & LAT<=(-26)),"LIVEWT.reap")
+  dev.off()
 }
-tiff(file=paste(Hndl,"Compare.Rory.current.ktch.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
-fn.check(subset(Data.monthly,SPECIES%in%Elasmo.species & METHOD%in%c("GN","LL") &
-                  !(CONDITN %in% c("DR","LI","FI")) & LAT<=(-26)),"LIVEWT.c")
-dev.off()
 
-
-#by zone 
-fn.check.zn=function(dat,WHAT)
-{
-  if(WHAT=="LIVEWT")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=dat,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
-  }
-  if(WHAT=="LIVEWT.reap")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=dat,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
-  }
-  if(WHAT=="LIVEWT.c")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=dat,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
-  }
-  
-  plot(Results.pre.2013$WC.tot.sk.live.wt,type='l',ylim=c(0,1200),ylab="Total shark catch",main=WHAT)
-  lines(Results.pre.2013$Z1.tot.sk.live.wt,lty=2)
-  lines(Results.pre.2013$Z2.tot.sk.live.wt,lty=3)
-  LTY=1:3;COL=2:4
-  for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
-  
-  legend("topleft",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
-}
-tiff(file=paste(Hndl,"Compare.Rory.current.ktch.Zone.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
-fn.check.zn(subset(Data.monthly,SPECIES%in%Elasmo.species & METHOD%in%c("GN","LL") & LAT<=(-26)),"LIVEWT.reap")
-dev.off()
 
 
 #by zone and species
-Read=read.csv("C:/Matias/Data/Catch and Effort/Historic/Spec.catch.zone.csv")
-fn.by.species=function(dat,WHAT)
+if(First.run=="YES")
 {
-  FInYEAR=unique(Read$Fin.yr)
-  NN=length(FInYEAR)
-  
-  #dusky
-  d1=subset(dat,SPECIES%in%c(18001,18003))
-  if(WHAT=="LIVEWT")
+  Read=read.csv("C:/Matias/Data/Catch and Effort/Historic/Spec.catch.zone.csv")
+  fn.by.species=function(dat,WHAT)
   {
-    annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
+    FInYEAR=unique(Read$Fin.yr)
+    NN=length(FInYEAR)
+    
+    #dusky
+    d1=subset(dat,SPECIES%in%c(18001,18003))
+    if(WHAT=="LIVEWT")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }
+    if(WHAT=="LIVEWT.reap")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }
+    
+    if(WHAT=="LIVEWT.c")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }  
+    plot(Read$Dusky.catch.WC,type='l',ylim=c(0,350),ylab="Total catch",xaxt='n',main=paste("Dusky",WHAT))
+    lines(Read$Dusky.catch.Zn1,lty=2)
+    lines(Read$Dusky.catch.Zn2,lty=3)
+    LTY=1:3;COL=2:4
+    for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
+    axis(1,at=1:NN,labels=F,tck=-0.01)
+    axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
+    legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
+    legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
+    
+    #sandbar
+    d1=subset(dat,SPECIES%in%c(18007))
+    if(WHAT=="LIVEWT")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }
+    if(WHAT=="LIVEWT.reap")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }
+    
+    if(WHAT=="LIVEWT.c")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
+      #wide=wide[-1,]
+    }  
+    Ns=nrow(Read)
+    plot(Read$Sandbar.catch.WC[11:Ns],type='l',ylim=c(0,350),ylab="Total catch",xaxt='n',main=paste("Sandbar",WHAT))
+    lines(Read$Sandbar.catch.Zn1[11:Ns],lty=2)
+    lines(Read$Sandbar.catch.Zn2[11:Ns],lty=3)
+    LTY=1:3;COL=2:4
+    for (i in 1:(ncol(wide)-1)) lines(wide[(match("1985-86",wide$FINYEAR)):nrow(wide),i+1]/1000,lty=LTY[i],col=COL[i])
+    id=match("1985-86",FInYEAR)
+    axis(1,at=1:nrow(wide),labels=F,tck=-0.01)
+    axis(1,at=seq(1,nrow(wide),5),labels=FInYEAR[id:Ns][seq(1,nrow(wide),5)],tck=-0.02,cex.axis=1.1)
+    legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
+    legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
+    
+    
+    #gummy
+    d1=subset(dat,SPECIES%in%c(17001))
+    if(WHAT=="LIVEWT")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }
+    if(WHAT=="LIVEWT.reap")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }
+    if(WHAT=="LIVEWT.c")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }  
+    plot(Read$Gummy.catch.WC,type='l',ylim=c(0,700),ylab="Total catch",xaxt='n',main=paste("Gummy",WHAT))
+    lines(Read$Gummy.catch.Zn1,lty=2)
+    lines(Read$Gummy.catch.Zn2,lty=3)
+    LTY=1:3;COL=2:4
+    for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
+    axis(1,at=1:NN,labels=F,tck=-0.01)
+    axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
+    legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
+    legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
+    
+    
+    #Whiskery
+    d1=subset(dat,SPECIES%in%c(17003))
+    if(WHAT=="LIVEWT")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }
+    if(WHAT=="LIVEWT.reap")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }
+    if(WHAT=="LIVEWT.c")
+    {
+      annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
+      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
+    }  
+    plot(Read$Whiskery.catch.WC,type='l',ylim=c(0,350),ylab="Total catch",xaxt='n',main=paste("Whiskery",WHAT))
+    lines(Read$Whiskery.catch.Zn1,lty=2)
+    lines(Read$Whiskery.catch.Zn2,lty=3)
+    LTY=1:3;COL=2:4
+    for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
+    axis(1,at=1:NN,labels=F,tck=-0.01)
+    axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
+    legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
+    legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
   }
-  if(WHAT=="LIVEWT.reap")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
-  }
-  
-  if(WHAT=="LIVEWT.c")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
-  }  
-  plot(Read$Dusky.catch.WC,type='l',ylim=c(0,350),ylab="Total catch",xaxt='n',main=paste("Dusky",WHAT))
-  lines(Read$Dusky.catch.Zn1,lty=2)
-  lines(Read$Dusky.catch.Zn2,lty=3)
-  LTY=1:3;COL=2:4
-  for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
-  axis(1,at=1:NN,labels=F,tck=-0.01)
-  axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
-  legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
-  legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
-  
-  #sandbar
-  d1=subset(dat,SPECIES%in%c(18007))
-  if(WHAT=="LIVEWT")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
-  }
-  if(WHAT=="LIVEWT.reap")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
-  }
-  
-  if(WHAT=="LIVEWT.c")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
-    #wide=wide[-1,]
-  }  
-  Ns=nrow(Read)
-  plot(Read$Sandbar.catch.WC[11:Ns],type='l',ylim=c(0,350),ylab="Total catch",xaxt='n',main=paste("Sandbar",WHAT))
-  lines(Read$Sandbar.catch.Zn1[11:Ns],lty=2)
-  lines(Read$Sandbar.catch.Zn2[11:Ns],lty=3)
-  LTY=1:3;COL=2:4
-  for (i in 1:(ncol(wide)-1)) lines(wide[(match("1985-86",wide$FINYEAR)):nrow(wide),i+1]/1000,lty=LTY[i],col=COL[i])
-  id=match("1985-86",FInYEAR)
-  axis(1,at=1:nrow(wide),labels=F,tck=-0.01)
-  axis(1,at=seq(1,nrow(wide),5),labels=FInYEAR[id:Ns][seq(1,nrow(wide),5)],tck=-0.02,cex.axis=1.1)
-  legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
-  legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
-  
-  
-  #gummy
-  d1=subset(dat,SPECIES%in%c(17001))
-  if(WHAT=="LIVEWT")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
-  }
-  if(WHAT=="LIVEWT.reap")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
-  }
-  if(WHAT=="LIVEWT.c")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
-  }  
-  plot(Read$Gummy.catch.WC,type='l',ylim=c(0,700),ylab="Total catch",xaxt='n',main=paste("Gummy",WHAT))
-  lines(Read$Gummy.catch.Zn1,lty=2)
-  lines(Read$Gummy.catch.Zn2,lty=3)
-  LTY=1:3;COL=2:4
-  for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
-  axis(1,at=1:NN,labels=F,tck=-0.01)
-  axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
-  legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
-  legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
-  
-  
-  #Whiskery
-  d1=subset(dat,SPECIES%in%c(17003))
-  if(WHAT=="LIVEWT")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
-  }
-  if(WHAT=="LIVEWT.reap")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
-  }
-  if(WHAT=="LIVEWT.c")
-  {
-    annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
-    wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
-  }  
-  plot(Read$Whiskery.catch.WC,type='l',ylim=c(0,350),ylab="Total catch",xaxt='n',main=paste("Whiskery",WHAT))
-  lines(Read$Whiskery.catch.Zn1,lty=2)
-  lines(Read$Whiskery.catch.Zn2,lty=3)
-  LTY=1:3;COL=2:4
-  for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
-  axis(1,at=1:NN,labels=F,tck=-0.01)
-  axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
-  legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
-  legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
+  tiff(file=paste(Hndl,"Compare.Rory.current.ktch.Zone.and.species.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+  par(mfcol=c(2,2),las=1)
+  fn.by.species(subset(Data.monthly,SPECIES%in%Elasmo.species & METHOD%in%c("GN","LL") & LAT<=(-26)),"LIVEWT.c")
+  dev.off()
 }
-tiff(file=paste(Hndl,"Compare.Rory.current.ktch.Zone.and.species.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
-par(mfcol=c(2,2),las=1)
-fn.by.species(subset(Data.monthly,SPECIES%in%Elasmo.species & METHOD%in%c("GN","LL") & LAT<=(-26)),"LIVEWT.c")
-dev.off()
+
 
 
 # C.10  Check fishing methods used
@@ -4908,38 +4971,43 @@ if(Inspect.New.dat=="YES")
     
     Data$Session=with(Data,paste(TSNo,"_",DSNo,sep=""))
     Data=Data[order(Data$VESSEL,Data$year,Data$MONTH,Data$Session),]
-    
+    Data=subset(Data,!is.na(km.gn.hours))
     ddd=vector('list',length(Unik.ves))
     for (i in 1:length(Unik.ves))
     {
       da=subset(Data,VESSEL==Unik.ves[i])
-      Unik.sess=unique(da$Session)
-      NN=length(Unik.sess)
-      da$dummy=1:nrow(da)
       
-      plot(da$dummy,da$km.gn.hours,type="b",xlab="session number",ylab="km.gn.hours",main=paste(YRS,"",Unik.ves[i]))
-      Med=median(da$km.gn.hours,na.rm=T)
-      Up=quantile(da$km.gn.hours,.975,na.rm=T)
-      Low=quantile(da$km.gn.hours,.025,na.rm=T)
-      abline(h=Med,lwd=2)
-      polygon(c(da$dummy,rev(da$dummy)),c(rep(Low,nrow(da)),rep(Up,nrow(da))),
-              border='transparent',col=rgb(.1,.3,.1,alpha=.2))
-      if(withCols=="YES")
+      if(nrow(da)>0)
       {
-        Cols=sample(rainbow(NN))
-        for (j in 1:NN)
+        Unik.sess=unique(da$Session)
+        NN=length(Unik.sess)
+        da$dummy=1:nrow(da)
+        
+        plot(da$dummy,da$km.gn.hours,type="b",xlab="session number",ylab="km.gn.hours",main=paste(YRS,"",Unik.ves[i]))
+        Med=median(da$km.gn.hours,na.rm=T)
+        Up=quantile(da$km.gn.hours,.975,na.rm=T)
+        Low=quantile(da$km.gn.hours,.025,na.rm=T)
+        abline(h=Med,lwd=2)
+        polygon(c(da$dummy,rev(da$dummy)),c(rep(Low,nrow(da)),rep(Up,nrow(da))),
+                border='transparent',col=rgb(.1,.3,.1,alpha=.2))
+        if(withCols=="YES")
         {
-          datt=subset(da,Session==Unik.sess[j])
-          points(datt$dummy,datt$km.gn.hours,col=Cols[j],type='b')
-        }      
+          Cols=sample(rainbow(NN))
+          for (j in 1:NN)
+          {
+            datt=subset(da,Session==Unik.sess[j])
+            points(datt$dummy,datt$km.gn.hours,col=Cols[j],type='b')
+          }      
+        }
+        da=da%>%
+          mutate(VESSEL=as.character(VESSEL),
+                 TSNo=as.character(TSNo),
+                 Check=ifelse(km.gn.hours>2*Med,"Above 2 x media","OK"))
+        iii=which(da$TSNo%in%unique(subset(da,Check=="Above 2 x media")$TSNo))
+        if(length(iii)>0)ddd[[i]]=da[iii,c(match(c("VESSEL","TSNo","DSNo","km.gn.hours","Check"),names(da)),id)]
+        
       }
-      da=da%>%
-        mutate(VESSEL=as.character(VESSEL),
-               TSNo=as.character(TSNo),
-               Check=ifelse(km.gn.hours>2*Med,"Above 2 x media","OK"))
-      iii=which(da$TSNo%in%unique(subset(da,Check=="Above 2 x media")$TSNo))
-      if(length(iii)>0)ddd[[i]]=da[iii,c(match(c("VESSEL","TSNo","DSNo","km.gn.hours","Check"),names(da)),id)]
-    }
+     }
     return(do.call(rbind,ddd))
   }
   
@@ -5103,10 +5171,22 @@ if(Inspect.New.dat=="YES")
   #-BDAYS by session
   graphics.off()
   fun.plot.eff.var(Data.daily.original,Current.yr,"BDAYS",0,40,15,"YES")
-    #vessell visually identified as problematic
-  #check.vesl=c("F 517","E 045","B 142","F 417") 
-  #MIN=1; MAX=30
-  #Inspect.bday=fun.further.chk(Data.daily.original,Current.yr,"BDAYS")
+  check.vesl=c("F 517","E 045")  #vessell visually identified as problematic
+  MIN=1; MAX=30
+  Inspect.bday=fun.further.chk(Data.daily.original,Current.yr,"BDAYS")%>%
+    filter(Ok.var=='Problem')
+  if(nrow(Inspect.bday)>0)
+  {
+    write.csv(Inspect.bday,paste(handle,"/Inspect.bday.csv",sep=""),row.names = F)
+    send.email(TO=Email.data.checks,
+               Subject="TDGDLF data validation check BDAYS",
+               Body= "For the attached file, could you please check that there are no typos in the ‘BDAYS’ 
+                    column. The values are way outside the range reported by these fishers in other shots. 
+                    Cheers
+                    Matias",
+               Attachment=paste(handle,"/Inspect.bday.csv",sep=""))
+    
+  }
   
   
   #-Fdays by month (shouldn't be > 30)
@@ -5117,57 +5197,77 @@ if(Inspect.New.dat=="YES")
   #-Hours
   graphics.off()
   fun.plot.eff.var(Data.daily.original,Current.yr,"HOURS",0,48,24,"YES")
-    #vessell visually identified as problematic
-  #check.vesl=c("E 035","B 142","F 517","G 406") 
-  #MIN=1; MAX=24
-  #Inspect.hours=fun.further.chk(Data.daily.original,Current.yr,"HOURS")
- 
+  check.vesl=c("B 091","E 009") #vessell visually identified as problematic
+  MIN=1; MAX=24
+  Inspect.hours=fun.further.chk(Data.daily.original,Current.yr,"HOURS")%>%
+  filter(Ok.var=='Problem')
+ if(nrow(Inspect.hours)>0)
+ {
+   write.csv(Inspect.hours,paste(handle,"/Inspect.hours.csv",sep=""),row.names = F)
+   send.email(TO=Email.data.checks,
+              Subject="TDGDLF data validation check HOURS",
+              Body= "For the attached file, could you please check that there are no typos in the ‘HOURS’ 
+                    column. The values are way outside the range reported by these fishers in other shots. 
+                    Cheers
+                    Matias",
+              Attachment=paste(handle,"/Inspect.hours.csv",sep=""))
+   
+ }
   
-  #-Shots
+  #-Shots   
   graphics.off()
   Table.Shots.year=table(Effort.daily$finyear,Effort.daily$shots)
   fun.plot.eff.var(Data.daily.original,Current.yr,"SHOTS",0,10,2,"YES")
-    #vessell visually identified as problematic
-  #check.vesl=c("A 035B") 
-  #MIN=1; MAX=2
-  #Inspect.shots=fun.further.chk(Data.daily.original,Current.yr,"SHOTS")
-  #Check.shot=subset(Data.daily.original,FINYEAR==Current.yr & VESSEL%in%check.vesl) 
-  #Check.shot=Check.shot[!duplicated(Check.shot$Same.return.SNo),match(c("date","VESSEL",
-  #        "SNo","DSNo","TSNo","SHOTS"),names(Check.shot))]
-  #Check.shot=subset(Check.shot, SHOTS==0 | SHOTS>2)
+  check.vesl=c("G 297")  #vessell visually identified as problematic
+  MIN=1; MAX=2
+  Inspect.shots=fun.further.chk(Data.daily.original,Current.yr,"SHOTS")%>%
+    filter(Ok.var=='Problem')%>%
+    arrange(VESSEL,date)
+  if(nrow(Inspect.shots)>0)
+  {
+    write.csv(Inspect.shots,paste(handle,"/Inspect.shots.csv",sep=""),row.names = F)
+    send.email(TO=Email.data.checks,
+               Subject="TDGDLF data validation check SHOTS",
+               Body= "For the attached file, could you please check that there are no typos in the ‘SHOTS’ 
+                    column. The values are way outside the range reported by these fishers in other shots. 
+                    Cheers
+                    Matias",
+               Attachment=paste(handle,"/Inspect.shots.csv",sep=""))
+  }
+
   
-  
-  #-Shots X Hours
+  #-Shots X Hours     
   graphics.off()
   fun.plot.combo(Data.daily.original,Current.yr,"SHOTS","HOURS",0,48,26,"YES")
-  # check.vesl=c("E 035","B 142","F 517") 
-  # Check.shot.hours=subset(Data.daily.original,FINYEAR==Current.yr & VESSEL%in%check.vesl) 
-  # Check.shot.hours=Check.shot.hours[!duplicated(Check.shot.hours$Same.return.SNo),
-  #           match(c("date","VESSEL","SNo","DSNo","TSNo","SHOTS","HOURS"),names(Check.shot.hours))]
-  # Check.shot.hours$Shots.hours=with(Check.shot.hours,SHOTS*HOURS)
-  # Check.shot.hours=subset(Check.shot.hours, Shots.hours>26)
-  
-    #separate vessell visually identified as problematic
-  #MIN=1; MAX=24
-  #graphics.off()
-  #Inspect.hours.shots=fun.further.chk.combo(Data.daily.original,Current.yr,"SHOTS","HOURS")
+   check.vesl=c("E 035","E 009","G 297") 
+   Check.shot.hours=subset(Data.daily.original,FINYEAR==Current.yr & VESSEL%in%check.vesl)%>%
+     distinct(Same.return.SNo,date,VESSEL,SNo,DSNo,TSNo,SHOTS,HOURS)%>%
+     mutate(Shots.hours=SHOTS*HOURS)%>%
+     filter(Shots.hours>26)%>%
+     arrange(VESSEL,date)
+   if(nrow(Check.shot.hours)>0)
+   {
+     write.csv(Check.shot.hours,paste(handle,"/Inspect.shot.hours.csv",sep=""),row.names = F)
+     send.email(TO=Email.data.checks,
+                Subject="TDGDLF data validation check SHOTS & HOURS",
+                Body= "For the attached file, could you please check that there are no typos in the ‘SHOTS’ &  'HOURS' columns. 
+                     The values are way outside the range reported by these fishers in other shots. 
+                    Cheers
+                    Matias",
+                Attachment=paste(handle,"/Inspect.shots.csv",sep=""))
+   }
+
+  MIN=1; MAX=24
+  graphics.off()
+  Inspect.hours.shots=fun.further.chk.combo(Data.daily.original,Current.yr,"SHOTS","HOURS")
   
   
   #-Effort (km.gn.hours)
-  graphics.off()
+  #graphics.off()
   Explr.ves=fun.plot.km.gn.hours(Data.daily.original,Current.yr,"SHOTS","HOURS","NETLEN","YES")
-   
+ 
     
-  #Export file for checking original returns by data entry girls
-  #daily
-  if(exists("Check.netlen"))if(nrow(Check.netlen)>0) write.csv(Check.netlen,paste(handle,"/Check.net.csv",sep=""),row.names=F)
-  if(exists("Inspect.hours"))if( nrow(Inspect.hours)>0) write.csv(Inspect.hours,paste(handle,"/Check.hours.csv",sep=""),row.names=F)
-  if(exists("Check.shot") )if( nrow(Check.shot)>0) write.csv(Check.shot,paste(handle,"/Check.shot.csv",sep=""),row.names=F)
-  if(exists("Check.shot.hours"))if( nrow(Check.shot.hours)>0) write.csv(Check.shot.hours,paste(handle,"/Check.shot_hours.csv",sep=""),row.names=F)
-  
-  #monthly
-  #write.csv(Inspect.net.monthly,file="Monthly/Monthly.Check.net.length.csv",row.names=F)
-  
+
 }
 graphics.off()
 
@@ -7339,75 +7439,81 @@ if(Export.SAFS=="YES")
 #------ SECTION G 1. SPATIO TEMPORAL CATCH AND EFFORT DISTRIBUTION ------
 if(do.spatio.temporal.ktch.effort=="YES")
 {
-  # Plot spatio-temporal catches of 4 main shark species
-  Effect.area=function(SPEC,RANGO)
-  {
-    a=subset(Data.monthly,SPECIES%in%SPEC)
-    yr=sort(unique(a$FINYEAR))
-    n=length(yr)
-    
-    agg=aggregate(LIVEWT.c~FINYEAR+BLOCKX+LAT+LONG,a,sum)
-    
-    for(i in 1:n)
-    {
-      b=subset(agg,FINYEAR==yr[i])
-      z=b$LIVEWT.c/max(b$LIVEWT.c)
-      plot(b$LONG,b$LAT,cex=z*2,main=yr[i],ylab="",xlab="",pch=19,ylim=c(-36,-26),
-           xlim=c(113,129),cex.axis=0.8,cex.main=.85,col="steelblue4")
-      legend("top",paste(round(max(b$LIVEWT.c)/1000),"tons"),pch=19,pt.cex=2,bty='n',col="steelblue4")
-      Y1=RANGO[RANGO<0]
-      Y2=-36
-      if(length(Y1)>0)
-      {
-        X2=RANGO[RANGO>0]
-        X1=112.5
-      }
-      if(length(Y1)==0)
-      {
-        Y1=-31
-        X1=RANGO[1]
-        X2=RANGO[2]
-      }
-      polygon(c(X1,X2,X2,X1),c(Y2,Y2,Y1,Y1),col=rgb(0.1, .1, .1, 0.1),border="transparent")
-    }
-  }
   setwd("C:/Matias/Analyses/Catch and effort/Outputs/Spatio.temporal_Catch")
   
-  tiff("Bubble.plot.catch_Whiskery.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-  n.graph=length(unique(subset(Data.monthly,SPECIES==Whiskery)$FINYEAR))
-  smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-  Effect.area(Whiskery,Whiskery.range)
-  plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
-  text(5,7,"Whiskery",cex=1.5)
-  text(5,4,"shark",cex=1.75)
-  dev.off()
-  
-  tiff("Bubble.plot.catch_gummy.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-  n.graph=length(unique(subset(Data.monthly,SPECIES==Gummy)$FINYEAR))
-  smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-  Effect.area(Gummy,Gummy.range)
-  plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
-  text(5,7,"Gummy",cex=1.5)
-  text(5,4,"shark",cex=1.75)
-  dev.off()
-  
-  tiff("Bubble.plot.catch_dusky.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-  n.graph=length(unique(subset(Data.monthly,SPECIES%in%Dusky_whaler)$FINYEAR))
-  smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-  Effect.area(Dusky_whaler,Dusky.range)
-  plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
-  text(5,7,"Dusky",cex=1.5)
-  text(5,4,"shark",cex=1.75)
-  dev.off()
-  
-  tiff("Bubble.plot.catch_sandbar.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-  n.graph=length(unique(subset(Data.monthly,SPECIES==Sandbar)$FINYEAR))
-  smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-  Effect.area(Sandbar,Sandbar.range)
-  plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
-  text(5,7,"Sandbar",cex=1.5)
-  text(5,4,"shark",cex=1.75)
-  dev.off()
+  # Plot spatio-temporal catches of 4 main shark species
+  do.bubble.plots=TRUE
+  if(do.bubble.plots)
+  {
+    Effect.area=function(SPEC,RANGO)
+    {
+      a=subset(Data.monthly,SPECIES%in%SPEC)
+      yr=sort(unique(a$FINYEAR))
+      n=length(yr)
+      
+      agg=aggregate(LIVEWT.c~FINYEAR+BLOCKX+LAT+LONG,a,sum)
+      
+      for(i in 1:n)
+      {
+        b=subset(agg,FINYEAR==yr[i])
+        z=b$LIVEWT.c/max(b$LIVEWT.c)
+        plot(b$LONG,b$LAT,cex=z*2,main=yr[i],ylab="",xlab="",pch=19,ylim=c(-36,-26),
+             xlim=c(113,129),cex.axis=0.8,cex.main=.85,col="steelblue4")
+        legend("top",paste(round(max(b$LIVEWT.c)/1000),"tons"),pch=19,pt.cex=2,bty='n',col="steelblue4")
+        Y1=RANGO[RANGO<0]
+        Y2=-36
+        if(length(Y1)>0)
+        {
+          X2=RANGO[RANGO>0]
+          X1=112.5
+        }
+        if(length(Y1)==0)
+        {
+          Y1=-31
+          X1=RANGO[1]
+          X2=RANGO[2]
+        }
+        polygon(c(X1,X2,X2,X1),c(Y2,Y2,Y1,Y1),col=rgb(0.1, .1, .1, 0.1),border="transparent")
+      }
+    }
+    
+    tiff("Bubble.plot.catch_Whiskery.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    n.graph=length(unique(subset(Data.monthly,SPECIES==Whiskery)$FINYEAR))
+    smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
+    Effect.area(Whiskery,Whiskery.range)
+    plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
+    text(5,7,"Whiskery",cex=1.5)
+    text(5,4,"shark",cex=1.75)
+    dev.off()
+    
+    tiff("Bubble.plot.catch_gummy.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    n.graph=length(unique(subset(Data.monthly,SPECIES==Gummy)$FINYEAR))
+    smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
+    Effect.area(Gummy,Gummy.range)
+    plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
+    text(5,7,"Gummy",cex=1.5)
+    text(5,4,"shark",cex=1.75)
+    dev.off()
+    
+    tiff("Bubble.plot.catch_dusky.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    n.graph=length(unique(subset(Data.monthly,SPECIES%in%Dusky_whaler)$FINYEAR))
+    smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
+    Effect.area(Dusky_whaler,Dusky.range)
+    plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
+    text(5,7,"Dusky",cex=1.5)
+    text(5,4,"shark",cex=1.75)
+    dev.off()
+    
+    tiff("Bubble.plot.catch_sandbar.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+    n.graph=length(unique(subset(Data.monthly,SPECIES==Sandbar)$FINYEAR))
+    smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
+    Effect.area(Sandbar,Sandbar.range)
+    plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
+    text(5,7,"Sandbar",cex=1.5)
+    text(5,4,"shark",cex=1.75)
+    dev.off()
+    
+  }
   
   #Catch densities
   do.density=FALSE
@@ -7454,7 +7560,7 @@ if(do.spatio.temporal.ktch.effort=="YES")
   if(in.color=="YES")
   {
     couleurs=rev(heat.colors((numInt-1)))
-    #Colfunc <- colorRampPalette(c("yellow","red"))
+    Colfunc <- colorRampPalette(c("yellow","red"))
     Couleurs=Colfunc(numInt-1)
   }
   couleurs=c("white",couleurs)
@@ -7472,8 +7578,17 @@ if(do.spatio.temporal.ktch.effort=="YES")
   Rotnest=c(115.50,-32.02)
   Lat.exp=expression(paste("Latitude (",degree,"S)",sep=""))
   Lon.exp=expression(paste("Longitude (",degree,"E)",sep=""))
-  
-  
+
+  #grouping years
+  Last.calendar.Yr=as.numeric(substr(Current.yr,1,4))
+  yrs.grupd=4
+  Yr.group=seq(1975,(Last.calendar.Yr+1),5)
+  Yr.group.plus=Yr.group+yrs.grupd
+  Yr.group.plus[length(Yr.group.plus)]=min(Yr.group.plus[length(Yr.group.plus)],Last.calendar.Yr)
+  Yr.range=vector('list',length(Yr.group))
+  for(e in 1:length(Yr.group))Yr.range[[e]]=paste(Yr.group[e],"-",Yr.group.plus[e])
+  Yr.range=unlist(Yr.range)  
+
   #create data list
   DATA.lista=vector('list',length(Yr.range))
   names(DATA.lista)=Yr.range
@@ -7483,7 +7598,9 @@ if(do.spatio.temporal.ktch.effort=="YES")
                                METHOD%in%c("GN","LL")& LAT<=(-26) & 
                                YEAR.c>=Yr.group[i] & YEAR.c<=Yr.group.plus[i])
   }  
-    
+  
+  add.depth="NO"
+
   #This bit is irrelevant
   do.this=FALSE
   if(do.this)
@@ -7496,19 +7613,9 @@ if(do.spatio.temporal.ktch.effort=="YES")
     Data.monthly.GN=Data.monthly.GN%>%left_join(s,by="Same.return")
     #Data.monthly.GN=merge(Data.monthly.GN,s,by="Same.return",all.x=T)
     
-    #grouping years
-    Last.calendar.Yr=as.numeric(substr(Current.yr,1,4))
-    yrs.grupd=4
-    Yr.group=seq(1975,(Last.calendar.Yr+1),5)
-    Yr.group.plus=Yr.group+yrs.grupd
-    Yr.group.plus[length(Yr.group.plus)]=min(Yr.group.plus[length(Yr.group.plus)],Last.calendar.Yr)
-    Yr.range=vector('list',length(Yr.group))
-    for(e in 1:length(Yr.group))Yr.range[[e]]=paste(Yr.group[e],"-",Yr.group.plus[e])
-    Yr.range=unlist(Yr.range)  
     Bathymetry=Bathymetry[order(Bathymetry$V1,Bathymetry$V2),]
     xbat=sort(unique(Bathymetry$V1))
     ybat=sort(unique(Bathymetry$V2))
-    add.depth="NO"
     if(add.depth=="YES")reshaped=as.matrix(reshape(Bathymetry,idvar="V1",timevar="V2",v.names="V3", direction="wide"))
     data(worldLLhigh)
     #define coordinates of plots
@@ -8184,7 +8291,7 @@ if(do.spatio.temporal.ktch.effort=="YES")
   mtext(Lon.exp,side=1,line=.8,cex=1.25,outer=T)
   dev.off()
   
-      #Daily
+      #Daily      
   s2=subset(Eff.daily.c.daily,LAT<=(-26))
   s2$LatDeg=with(s2,as.numeric(substr(block10,1,2)))  
   s2$LatMin=with(s2,10*as.numeric(substr(block10,3,3)))  
@@ -8438,6 +8545,7 @@ if(do.spatio.temporal.ktch.effort=="YES")
   ddd$LONG=as.numeric(substr(ddd$long,1,3))
   movie.fn.eff.plot.all.yrs.mon.and.daily(DATA=ddd,tcl.1=.1,tcl.2=.1,numInt=50)
   
+ 
 }
 
 
@@ -8753,25 +8861,6 @@ if(do.Jeffs=="YES")
 hndls=paste(hndl,"/Jodie_OMalley_2016/data/",sep="")
 if(do.Jodies.ASL=="YES")
 {  
-  ASL_exclusions_block10_JASDGDLF=list(
-      Twilight_cove=c(321255,321260,321261,322255,322260),
-      Esperance=c(335222:335225,335230,335232,333235,333240,333241,
-                334235,334240,334241,335235,335240,335241,340215,
-                340220:340225,340230:340235,340240,341215,341220:341225,
-                341230:341235,341240,342215,342220,342232:342234,
-                343215,343220),
-      Albany_east=c(343184,344183,344184),
-      Hopetoun_west=c(340194,340195,341193,341194,342192:342194),
-      Hopetoun_east=c(335203:335205,340201:340205,340210,341202:341205))
-  
-  ASL_exclusions_block10_WCDGDLF=list(
-      Geraldton=c(283133:283135,283140,284133:284135,284140,285134,285135,
-                285140,290134,290135,290140),
-      JurienBay_north=c(293144,293145,294144,294145,295144,295145,300144,
-                300145,301144,301145),
-      JurienBay_south=c(303145,303150,304145,304150))
-  
-  
   Data.daily$Fishing_yr=with(Data.daily,ifelse(MONTH>=6,YEAR.c,YEAR.c-1))
   Data.daily$FISHERY=with(Data.daily,ifelse(zone=="West","WCDGDLF",
                                             ifelse(zone%in%c("Zone1","Zone2"),"JASDGDLF",NA)))
@@ -9538,16 +9627,13 @@ if(Extract.data.FishCUBE=="YES")
  # options(java.parameters = "-Xmx8000m")
 #  system.time(write.xlsx(FishCUBE,paste(hndl.FishCUBE,"Shark Data Extract for FishCubeWA.",Sys.Date(),".xlsx",sep=""), colNames = TRUE))
   
-  #notify Vero by email
-  # function.send.email(
-  #   to ="Paul.Fildes@dpird.wa.gov.au",
-  #   subject ="Annual data",
-  #   body =paste("Data corrections done and uploaded.",
-  #             "Data files stored in",hndl.FishCUBE,"and",
-  #             hndl.FishCUBE.daily),                     
-  #   Attachment=NULL
-  # )
-  
+  #notify FishCube by email
+  send.email(TO=Email.FishCube,
+             Subject="Annual data",
+             Body= paste("Data corrections done and uploaded.",
+                         "Data files stored in",hndl.FishCUBE,"and",
+                         hndl.FishCUBE.daily),  
+             Attachment=NULL)
 }
 
 #G 4.10 Steve's map for interview
@@ -9819,19 +9905,15 @@ if(do.Dave.F=="YES")
   write.csv(KTCH.scalies_daily,paste(hndl,"/Dave F/Dave_F_scalefish_daily.csv",sep=""),row.names=F)
 
   #email data
-  # function.send.email(
-  #   to ="David.Fairclough@dpird.wa.gov.au",
-  #   subject ="Annual data",
-  #   body ="Please find attached the annual monthly records",                     
-  #   Attachment=paste(hndl,"/Dave F/Dave_F_scalefish_monthly.csv",sep="")
-  # )
-  # function.send.email(
-  #   to ="David.Fairclough@dpird.wa.gov.au",
-  #   subject ="Annual data",
-  #   body ="Please find attached the annual daily records",                     
-  #   Attachment=paste(hndl,"/Dave F/Dave_F_scalefish_daily.csv",sep="")
-  # )
-  
+  send.email(TO="David.Fairclough@dpird.wa.gov.au",
+             Subject="Annual data",
+             Body= "Please find attached the annual monthly records",  
+             Attachment=paste(hndl,"/Dave F/Dave_F_scalefish_monthly.csv",sep=""))
+  send.email(TO="David.Fairclough@dpird.wa.gov.au",
+             Subject="Annual data",
+             Body= "Please find attached the annual daily records",  
+             Attachment=paste(hndl,"/Dave F/Dave_F_scalefish_daily.csv",sep=""))
+
   do.table.all.yrs="NO"
   if(do.table.all.yrs=="YES")
   {
@@ -9907,12 +9989,10 @@ if(do.Jeff.N=="YES")
   write.csv(Dummy,OuTT,row.names=F)
   
   #email data
-  # function.send.email(
-  #   to ="Jeffrey.Norriss@dpird.wa.gov.au",
-  #   subject ="Annual data",
-  #   body ="Please find attached the annual catch records",                     
-  #   Attachment=OuTT
-  # )
+  send.email(TO="Jeffrey.Norriss@dpird.wa.gov.au",
+             Subject="Annual data",
+             Body= "Please find attached the annual catch records",  
+             Attachment=OuTT)
   
   rm(a)
 
@@ -9931,13 +10011,10 @@ if(do.Paul.L=="YES")
   write.csv(Dummy,OuTT,row.names=F)
   
   #email data
-  # function.send.email(
-  #   to ="paul.lewis@dpird.wa.gov.au",
-  #   subject ="Annual data",
-  #   body ="Please find attached the annual daily records",                     
-  #   Attachment=OuTT
-  # )
-  
+  send.email(TO="paul.lewis@dpird.wa.gov.au",
+             Subject="Annual data",
+             Body= "Please find attached the annual daily records",  
+             Attachment=OuTT)
   rm(a)
 }
 
@@ -10558,6 +10635,145 @@ if(do.Paul.Rogers_ASL=="YES")
     }
   }
   
+}
+
+#ACA
+#G 4.27 Overlap between ASL closures and effort
+if(do.ASL.closure_effort_overlap)
+{
+  hndl.ASL.closures.overlap=paste(hndl,'ASL/ASL_overlap.closure.effort',sep='/')
+  paz="C:/Matias/Data/Mapping/Closures/"
+  ASL_Closures=readOGR(paste(paz,"ASL_Closures/ASL_Closures.shp",sep=''),
+                       layer="ASL_Closures") 
+  ASL_Closures_west.coast=data.frame(
+    Point=c(paste("A",1:18,sep="."),
+            paste("B",1:12,sep="."),
+            paste("C",1:8,sep=".")),
+    Lon=c(113.75660,113.89002,114.00565,114.0727,
+          114.17,114.24888,114.29735,114.27432,
+          114.1833,114.04712,113.88545,113.7455,
+          113.6421,113.59458,113.61688,113.58822,
+          113.58155,113.64345,
+          
+          114.97348,114.853,114.73920,114.6717,
+          114.6753,114.74808,114.80042,114.72990,
+          114.7305,114.80023,114.91950,115.04328,
+          
+          115.07697,115.00548,114.94362,114.93220,
+          114.96693,115.0388,115.13683,115.19965),
+    
+    
+    Lat=c(-28.45407,-28.45165,-28.50912,-28.61142,
+          -28.66167,-28.74223,-28.87392,-29.01473,
+          -29.13078,-29.19832,-29.20673,-29.1564,
+          -29.05877,-28.92743,-28.78988,-28.73745,
+          -28.62003,-28.51593,
+          
+          -29.64328,-29.6233,-29.66638,-29.7584,
+          -29.8679,-29.95597,-29.98138,-30.07547,
+          -30.1861,-30.27803,-30.32247,-30.30342,
+          
+          -30.50578,-30.52662,-30.59515,-30.67653,
+          -30.75267,-30.80168,-30.81597,-30.79598))
+  paz="C:/Matias/Data/Mapping/Closures/"
+  Closed.ASL=read.csv(paste(paz,'ASL_Closures_Block_Intersection.csv',sep=""))
+  source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
+  
+  if(!Use.Date=="YES") Effrt=aggregate(Km.Gillnet.Days.c~Same.return.SNo+vessel+finyear+month+
+                                         LAT+LONG+block10,data=subset(Effort.daily,netlen.c>100 & method=="GN"),max,na.rm=T)    
+  if(Use.Date=="YES") Effrt=aggregate(Km.Gillnet.Days.c~date+Same.return.SNo+vessel+finyear+month+
+                                        LAT+LONG+block10,data=subset(Effort.daily,netlen.c>100 & method=="GN"),max,na.rm=T)    
+  
+  fn.plt.map=function(Xlim,Ylim,col.ASL.closure,Efrt)
+  {
+    plot(1,xlim=c(Xlim[1]*0.9995,Xlim[2]*0.99),ylim=Ylim,xlab="",ylab="",axes=F,main="")
+    
+    #ASL closure
+    plot(ASL_Closures,add=T,col=col.ASL.closure)
+    with(ASL_Closures_west.coast%>%filter(Point%in%paste("A",1:18,sep=".")),
+         {
+           polygon(Lon,Lat, col=col.ASL.closure)
+         })
+    with(ASL_Closures_west.coast%>%filter(Point%in%paste("B",1:12,sep=".")),
+         {
+           polygon(Lon,Lat, col=col.ASL.closure)
+         })
+    with(ASL_Closures_west.coast%>%filter(Point%in%paste("C",1:8,sep=".")),
+         {
+           polygon(Lon,Lat, col=col.ASL.closure)
+         })
+    
+    #Effort
+    with(Efrt,points(LONG,LAT,pch=21,cex=.5,col="transparent",bg=rgb(.8,.1,.1,alpha=0.3)))
+    
+    #Coast
+    polygon(WAcoast$Longitude,WAcoast$Latitude, col="grey80")
+    box()
+  }
+  Inset=function(Xlim,Ylim,col.ASL.closure)
+  {
+    plot(1,xlim=c(Xlim[1]*0.9995,Xlim[2]*0.99),ylim=Ylim,xlab="",ylab="",axes=F,main="")
+    
+    #ASL closure
+    plot(ASL_Closures,add=T,col=col.ASL.closure)
+    with(ASL_Closures_west.coast%>%filter(Point%in%paste("A",1:18,sep=".")),
+         {
+           polygon(Lon,Lat, col=col.ASL.closure)
+         })
+    with(ASL_Closures_west.coast%>%filter(Point%in%paste("B",1:12,sep=".")),
+         {
+           polygon(Lon,Lat, col=col.ASL.closure)
+         })
+    with(ASL_Closures_west.coast%>%filter(Point%in%paste("C",1:8,sep=".")),
+         {
+           polygon(Lon,Lat, col=col.ASL.closure)
+         })
+    #Coast
+    polygon(WAcoast$Longitude,WAcoast$Latitude, col="grey70")
+    mtext("ASL exclusion zones",3,-2,cex=1.5)
+    
+    text(114.58,-28.77,"Geraldton",pos=4)
+    text(123,-33.6,"Esperance",pos=3,srt=25)
+  }
+  ASL.yrs=paste(2016:as.numeric(substr(Current.yr,1,4)),
+                substr(2017:(1+as.numeric(substr(Current.yr,1,4))),3,4),sep="-")
+  tiff(file=paste(hndl.ASL.closures.overlap,"ASL.closures_daily.effort_overlap.tiff",sep="/"),
+       width = 2400, height = 2200,units = "px", res = 300, compression = "lzw")    
+  smart.par(n.plots=length(ASL.yrs)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
+  Inset(Xlim=c(113,129.5),Ylim=c(-36,-26),"steelblue") #ASL closures
+  for (i in 1:length(ASL.yrs))
+  {
+    fn.plt.map(Xlim=c(113,129.5),
+               Ylim=c(-36,-26),
+               col.ASL.closure='steelblue',
+               Efrt=subset(Effrt,finyear==ASL.yrs[i]))
+    axis(side = 1, at =Long.seq, labels =F, tcl = .35,las=1,cex.axis=1,padj=-0.9)
+    axis(side = 2, at = Lat.seq, labels = F,tcl = .35,las=2,cex.axis=1,hadj=.65)
+    mtext(ASL.yrs[i],side=3,line=-1.75,cex=1.5)
+    axis(side = 1, at =Long.seq, labels = Long.seq, tcl = .35,las=1,cex.axis=1,padj=-0.9)
+    axis(side = 2, at = Lat.seq, labels = -Lat.seq,tcl = .35,las=2,cex.axis=1,hadj=.65)
+  }  
+  mtext(Lat.exp,side=2,line=.1,las=3,cex=1.25,outer=T)
+  mtext(Lon.exp,side=1,line=.8,cex=1.25,outer=T)
+  dev.off()
+  
+  
+  #Percentage change
+  ASL_closure_block10=data.frame(Block10=c(unlist(ASL_exclusions_block10_JASDGDLF),
+                                           unlist(ASL_exclusions_block10_WCDGDLF)))
+  a=Effrt%>%
+    filter(finyear%in%ASL.yrs & block10%in%ASL_closure_block10$Block10)%>%
+    group_by(finyear,block10)%>%
+    summarise(Total=sum(Km.Gillnet.Days.c))%>%
+    arrange(block10,finyear)%>%
+    spread(finyear,Total,fill=0)%>%
+    mutate('2016-17 to 2017-18'=ifelse(`2016-17`>0,round(100*`2017-18`/`2016-17`,2),0),
+           '2017-18 to 2018-19'=ifelse(`2017-18`>0,round(100*`2018-19`/`2017-18`,2),0),
+           '2018-19 to 2019-20'=ifelse(`2018-19`>0,round(100*`2019-20`/`2018-19`,2),0))%>%
+    data.frame%>%
+    dplyr::select(-X2016.17, -X2017.18, -X2018.19, -X2019.20)
+
+  write.csv(a,paste(hndl.ASL.closures.overlap,"ASL.closures_percent.change.csv",sep="/"))
 }
 
 ########### SECTION H. ----  EXPORT TOTAL CATCH FOR REFERENCE POINT ANALYSIS --- ###########
