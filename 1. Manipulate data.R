@@ -3,6 +3,12 @@
 #missing: Data inspection. Map each species catch distribution, some previous records outside distribution
 
 #NOTES:
+  #NEW YEAR OF DATA:
+#                     Set First.run TO 'YES' and update Current.yr
+#                     Bring in Monthly and Daily data and run FishCube query
+#                      for '3. Daily records from other fisheries reporting shark catch in daily returns'
+#                     Update 'TEPS.current', 'Comments.TEPS.current'and 'PRICES' from Eva
+
   #MONTHLY RECORDS:   CAESS data from 1988/89 to 2007/08 (some fishers kept reporting in CAESS 
 #                      after introduction of daily logbooks).
 #                   Records include shark data from all fisheries, not just TDGDLF (fishery
@@ -88,7 +94,7 @@ setwd("C:/Matias/Data/Catch and Effort")  # working directory
 
 
 
-First.run="NO"    #turn to 'yes' when new year's data is included
+First.run="NO"    
 #First.run="YES"
 
 Current.yr="2019-20"    #Set current financial year 
@@ -98,14 +104,14 @@ Current.yr.dat=paste(substr(Current.yr,1,4),substr(Current.yr,6,7),sep="_")
 Email.data.checks="Paul.Fildes@dpird.wa.gov.au"
 Email.FishCube="Paul.Fildes@dpird.wa.gov.au"
 
-#Monthly records 
+#1. Monthly records 
 
   #CAESS data 
 #note: CAESS is dynamic, constantly updated, Table81.d is static so only use Table 81.d for 
 #       years prior to 1988-89 as CAESS data starts in 1988-89.
-#       Also, don't use CAESS from non TDGDLF of NSF fisheries for catch rate standardisations as
+#       Also, don't use CAESS from non-TDGDLF or NSF fisheries for catch rate standardisations as
 #       0 catch records are missing/incomplete
-
+#       Data.monthly.CAESS has all WA fisheries reporting shark
 Get.CAESS.Logbook="YES"
 
 #CAES extract done by Paul Fildes from FishCUBE. This has all fisheries reporting shark
@@ -139,7 +145,7 @@ if(Get.CAESS.Logbook=="YES")
 }
 
 
-#Daily logbooks
+#2. Daily logbooks
   #Select previous daily logbooks (static) or Eva's dynamic data dump
 #Get.Daily.Logbook="NO"  #use Rory's files
 Get.Daily.Logbook="YES"  #use SADA's annual extraction
@@ -152,9 +158,9 @@ Data.daily<- sqlFetch(channel,"CATCH", colnames = F)
 close(channel)
 
 
-#Daily records from other fisheries reporting shark catch in daily returns
-#note: run this FishCube query (copy to browser and update) 
-#      http://f01-fims-webp01/FishCubeWA/Query.aspx?CubeId=CommercialDPIRDOnly
+#3. Daily records from other fisheries reporting shark catch in daily returns
+#note: run this FishCube query (copy to browser and update file in folder) 
+#      http://F01-FIMS-WEBP01/FishCubeWA/Query.aspx?CubeId=CommercialDPIRDOnly&QueryId=7c2d0c88-fe4a-4818-8d3a-0405eab6199b
 #and update the excel file that the query creates
 channel <- odbcConnectExcel2007("Fish Cube WA_daily.other.xlsx") 
 Data.daily.other.fisheries<- sqlFetch(channel,"Data")
@@ -181,7 +187,8 @@ Data.daily.other.fisheries=Data.daily.other.fisheries%>%
   dplyr::select(Bioregion,date,Vessel,method,fishery,fishery.name,block10,finyear,year,
          species,RSCommonName,CAESname,livewt)
 
-#TEPS
+
+#4. TEPS
 TEPS.current<- read.csv(paste(Current.yr.dat,"/TEPS_PROTECTEDSP.csv",sep=""),stringsAsFactors=F)
 Comments.TEPS.current<- read.csv(paste(Current.yr.dat,"/TEPS_Comments.csv",sep=""),stringsAsFactors=F)
 if(!is.na(match("DSNo",names(Comments.TEPS.current))))
@@ -197,22 +204,14 @@ if(!is.na(match("financial year",names(TEPS.current))))
   names(TEPS.current)[match("financial.year",names(TEPS.current))]="finyear"
 }
 
-#other fisheries
-#note: can extract from FishCube running this query:
-# http://F01-FIMS-WEBP01/FishCubeWA/Query.aspx?CubeId=CommercialDPIRDOnly&QueryId=8729f44a-3f88-4fb2-80d3-81a80aad9734
-#     however, since 2017 'other.fishery.catch' is provided by Paul F in the updated 'Data.monthly' file
-#Other.fishery.catch=read.csv(paste(Current.yr.dat,"/otherSH.csv",sep=""),stringsAsFactors=F)      
 
-#Catch price
-PRICES=read.csv(paste(Current.yr.dat,"/PriceComparison.csv",sep=""),stringsAsFactors=F)  
-
-
-
-
-#Historic TEP data (Prior to 2012 report)
+#5. Historic TEP data (Prior to 2012 report)
 Results.pre.2013=read.csv("Historic/Historic.res.csv")
 TEPS.pre.current=read.csv("Historic/Historic.TEPS.res.csv",stringsAsFactors =F)
 Spec.catch.zone.pre.2013=read.csv("Historic/Spec.catch.zone.csv")  
+
+#6. Catch price
+PRICES=read.csv(paste(Current.yr.dat,"/PriceComparison.csv",sep=""),stringsAsFactors=F)  
 
 
 #SHAPE FILE PERTH ISLANDS
@@ -220,33 +219,35 @@ Spec.catch.zone.pre.2013=read.csv("Historic/Spec.catch.zone.csv")
 # Rottnest.Is=subset(PerthIs,ID%in%c("ROTT1"))
 # Garden.Is=subset(PerthIs,ID%in%c("ROTT3"))
 
-#bathymetry data
+#7. bathymetry data
 #    bathymetry data downloaded from http://topex.ucsd.edu/cgi-bin/get_data.cgi (Topography option)
 Bathymetry_120=read.table("C:/Matias/Data/Mapping/get_data112_120.cgi")
 Bathymetry_138=read.table("C:/Matias/Data/Mapping/get_data120.05_138.cgi")
 Bathymetry=rbind(Bathymetry_120,Bathymetry_138)
 
 
-#Block10 locations
+#8. Block10 locations
 BlOCK_10=read.csv("C:/Matias/Data/Mapping/Blocks_10NM.csv")
 
-#All block 60 lat and long, including estuaries
+
+#9. All block 60 lat and long, including estuaries
 BLOCK_60=read.csv("C:/Matias/Data/Mapping/Block60s.csv")
 
-#Weight ranges
+
+#10. Weight ranges
 Wei.range=read.csv("C:/Matias/Data/Length_Weights/Data.Ranges.csv")
 Wei.range.names=read.csv("C:/Matias/Data/Length_Weights/Species.names.csv")
 
 
-#Conditions
+#11. Conditions
 Conditions=read.csv("C:/Matias/Data/Catch and Effort/Conditions.csv")
 
 
-#Rory's manual changes to netlen and nlines
+#12. Rory's manual changes to netlen and nlines
 Rory_Alex_net_val=read.csv("C:/Matias/Data/Catch and Effort/Rory_Alex_net/Book2.csv",stringsAsFactors=F)
 
 
-#ASL block10 closures
+#13. ASL block10 closures
 ASL_exclusions_block10_JASDGDLF=list(
   Twilight_cove=c(321255,321260,321261,322255,322260),
   Esperance=c(335222:335225,335230,335232,333235,333240,333241,
@@ -265,6 +266,16 @@ ASL_exclusions_block10_WCDGDLF=list(
                     300145,301144,301145),
   JurienBay_south=c(303145,303150,304145,304150))
 
+
+#14. define estuaries
+Estuaries=c(95010,95020,95030,95040,95050,95060,95070,95080,95090,85010,85020,85030,85040,85050,85060,
+            85070,85080,85090,85100,85110,85120,85130,85210,85220,85990)
+Bays=96000:98000
+Shark.Bay=96021
+Abrolhos=97011
+Geographe.Bay=96010 
+Cockburn.sound=96000
+King.George.sound=96030 
 
 
 ##################--- PARAMETERS SECTION ---#######################
@@ -329,7 +340,7 @@ do.AMM.2013="NO"
 Export.SAFS="NO"
 do.Perth.metro.closure="NO"
 do.Heather.request="NO"
-do.Jeffs="NO"
+do.Jeffs="NO"   #old request
 do.Dave.F=do.Jeff.N=do.Paul.L=do.SoFAR
 do.ABARES="NO"
 do.Carlie.Telfer="NO"
@@ -500,103 +511,106 @@ Data.monthly$TYPE.DATA="monthly"
 
 #remove fins and livers to avoid duplication when calculating live weight
   #note: id records were only fins or livers were reported.
-  # for this, check with species were wrongly assigned a liver
+  # for this, check which species were wrongly assigned a liver
   # or fin code and remove records from those where liver/fin and
   # WF or WH weights were reported
 A=Data.monthly%>%
         filter(CONDITN%in%c("LI","FI") &
                !SPECIES%in%c(22997,22998))
-SPEC.livr.fin=unique(A$SPECIES)
-A=subset(Data.monthly,SPECIES%in%SPEC.livr.fin)
-Data.monthly=subset(Data.monthly,!SPECIES%in%SPEC.livr.fin)
-keep.these=vector('list',length(SPEC.livr.fin))
-for(s in 1:length(SPEC.livr.fin))
+if(nrow(A)>0)
 {
-  x=subset(A,SPECIES==SPEC.livr.fin[s])
-  Tbl.x=with(x,table(Same.return,CONDITN))
-  Tbl.x=as.data.frame.matrix(Tbl.x) 
-  Tbl.x$Sums=rowSums(Tbl.x)
-  if(!is.null(Tbl.x$LI)) KEEP=subset(Tbl.x,(Sums==1 & FI==1) | (Sums==1 & LI==1)) else
-  KEEP=subset(Tbl.x,(Sums==1 & FI==1))
-  keep.these[[s]]=row.names(KEEP)
+  SPEC.livr.fin=unique(A$SPECIES)
+  A=subset(Data.monthly,SPECIES%in%SPEC.livr.fin)
+  Data.monthly=subset(Data.monthly,!SPECIES%in%SPEC.livr.fin)
+  keep.these=vector('list',length(SPEC.livr.fin))
+  for(s in 1:length(SPEC.livr.fin))
+  {
+    x=subset(A,SPECIES==SPEC.livr.fin[s])
+    Tbl.x=with(x,table(Same.return,CONDITN))
+    Tbl.x=as.data.frame.matrix(Tbl.x) 
+    Tbl.x$Sums=rowSums(Tbl.x)
+    if(!is.null(Tbl.x$LI)) KEEP=subset(Tbl.x,(Sums==1 & FI==1) | (Sums==1 & LI==1)) else
+      KEEP=subset(Tbl.x,(Sums==1 & FI==1))
+    keep.these[[s]]=row.names(KEEP)
+  }
+  keep.these=unlist(keep.these)
+  keep.these=keep.these[!duplicated(keep.these)]
+  A$KEEP=with(A,ifelse(Same.return%in%keep.these,"KEEP","DROP"))
+  A$KEEP=with(A,ifelse(!CONDITN%in%c("FI","LI"),"KEEP",KEEP))
 }
-keep.these=unlist(keep.these)
-keep.these=keep.these[!duplicated(keep.these)]
-A$KEEP=with(A,ifelse(Same.return%in%keep.these,"KEEP","DROP"))
-A$KEEP=with(A,ifelse(!CONDITN%in%c("FI","LI"),"KEEP",KEEP))
-Data.monthly$KEEP=with(Data.monthly,
-        ifelse(CONDITN%in%c("FI","LI"),"DROP","KEEP"))
-Data.monthly=rbind(Data.monthly,A)
+if(nrow(A)>0) Data.monthly$KEEP=with(Data.monthly,ifelse(CONDITN%in%c("FI","LI"),"DROP","KEEP"))
+if(nrow(A)>0) Data.monthly=rbind(Data.monthly,A)
 
   #a. reconstruct landed and livewt records that only reported 'liver' or 'fin'
 only.liver.fin=Data.monthly%>%
                   filter(SPECIES%in%c(22997,22998))%>%
                   distinct(Same.return)%>%
                   pull(Same.return)
-only.liver.fin=Data.monthly%>%
-                filter(Same.return%in%only.liver.fin & SPECIES<50000)%>%
-                mutate(SNAME=tolower(SNAME))%>%
-                group_by(Same.return,SNAME)%>%
-                summarise(n = n()) %>%
-                mutate(freq = n / sum(n))%>%
-                dplyr::select(-n)%>%
-                spread(SNAME,freq,fill=0)%>%
-                data.frame%>%
-                mutate(Prop=shark.fins+shark.liver)
-Prop.fin=only.liver.fin%>%
-                filter(shark.fins>0)%>%
-                pull(Same.return)
-Prop.fin=Data.monthly%>%
-                filter(Same.return%in%Prop.fin & SPECIES<50000)%>%
-                mutate(fin.no.fin=ifelse(SPECIES==22998,"Fin","No.Fin"))%>%
-                group_by(fin.no.fin)%>%
-                summarise(livewt=sum(LIVEWT),
-                          landwt=sum(LANDWT))
-Prop.fin.livewt=Prop.fin$livewt[1]/Prop.fin$livewt[2]
-Prop.fin.landwt=Prop.fin$landwt[1]/Prop.fin$landwt[2]
-
-Prop.livr=only.liver.fin%>%
-                filter(shark.liver>0)%>%
-                pull(Same.return)
-Prop.livr=Data.monthly%>%
-                filter(Same.return%in%Prop.livr & SPECIES<50000)%>%
-                mutate(livr.no.livr=ifelse(SPECIES==22997,"Livr","No.Livr"))%>%
-                group_by(livr.no.livr)%>%
-                summarise(livewt=sum(LIVEWT),
-                          landwt=sum(LANDWT))
-Prop.livr.livewt=Prop.livr$livewt[1]/Prop.livr$livewt[2]
-Prop.livr.landwt=Prop.livr$landwt[1]/Prop.livr$landwt[2]
-
-add.only.liver.fin=only.liver.fin%>%filter(Prop==1)%>%pull(Same.return)
-add.only.liver.fin=Data.monthly%>%
-                filter(Same.return%in%add.only.liver.fin & 
-                         SPECIES%in%c(22997,22998))%>%
-                mutate(SPECIES=22999,
-                       SNAME='shark, other',
-                       LIVEWT=ifelse(SPECIES==22998,LIVEWT/Prop.fin.livewt,
-                                                    LIVEWT/Prop.livr.livewt),
-                       LANDWT=ifelse(SPECIES==22998,LANDWT/Prop.fin.landwt,
-                                                    LANDWT/Prop.livr.livewt),
-                       CONDITN='WF',
-                       KEEP='KEEP')
+if(length(only.liver.fin)>0)
+{
+  only.liver.fin=Data.monthly%>%
+    filter(Same.return%in%only.liver.fin & SPECIES<50000)%>%
+    mutate(SNAME=tolower(SNAME))%>%
+    group_by(Same.return,SNAME)%>%
+    summarise(n = n()) %>%
+    mutate(freq = n / sum(n))%>%
+    dplyr::select(-n)%>%
+    spread(SNAME,freq,fill=0)%>%
+    data.frame%>%
+    mutate(Prop=shark.fins+shark.liver)
+  Prop.fin=only.liver.fin%>%
+    filter(shark.fins>0)%>%
+    pull(Same.return)
+  Prop.fin=Data.monthly%>%
+    filter(Same.return%in%Prop.fin & SPECIES<50000)%>%
+    mutate(fin.no.fin=ifelse(SPECIES==22998,"Fin","No.Fin"))%>%
+    group_by(fin.no.fin)%>%
+    summarise(livewt=sum(LIVEWT),
+              landwt=sum(LANDWT))
+  Prop.fin.livewt=Prop.fin$livewt[1]/Prop.fin$livewt[2]
+  Prop.fin.landwt=Prop.fin$landwt[1]/Prop.fin$landwt[2]
+  
+  Prop.livr=only.liver.fin%>%
+    filter(shark.liver>0)%>%
+    pull(Same.return)
+  Prop.livr=Data.monthly%>%
+    filter(Same.return%in%Prop.livr & SPECIES<50000)%>%
+    mutate(livr.no.livr=ifelse(SPECIES==22997,"Livr","No.Livr"))%>%
+    group_by(livr.no.livr)%>%
+    summarise(livewt=sum(LIVEWT),
+              landwt=sum(LANDWT))
+  Prop.livr.livewt=Prop.livr$livewt[1]/Prop.livr$livewt[2]
+  Prop.livr.landwt=Prop.livr$landwt[1]/Prop.livr$landwt[2]
+  
+  add.only.liver.fin=only.liver.fin%>%filter(Prop==1)%>%pull(Same.return)
+  add.only.liver.fin=Data.monthly%>%
+    filter(Same.return%in%add.only.liver.fin & 
+             SPECIES%in%c(22997,22998))%>%
+    mutate(SPECIES=22999,
+           SNAME='shark, other',
+           LIVEWT=ifelse(SPECIES==22998,LIVEWT/Prop.fin.livewt,
+                         LIVEWT/Prop.livr.livewt),
+           LANDWT=ifelse(SPECIES==22998,LANDWT/Prop.fin.landwt,
+                         LANDWT/Prop.livr.livewt),
+           CONDITN='WF',
+           KEEP='KEEP')
+  
+  Data.monthly=Data.monthly%>%     
+    filter(!(Same.return%in%add.only.liver.fin$Same.return & 
+               SPECIES%in%c(22997,22998)))
+  Data.monthly=rbind(Data.monthly,add.only.liver.fin)
+}
 
 Data.daily.other.fisheries=Data.daily.other.fisheries%>%
                         filter(!species==22998)    #remove fins as already part of 'shark other'
 
-Data.monthly=Data.monthly%>%     
-              filter(!(Same.return%in%add.only.liver.fin$Same.return & 
-                      SPECIES%in%c(22997,22998)))
-Data.monthly=rbind(Data.monthly,add.only.liver.fin)
-
-
 #b. now remove fins and livers
 Data.monthly=subset(Data.monthly,!(SPECIES%in%c(22997,22998)))
-Data.monthly=subset(Data.monthly,KEEP=="KEEP")
+if(nrow(A)>0) Data.monthly=subset(Data.monthly,KEEP=="KEEP")
 Data.monthly$CONDITN=with(Data.monthly,
       ifelse(CONDITN%in%c("FI","LI"),"WF",CONDITN))
-rm(A,add.only.liver.fin,only.liver.fin)
-Data.monthly=Data.monthly[,-match("KEEP",names(Data.monthly))]
-
+if(nrow(A)>0) Data.monthly=Data.monthly[,-match("KEEP",names(Data.monthly))]
+if(length(only.liver.fin)>0) rm(A,add.only.liver.fin,only.liver.fin)
 
 # A.4.3. Create copy of original file
 Data.monthly.original=Data.monthly
@@ -629,16 +643,6 @@ fn.chk.ktch(d1=Data.monthly.original,
 
 
 # A.5. Create variables
-
-  #define estuaries
-Estuaries=c(95010,95020,95030,95040,95050,95060,95070,95080,95090,85010,85020,85030,85040,85050,85060,
-            85070,85080,85090,85100,85110,85120,85130,85210,85220,85990)
-Bays=96000:98000
-Shark.Bay=96021
-Abrolhos=97011
-Geographe.Bay=96010 
-Cockburn.sound=96000
-King.George.sound=96030 
 
   #Idenfity estuaries
 Data.monthly$Estuary=with(Data.monthly,ifelse(BLOCKX%in%Estuaries,"YES","NO"))
@@ -789,7 +793,8 @@ Data.monthly$LongFC=NA
 Data.monthly$nfish=NA
 Data.monthly=Data.monthly[,-match("fishery",names(Data.monthly))]
 
-
+#Remove rows will all NA records
+Data.monthly=Data.monthly%>%filter(!(is.na(YEAR) & is.na(MONTH) & FINYEAR=='' & is.na(BLOCKX)))
 
 
 #SECTION B. ---- DAILY LOGBOOKS ----
@@ -861,6 +866,7 @@ Data.daily=Data.daily%>%
                                MastersName== "p. murch"~ "murch, paul douglas" ,
                                MastersName== "jason & brian scimone"~ "brian / jason scimone" ,
                                MastersName== "c. henderson"~ "chris henderson" ,
+                               MastersName%in% c("andrew  joy","andrew francis joy")~ "andrew f joy" ,
                                TRUE~MastersName))
 
 #Fishers operating in recent years
@@ -1037,7 +1043,7 @@ if(Get.Daily.Logbook=="YES")
     ifelse(finyear=="2012-13" & TSNo%in%c("TDGLF8008946","TDGLF8008924") & netlen==400,4000,netlen))))
 }
 
-  #Remove incomplete years  
+  #Remove incomplete years 
 FINYrs=c(sort(as.character(unique(Data.monthly$FINYEAR))),sort(as.character(unique(Data.daily$finyear))))
 idss=match("   .- .",FINYrs)
 if(!is.na(idss))FINYrs=FINYrs[-idss]
@@ -1057,7 +1063,7 @@ Data.daily=subset(Data.daily,finyear%in%FINYrs)
   # already in the record and range between 1.1 and 6 kg,
   # hence remove directly
 
-#Check if any fisher reported just fins
+#Check if any fisher reported just fins 
 if(Inspect.New.dat=="YES")
 {
   A=subset(Data.daily,species==22998 & finyear==Current.yr)
@@ -7395,9 +7401,7 @@ Exprt.list=list(
                       dplyr::select(-crap.ef),
   Mesh.monthly=Mesh.monthly,
   Mesh.size=Mesh.size,
-  TEPS.current=TEPS.current,
   Data.current.Sofar=Data.current.Sofar,
-  PRICES=PRICES,
   TEPS.pre.current=TEPS.pre.current,
   Suite=data.frame(Suite=Suite),
   LL.equiv.Eff.days.zone=LL.equiv.Eff.days.zone,
@@ -7416,11 +7420,12 @@ Exprt.list=list(
   Data.daily.GN=Data.daily.GN[,-match(crap.daily,names(Data.daily.GN))],
   #  Data.daily.other=Data.daily.other[,-match(crap.daily,names(Data.daily.other))],
   Data.daily.LL=Data.daily.LL[,-match(crap.daily,names(Data.daily.LL))])
+
+if(exists('TEPS.current'))Exprt.list$TEPS.current=TEPS.current
+if(exists('PRICES'))Exprt.list$PRICES=PRICES
+
 for(i in 1:length(Exprt.list)) fwrite(Exprt.list[[i]],paste(names(Exprt.list)[i],".csv",sep=""),row.names=F)
 rm(Exprt.list)
-
-
-
 
 
   #Total catch SAFS for EVA
@@ -8823,7 +8828,7 @@ if(do.whiskerys=="YES")
   write.csv(Whisk.ktch,paste(hndl,"/Whisk.ktch.csv",sep=""),row.names=F)  
 }
 
-#G 4.7 Jeff Norris, all catch and effort for South Coast Bioregion
+#G 4.7 Jeff Norris, all catch and effort for South Coast Bioregion (old request)
 if(do.Jeffs=="YES")
 {
   Yrs.of.scalies.data=unique(subset(Data.monthly,SPECIES%in%Scalefish.species,select=FINYEAR))

@@ -905,7 +905,7 @@ ERA.main.SP=data.frame(SPECIES=c(17001,18003,17003,18001,
 ERA.main.SP$Names=factor(ERA.main.SP$Names,levels=ERA.main.SP$Names)
 
 #myColors=c(brewer.pal(8,"YlOrRd"),brewer.pal(4,"Blues"))
-myColors=c("brown","brown1","chocolate","chocolate1","coral","coral2","darkred","darkorange",
+myColors=c("brown","brown1","chocolate","deeppink2","pink","coral2","goldenrod","darkorange",
            "blue","cyan3","deepskyblue","cornflowerblue")
 names(myColors)=ERA.main.SP$Names
 jpeg(file="ERA_Catch_main.species.jpeg",width=2400,height=2200,units="px",res=300)
