@@ -358,6 +358,7 @@ do.financial.ass="NO"
 do.annual.TEPS.extraction="NO"
 do.Paul.Rogers_ASL="NO"
 do.ASL.closure_effort_overlap="NO"
+Check.school.shark.targeting="NO"
 
 #Spatial range TDGDLF
 TDGDLF.lat.range=c(-26,-40)
@@ -10642,7 +10643,7 @@ if(do.Paul.Rogers_ASL=="YES")
   
 }
 
-#ACA
+
 #G 4.27 Overlap between ASL closures and effort
 if(do.ASL.closure_effort_overlap)
 {
@@ -10780,6 +10781,60 @@ if(do.ASL.closure_effort_overlap)
 
   write.csv(a,paste(hndl.ASL.closures.overlap,"ASL.closures_percent.change.csv",sep="/"))
 }
+
+#G 4.28 Explore school shark targeting
+if(Check.school.shark.targeting=="YES")
+{
+  library(ozmaps)
+  library(sf)
+  library(ggrepel)
+  library(ggpubr)
+  library(gridExtra)
+  
+  #Targeted trip
+  d=Data.daily.original%>%filter(TSNo%in%c('TDGLF8010741','TDGLF6003155'))%>%
+    group_by(DSNo,TSNo,SNo,RSCommonName,date,VESSEL,port,BoatName,MastersName,Lat,Long,block10)%>%
+    summarise(Tonnes=round(sum(livewt)/1000,2))%>%
+    data.frame%>%
+    mutate(Legend=paste(VESSEL,TSNo,port,MastersName,sep=', '),
+           Latitude=-(as.numeric(substr(block10,1,2))+10*as.numeric(substr(block10,3,3))/60),
+           Longitude=100+as.numeric(substr(block10,4,5))+10*as.numeric(substr(block10,6,6))/60)
+  
+  p1=d%>%
+    ggplot(aes(x=SNo,y=Tonnes, fill=RSCommonName))+
+    geom_bar(stat="identity")+ 
+    facet_wrap(vars(Legend),scales="free_y")+
+    xlab("Shot number")+
+    theme(legend.position = 'top',
+          legend.title=element_blank(),
+          legend.text=element_text(size=rel(1.3)),
+          axis.title=element_text(size=14,face="bold"),
+          axis.text=element_text(size=12),
+          strip.text = element_text(size = 14))
+  
+  #map
+  oz_states <- ozmaps::ozmap_states
+  d1=d%>%distinct(block10,.keep_all = T)
+  p2=ggplot(oz_states) + 
+    geom_sf() + 
+    coord_sf(xlim = c(112,129),ylim = c(-36,-26))+
+    geom_point(data=d1,aes(Longitude,Latitude),size=2)+
+    geom_label_repel(data=d1,aes(Longitude,Latitude,label=block10))+
+    theme(legend.position = 'top',
+          legend.title=element_blank(),
+          legend.text=element_text(size=rel(1.3)),
+          axis.title=element_text(size=14,face="bold"),
+          axis.text=element_text(size=12))
+  
+  
+  infographic=grid.arrange(p1,p2, nrow = 2,ncol=1,heights=c(3,3))
+  annotate_figure(infographic,
+                  bottom = text_grob("",size = 20),
+                  left = text_grob("",rot = 90,size = 20))
+  
+  ggsave(paste(hndl,'School.shark.targeting.tiff',sep='/'), width = 12, height = 8,compression = "lzw")
+}
+
 
 ########### SECTION H. ----  EXPORT TOTAL CATCH FOR REFERENCE POINT ANALYSIS --- ###########
 if(do.Ref.Points=="YES")
