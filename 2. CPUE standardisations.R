@@ -9249,9 +9249,9 @@ if(Explore.smooth.HH)
 Explore.why.dusky.sandbar.uncertain=FALSE
 if(Explore.why.dusky.sandbar.uncertain)
 {
-  #s=5
-  s=6
-  for()
+  dusk.san=names(DATA.list.LIVEWT.c.daily)
+  dusk.san=match(c("Dusky Whaler","Sandbar Shark"),dusk.san)
+  for(s in dusk.san)
   {
     d=DATA.list.LIVEWT.c.daily[[s]]%>%
       filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]] & FINYEAR%in%theseyears)
