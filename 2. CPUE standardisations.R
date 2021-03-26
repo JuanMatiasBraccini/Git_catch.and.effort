@@ -196,7 +196,7 @@ Use.Qualif.level=FALSE
 
 
 #Control if doing cluster analysis of daily data
-do_cluster="NO"
+do_cluster="YES"
 
 #Control if doing PCA analysis of daily data                    
 do_pca="NO"   
@@ -356,7 +356,11 @@ Q_change="1975-76"    #use all monthly records in one series (this bypasses the 
 #note: Rory McAuley
 Inc.per=1.05  
 
-
+#McAuly core areas
+Dusky.range=c(-28,120)
+Sandbar.range=c(-26,118)
+Whiskery.range=c(-28,129)
+Gummy.range=c(116,129) 
 
 
 # BASIC MANIPULATIONS -----------------------------------------------------------------------
@@ -708,7 +712,7 @@ Tar.sp=match(TARGETS,SP.list)
 fn.scale=function(x,scaler) ((x/max(x,na.rm=T))^0.5)*scaler
 
 Core=SP.list
-pdf('C:/Matias/Analyses/Catch and effort/Species core areas/cores.pdf')
+pdf('C:/Matias/Analyses/Catch and effort/Outputs/Species core areas/cores.pdf')
 for(s in nnn)
 {
   Kr=core.per
@@ -760,7 +764,7 @@ if(Model.run=="First")
     plot_list[[nnn.i[s]]]=p2
   }
   multi.page <-ggarrange(plotlist=plot_list, nrow = 2, ncol = 1)
-  ggexport(multi.page, filename = "C:/Matias/Analyses/Catch and effort/species core areas/raster.pdf")
+  ggexport(multi.page, filename = "C:/Matias/Analyses/Catch and effort/Outputs/species core areas/raster.pdf")
 }
 
 
@@ -808,10 +812,6 @@ if(Model.run=="First")
 }
 
 #adjust core areas following Rory McAuley 
-Dusky.range=c(-28,120)
-Sandbar.range=c(-26,118)
-Whiskery.range=c(-28,129)
-Gummy.range=c(116,129) 
 change.core.manually=FALSE
 if(change.core.manually)
 {
@@ -1077,7 +1077,9 @@ if(get.raw)
   registerDoParallel(cl)
   system.time({Species.list.raw=foreach(s= 1:length(Tar.sp),.packages=c('dplyr','doParallel')) %dopar%
     {
-      a=fn.cpue.data(Dat=Data.monthly.GN,EffrrT=Eff,sp=SP.list[[Tar.sp[s]]])%>%
+      a=fn.cpue.data(Dat=Data.monthly.GN,
+                     EffrrT=Eff,
+                     sp=SP.list[[Tar.sp[s]]])%>%
         filter(SPECIES==SP.list[[Tar.sp[s]]])%>%
         dplyr::select(FINYEAR,SPECIES,LIVEWT.c,Km.Gillnet.Hours.c)
       return(a)
@@ -1089,7 +1091,9 @@ if(get.raw)
   registerDoParallel(cl)
   system.time({Species.list.daily.raw=foreach(s= 1:length(Tar.sp),.packages=c('dplyr','doParallel')) %dopar%
     {
-      a=fn.cpue.data.daily(Dat=Data.daily.GN,EffrrT=Eff.daily,sp=SP.list[[Tar.sp[s]]])%>%
+      a=fn.cpue.data.daily(Dat=Data.daily.GN,
+                           EffrrT=Eff.daily,
+                           sp=SP.list[[Tar.sp[s]]])%>%
         filter(SPECIES==SP.list[[Tar.sp[s]]])%>%
         dplyr::select(FINYEAR,SPECIES,LIVEWT.c,Km.Gillnet.Hours.c)
       return(a)
@@ -1120,36 +1124,6 @@ for(s in nnn)
 
 }
 
-# PROPORTION OF DUSKY AND COPPER SHARKS ----------------------------------------------
-Combine.dusky.copper="NO"
-if(Combine.dusky.copper=="YES")
-{
-  fn.fig("proportion of dusky and copper shark_TDGLDF",2000,2400)
-  par(mfcol=c(2,1),las=1,mai=c(.8,.85,.1,.1),mgp=c(2.5,.8,0))
-  #monthly
-  All.dusky=aggregate(LIVEWT.c~FINYEAR,subset(Species.list[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18003),sum)
-  All.copper=aggregate(LIVEWT.c~FINYEAR,subset(Species.list[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18001),sum)
-  All.dusky=All.dusky[match(All.copper$FINYEAR,All.dusky$FINYEAR),]
-  Prop.copper_dusky=data.frame(FINYEAR=All.dusky$FINYEAR,proportion=All.copper$LIVEWT.c/All.dusky$LIVEWT.c)
-  plot(1:nrow(Prop.copper_dusky),Prop.copper_dusky$proportion,xaxt='n',
-       ylab="",xlab="",pch=19,col=2,cex=1.75,cex.lab=1.5,ylim=c(0,.25))
-  axis(1,1:nrow(Prop.copper_dusky),Prop.copper_dusky$FINYEAR)
-  legend("topright","Monthly returns",bty='n',cex=1.5)
-  
-  #daily
-  All.dusky=aggregate(LIVEWT.c~FINYEAR,subset(Species.list.daily[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18003),sum)
-  All.copper=aggregate(LIVEWT.c~FINYEAR,subset(Species.list.daily[[match("Dusky Whaler Bronze Whaler",names(Species.list))]],SPECIES==18001),sum)
-  All.dusky=All.dusky[match(All.copper$FINYEAR,All.dusky$FINYEAR),]
-  Prop.copper_dusky=data.frame(FINYEAR=All.dusky$FINYEAR,proportion=All.copper$LIVEWT.c/All.dusky$LIVEWT.c)
-  plot(1:nrow(Prop.copper_dusky),Prop.copper_dusky$proportion,xaxt='n',
-       ylab="",xlab="Financial year",pch=19,col=2,cex=1.75,cex.lab=1.5,ylim=c(0,.25))
-  axis(1,1:nrow(Prop.copper_dusky),Prop.copper_dusky$FINYEAR)
-  legend("topright","Daily logbooks",bty='n',cex=1.5)
-  
-  mtext("Bronze whaler shark catch / Dusky shark catch",2,-1.5,las=3,outer=T,cex=1.75)
-  dev.off()
-  
-}
 
 # VESSELS & BLOCKS----------------------------------------------
 # Keep vessel characteristics from vessel survey for vessels that have fished      
@@ -1774,6 +1748,13 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
     #remove nonsense lat
     DATA=subset(DATA,LAT>=(-36))
     
+    #unique lat and long per Same.return.SNo
+    DATA=DATA%>%
+      group_by(Same.return.SNo)%>%
+      mutate(LAT=mean(LAT,na.rm=T),
+             LONG=mean(LONG,na.rm=T))%>%
+      ungroup()
+    
     #calculate effort
     Match.these.eff=match(These.efforts.daily,names(DATA))
     Effort.data1=DATA[,Match.these.eff]
@@ -1797,20 +1778,21 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
       }
     }
     
-    #target species catch 
-    ID=match(c(ktch),colnames(DATA))
-    DATA$Catch.Target=with(DATA,ifelse(SPECIES%in%target,DATA[,ID],0))
+    #target species and other main species catch 
+    DATA=DATA%>%
+      mutate(
+        Catch.Target=ifelse(SPECIES%in%target,!!sym(ktch),0),
+        Catch.Gummy=ifelse(SPECIES==17001,!!sym(ktch),0),
+        Catch.Whiskery=ifelse(SPECIES==17003,!!sym(ktch),0),
+        Catch.Dusky=ifelse(SPECIES%in%c(18003),!!sym(ktch),0),
+        Catch.Sandbar=ifelse(SPECIES==18007,!!sym(ktch),0),
+        Catch.Groper=ifelse(SPECIES%in%c(384002),!!sym(ktch),0),
+        Catch.Snapper=ifelse(SPECIES%in%c(353001),!!sym(ktch),0),
+        Catch.Blue_mor=ifelse(SPECIES%in%c(377004),!!sym(ktch),0),
+        Catch.Total=ifelse(SPECIES%in%c(5001:24900,25000:31000,188000:599001),!!sym(ktch),0))
     
-    #catch targeted at other species
-    DATA$Catch.Gummy=with(DATA,ifelse(SPECIES==17001,DATA[,ID],0))
-    DATA$Catch.Whiskery=with(DATA,ifelse(SPECIES==17003,DATA[,ID],0))
-    DATA$Catch.Dusky=with(DATA,ifelse(SPECIES%in%c(18003),DATA[,ID],0))
-    DATA$Catch.Sandbar=with(DATA,ifelse(SPECIES==18007,DATA[,ID],0))
-    DATA$Catch.Groper=with(DATA,ifelse(SPECIES%in%c(384002),DATA[,ID],0))
-    DATA$Catch.Snapper=with(DATA,ifelse(SPECIES%in%c(353001),DATA[,ID],0))
-    DATA$Catch.Blue_mor=with(DATA,ifelse(SPECIES%in%c(377004),DATA[,ID],0))
-    DATA$Catch.Total=with(DATA,ifelse(SPECIES%in%c(5001:24900,25000:31000,188000:599001),DATA[,ID],0))
     
+
     #reshape catch data
     if(Use.Date=="NO")
     {
@@ -1952,7 +1934,7 @@ DATA.list.LIVEWT.c$"Sandbar Shark"=subset(DATA.list.LIVEWT.c$"Sandbar Shark",FIN
 Nms.sp=capitalize(tolower(names(SP.list)))  
 Nms.sp[match(c("Smooth hammerhead shark","Dusky whaler"),Nms.sp)]=c("Smooth hammerhead","Dusky shark")
 
-# IDENTIFY TARGETING BEHAVIOUR ----------------------------------------------
+# IDENTIFY FISHING ON DIFFERENT HABITATS (~TARGETING BEHAVIOUR) ----------------------------------------------
 #note:  more code in 2.CPUE standardisations_delta.R)
 #      this uses all species accounting for 95% of catch
 HndL.Species_targeting="C:/Matias/Analyses/Catch and effort/Outputs/Species targeting/"
@@ -1998,18 +1980,48 @@ if(Model.run=="First")
 
 if(do_cluster=="YES")
 {
-  #clustering analysis
-  fn.cluster=function(data,TarSp,target,varS,scaling,check.clustrbl,n.clus)
+  #note: CLARA analysis as per Campbell et al 2017 on nfish as this has data at Sesssion level
+  #       The CLARA (Clustering Large Applications) algorithm is an extension to the 
+  #       PAM (Partitioning Around Medoids) clustering method for large data sets. It intends to 
+  #       reduce the computation time in the case of large data set.
+  Store.cluster=vector('list',length(SP.list)) 
+  names(Store.cluster)=names(SP.list)
+  
+  #Using catch rates of all species
+  N.clus=c(2,2,2,2)  #from initial optimum number
+  fn.cluster=function(data,TarSp,n.clus,target)
   {
-    a=data[[TarSp]]%>% column_to_rownames(var = "Same.return.SNo")%>%
-      select(varS[-match(target,varS)])
-    if(scaling=="YES")a=scale(a)
+    a=data[[TarSp]]%>%
+      filter(Same.return.SNo%in%unique(DATA.list.LIVEWT.c.daily[[TarSp]]$Same.return.SNo))%>%
+      filter(!SPECIES%in%31000)%>%
+      mutate(SPECIES=ifelse(SPECIES==19004,19000,SPECIES),
+             Same.return.SNo.block10=paste(Same.return.SNo,block10))
+    TOP.ktch=a%>%group_by(SPECIES)%>%
+      summarise(Catch=sum(LIVEWT.c))%>%
+      arrange(-Catch)%>%
+      mutate(Cum.ktch=cumsum(Catch),
+             Quantiles=Cum.ktch/sum(Catch))
+    top.sp=TOP.ktch$SPECIES[1:which.min(abs(TOP.ktch$Quantiles-95/100))]
+    
+    a=a%>%filter(SPECIES%in%top.sp)%>%
+      group_by(Same.return.SNo.block10,SPECIES)%>%
+      summarise(LIVEWT.c=sum(LIVEWT.c,na.rm=T),
+                Km.Gillnet.Hours.c=max(Km.Gillnet.Hours.c))%>%
+      mutate(cpue=LIVEWT.c/Km.Gillnet.Hours.c)%>%
+      dplyr::select(SPECIES,cpue,Same.return.SNo.block10)%>% 
+      spread(SPECIES,cpue)%>%
+      column_to_rownames(var = "Same.return.SNo.block10")
+    
+    #proportion
+    a[is.na(a)]=0
+    a=a/rowSums(a,na.rm = T)
+    
     
     #step 1. Define if data are clusterable
     if(check.clustrbl=="YES")
     {
       #random sample to reduce computation time
-      ran.samp=sample(1:nrow(a),15000,replace=F)
+      ran.samp=sample(1:nrow(a),5000,replace=F)
       
       res <- get_clust_tendency(a[ran.samp,], n = nrow(a[ran.samp,])-1, graph = FALSE)
       if(1-res$hopkins_stat>0.75) clusterable="YES"else  clusterable="NO"
@@ -2031,45 +2043,113 @@ if(do_cluster=="YES")
     clara.res <- clara(a, num.clus, samples = 50, pamLike = TRUE)
     
     #step 4. visualize CLARA clusters in data scattergram
-    fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_cluster_",target,sep=""),2400,2400)
-    fviz_cluster(clara.res, 
-                 palette = rainbow(num.clus), # color palette
-                 ellipse.type = "t", # Concentration ellipse
-                 geom = "point", pointsize = 1,
-                 ggtheme = theme_classic())
-    dev.off()
+    if(Model.run=="First")
+    {
+      fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_cluster_",target,sep=""),2400,2400)
+      fviz_cluster(clara.res, 
+                   palette = rainbow(num.clus), # color palette
+                   ellipse.type = "t", # Concentration ellipse
+                   geom = "point", pointsize = 1,
+                   ggtheme = theme_classic())
+      dev.off()
+    }
     
-    #step 5. add cluster to input data
+    #step 5. export cluster to add to input data
     dd.clara <- cbind(as.data.frame(a), cluster_clara = clara.res$cluster)
-    dd.clara=dd.clara%>%rownames_to_column(var = "Same.return.SNo")%>%
-      select(cluster_clara,Same.return.SNo)%>%remove_rownames()
+    dd.clara=dd.clara%>%rownames_to_column(var = "Same.return.SNo.block10")%>%
+      dplyr::select(cluster_clara,Same.return.SNo.block10)%>%remove_rownames()
     return(dd.clara)
   }
-  #note: CLARA analysis as per Campbell et al 2017 on nfish as this has data at Sesssion level
-  #       The CLARA (Clustering Large Applications) algorithm is an extension to the 
-  #       PAM (Partitioning Around Medoids) clustering method for large data sets. It intended to 
-  #       reduce the computation time in the case of large data set.
-  Clus.vars=c("Catch.Target","Catch.Gummy","Catch.Whiskery","Catch.Dusky","Catch.Sandbar",
-              "Catch.Groper","Catch.Snapper","Catch.Blue_mor")
-  Tar.clus.vars=c("Catch.Whiskery","Catch.Gummy","Catch.Dusky","Catch.Sandbar")
-  n.clus=c(2,2,2,2)  #from initial optimum number
-  scalem="YES"
   
-  Store.cluster=vector('list',length(SP.list)) 
-  names(Store.cluster)=names(SP.list)
   for(i in 1:length(Tar.sp))
   {
-    Store.cluster[[Tar.sp[i]]]=fn.cluster(data=DATA.list.LIVEWT.c.daily,TarSp=Tar.sp[i],
-                                          target=Tar.clus.vars[i],
-                                          varS=Clus.vars,scaling=scalem,
-                                          check.clustrbl="NO",n.clus=n.clus[i])
+    Store.cluster[[Tar.sp[i]]]=fn.cluster(data=Species.list.daily,
+                                          TarSp=Tar.sp[i],
+                                          n.clus=N.clus[i],
+                                          target=names(data)[Tar.sp[i]])
   }
-  
   #add cluster to original data for use in standardisations
   for(s in Tar.sp)
   {
-    DATA.list.LIVEWT.c.daily[[s]]=left_join(DATA.list.LIVEWT.c.daily[[s]],Store.cluster[[s]],by=c("Same.return.SNo"))
+    DATA.list.LIVEWT.c.daily[[s]]=left_join(DATA.list.LIVEWT.c.daily[[s]]%>%
+                                              mutate(Same.return.SNo.block10=paste(Same.return.SNo,block10)),
+                                            Store.cluster[[s]],by=c("Same.return.SNo.block10"))%>%
+      dplyr::select(-Same.return.SNo.block10)
   }
+  
+  
+  #Using aggregated catch by main species #Not used
+  Clus.vars=c("Catch.Target","Catch.Gummy","Catch.Whiskery","Catch.Dusky","Catch.Sandbar",
+              "Catch.Groper","Catch.Snapper","Catch.Blue_mor")
+  Tar.clus.vars=c("Catch.Whiskery","Catch.Gummy","Catch.Dusky","Catch.Sandbar")
+  
+  use.this.custer=FALSE
+  if(use.this.custer)
+  {
+    fn.cluster.catch=function(data,TarSp,target,varS,scaling,check.clustrbl,n.clus)
+    {
+      a=data[[TarSp]]%>%
+        mutate(Same.return.SNo.block10=paste(Same.return.SNo,block10))%>%
+        column_to_rownames(var = "Same.return.SNo.block10")%>%
+        dplyr::select(varS[-match(target,varS)])
+      if(scaling=="YES")a=scale(a)
+      
+      #step 1. Define if data are clusterable
+      if(check.clustrbl=="YES")
+      {
+        #random sample to reduce computation time
+        ran.samp=sample(1:nrow(a),15000,replace=F)
+        
+        res <- get_clust_tendency(a[ran.samp,], n = nrow(a[ran.samp,])-1, graph = FALSE)
+        if(1-res$hopkins_stat>0.75) clusterable="YES"else  clusterable="NO"
+        print(clusterable)
+      }
+      
+      #step 2. Determine optimum number of clusters
+      if(check.clustrbl=="YES")
+      {
+        fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_optimal_numbers_",target,sep=""),2400,2400)
+        b=fviz_nbclust(a, clara, method = "silhouette",print.summary=T)
+        b+theme_classic()
+        dev.off()
+        num.clus=as.numeric(as.character(b$data$clusters[match(max(b$data$y),b$data$y)]))
+      }
+      
+      #step 3. fit clara
+      if(!exists("num.clus")) num.clus=n.clus
+      clara.res <- clara(a, num.clus, samples = 50, pamLike = TRUE)
+      
+      #step 4. visualize CLARA clusters in data scattergram
+      fn.fig(paste(HndL.Species_targeting,"Cluster/CLARA_cluster_",target,sep=""),2400,2400)
+      fviz_cluster(clara.res, 
+                   palette = rainbow(num.clus), # color palette
+                   ellipse.type = "t", # Concentration ellipse
+                   geom = "point", pointsize = 1,
+                   ggtheme = theme_classic())
+      dev.off()
+      
+      #step 5. add cluster to input data
+      dd.clara <- cbind(as.data.frame(a), cluster_clara = clara.res$cluster)
+      dd.clara=dd.clara%>%rownames_to_column(var = "Same.return.SNo")%>%
+        select(cluster_clara,Same.return.SNo)%>%remove_rownames()
+      return(dd.clara)
+    }
+    n.clus=c(2,2,2,2)  #from initial optimum number
+    scalem="YES"
+    for(i in 1:length(Tar.sp))
+    {
+      Store.cluster[[Tar.sp[i]]]=fn.cluster(data=DATA.list.LIVEWT.c.daily,TarSp=Tar.sp[i],
+                                            target=Tar.clus.vars[i],
+                                            varS=Clus.vars,scaling=scalem,
+                                            check.clustrbl="NO",n.clus=n.clus[i])
+    }
+    #add cluster to original data for use in standardisations
+    for(s in Tar.sp)
+    {
+      DATA.list.LIVEWT.c.daily[[s]]=left_join(DATA.list.LIVEWT.c.daily[[s]],Store.cluster[[s]],by=c("Same.return.SNo"))
+    }
+  }
+  
   rm(Store.cluster)
   
   #check cpue by cluster group
@@ -2079,20 +2159,27 @@ if(do_cluster=="YES")
                            main=names(DATA.list.LIVEWT.c.daily)[i],ylab="cpue",ylim=c(0,30))
   dev.off()
   
-  
-  
   fn.compare.targeting=function(DAT,Drop.var,Title)
   {
-    d=DAT%>% select(c(cluster_clara,tolower(Clus.vars[-match(Drop.var,Clus.vars)])))
+    d=DAT%>% dplyr::select(c(cluster_clara,Clus.vars[-match(Drop.var,Clus.vars)]))
     d[-1]=d[-1]/rowSums(d[-1])
-    d=d%>%gather('ID','value',-cluster_clara)           
-    ggplot(d) +labs(title = Title,x = "",y="Proportion")+
-      geom_boxplot(aes(x=ID, y=value, fill=cluster_clara))
+    colnames(d)[-1]=gsub("Catch.", "", colnames(d)[-1], fixed = TRUE)
+    p=d%>%
+      gather('ID','value',-cluster_clara)%>%           
+      ggplot(aes(x=ID, y=value, fill=factor(cluster_clara))) +
+      geom_boxplot()+
+      theme(legend.title = element_blank())+
+      labs(title = Title,x = "",y="Proportion of catch")
+    print(p)
   }
   for(s in 1:length(Tar.sp))
   {
-    pdf(paste(HndL.Species_targeting,"Cluster/Targeting_",Nms.sp[Tar.sp[s]],".pdf",sep="")) 
-    fn.compare.targeting(DAT=DATA.list.LIVEWT.c.daily[[Tar.sp[s]]],Drop.var=Tar.clus.vars[s],Nms.sp[Tar.sp[s]])
+    tiff(paste(HndL.Species_targeting,"Cluster/CLARA_cluster.boxplot_by_group_",Nms.sp[Tar.sp[s]],
+               ".tiff",sep=''),width = 2400,
+         height = 1800,units = "px", res = 300, compression = "lzw")    
+    fn.compare.targeting(DAT=DATA.list.LIVEWT.c.daily[[Tar.sp[s]]],
+                         Drop.var=Tar.clus.vars[s],
+                         Title=Nms.sp[Tar.sp[s]])
     dev.off()
   }
 }
@@ -2121,7 +2208,7 @@ if(do_pca=="YES")
       summarise(LIVEWT.c=sum(LIVEWT.c,na.rm=T),
                 Km.Gillnet.Hours.c=max(Km.Gillnet.Hours.c))%>%
       mutate(cpue=LIVEWT.c/Km.Gillnet.Hours.c)%>%
-      select(SPECIES,cpue,Same.return.SNo)%>% 
+      dplyr::select(SPECIES,cpue,Same.return.SNo)%>% 
       spread(SPECIES,cpue)%>%
       column_to_rownames(var = "Same.return.SNo")
     
@@ -3768,15 +3855,16 @@ ZONES=c("West","Zone1","Zone2")
 Response="catch.target"    #cpue and positive catch are calculated inside functions
 Eff.vars=c("km.gillnet.hours.c")
 Categorical=c("finyear","vessel","blockx","shots.c")
-
 Covariates.monthly=c("MONTH","LONG10.corner","LAT10.corner","Freo","Temp.res","SOI")
-
-Targeting.vars=c("Dim.1","Dim.2","Dim.3")
+if(do_cluster=="YES") Targeting.vars=c("cluster_clara")
+if(do_pca=="YES") Targeting.vars=c("Dim.1","Dim.2","Dim.3")
 Covariates.daily=c(Covariates.monthly,"Mean.depth","Lunar","mesh","nlines.c")
-if(do_pca=="YES") Covariates.daily=c(Covariates.daily,Targeting.vars)
+if(do_pca=="YES")Covariates.daily=c(Covariates.daily,Targeting.vars)
 
 Predictors_monthly=c(Categorical,Covariates.monthly)
 Predictors_daily=c(Categorical,Covariates.daily)
+if(do_cluster=="YES") Predictors_daily=c(Categorical,Targeting.vars,Covariates.daily)
+
 
   #check data properties and degrees of freedom   
 if(Model.run=="First")
@@ -3830,6 +3918,7 @@ Eff.creep=data.frame(finyear=FINYEAR.ALL,effort.creep=Fish.pow.inc)
     #remove predictors identified as highly correlated
 cNSTNT=Categorical[!Categorical=="block10"] 
 cNSTNT.daily=Categorical[!Categorical=="blockx"]
+if(do_cluster=="YES") cNSTNT.daily=c(Categorical[!Categorical=="blockx"],Targeting.vars)
 
     #extract best model   
 Best.Model=vector('list',length(SP.list)) 
@@ -4277,13 +4366,13 @@ if(Def.mod.Str=="NO")
     
     #Daily
     Best.Model.daily$`Sandbar Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                               s(long10.corner,lat10.corner)+s(mean.depth))
+                                               s(long10.corner,lat10.corner)+s(mean.depth)+cluster_clara)
     Best.Model.daily$`Whiskery Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                                s(long10.corner,lat10.corner)+s(mean.depth))
+                                                s(long10.corner,lat10.corner)+s(mean.depth)+cluster_clara)
     Best.Model.daily$`Gummy Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                             s(long10.corner,lat10.corner))
+                                             s(long10.corner,lat10.corner)+cluster_clara)
     Best.Model.daily$`Dusky Whaler`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                              s(long10.corner,lat10.corner)+s(mean.depth))
+                                              s(long10.corner,lat10.corner)+s(mean.depth)+cluster_clara)
     
     Best.Model.daily$`Smooth Hammerhead Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
                                                          s(long10.corner,lat10.corner)+s(mean.depth))
@@ -4996,7 +5085,7 @@ if(Use.Delta)
 if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
 {
   #predictions
-  #   use marginal means with accounts for unbalanced data
+  #   use marginal means which accounts for unbalanced data
   #   see https://cran.r-project.org/web/packages/emmeans/vignettes/basics.html
   pred.fun=function(mod,biascor,PRED)             
   {
@@ -5110,11 +5199,14 @@ if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
         theseyears=sort(unique(DATA.list.LIVEWT.c.daily[[s]]$FINYEAR))
         theseyears=theseyears[match(Firs.yr.ktch,theseyears):length(theseyears)]
         
+        #remove first year of transition from Monthly to Daily returns due to effort misreporting
+        drop.this=match("2006-07",theseyears)
+        if(!is.na(drop.this))theseyears=theseyears[-drop.this]
         
         d=DATA.list.LIVEWT.c.daily[[s]]%>%
             filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]] & FINYEAR%in%theseyears)
         Terms=Predictors_daily
-        Continuous=Covariates.daily
+        Continuous=Covariates.daily   
         colnames(d)=tolower(colnames(d))
         Terms=tolower(Terms)
         Continuous=tolower(Continuous)
@@ -5299,7 +5391,7 @@ if(Model.run=="First")
       {
         DAT=DATA.list.LIVEWT.c[[s]]
         if(Nms.sp[s]=="Sandbar Shark") DAT=DAT%>%filter(!BLOCKX==9600 & 
-                                        !FINYEAR%in%c('1986-87')) #cannot estimate this coefficient
+                                                          !FINYEAR%in%c('1986-87')) #cannot estimate this coefficient
         colnames(DAT)=tolower(colnames(DAT))
         #select years with a min number of vessels
         DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) 
@@ -5436,11 +5528,11 @@ if(Model.run=="First")
     dev.off()
     
   }
-
+  
   if(Use.Tweedie)  #takes 10 mins
   {
     #1. Fit models
-      #monthly
+    #monthly
     system.time({sens_monthly=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv')) %dopar%
       {
         d=DATA.list.LIVEWT.c[[s]]
@@ -5458,16 +5550,18 @@ if(Model.run=="First")
           mutate(cpue=catch.target/km.gillnet.hours.c)
         d <- makecategorical(Factors[Factors%in%Terms],d)
         mod<-bam(Best.Model[[s]],data=d,family='tw',method="fREML",discrete=TRUE)
-
+        
         return(list(DATA=d,res.gam=mod))
         rm(d,mod)
       }
     })
     
-      #daily
-    system.time({sens_daily=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv')) %dopar%
+    #daily
+    system.time({sens_daily=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv')) %do%
       {
-        d=DATA.list.LIVEWT.c.daily[[s]]
+        theseyears=as.character(unique(Stand.out.daily[[s]]$DATA$finyear))
+        d=DATA.list.LIVEWT.c.daily[[s]]%>%
+          filter(FINYEAR%in%theseyears)
         Terms=Predictors_daily
         Continuous=Covariates.daily
         colnames(d)=tolower(colnames(d))
@@ -5594,6 +5688,8 @@ if(Model.run=="First")
     par(mfrow=c(4,2),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
     for(s in 1:length(Tar.sp))
     {
+      aaa.daily=Stand.out.daily[[Tar.sp[s]]]$DATA%>%mutate(finyear=as.numeric(substr(finyear,1,4)))
+      
       #Monthly
       Da=list(All.preds.creep$`Base case`$monthly[[s]],
               All.preds.creep$`All vessels & blocks`$monthly[[s]],
@@ -5606,16 +5702,12 @@ if(Model.run=="First")
       if(s==1) mtext("Monthly",3,cex=1.5)
       if(s==4)     legend('topleft',sens$Scenario,bty='n',col=c("black","forestgreen","red"),
                           pch=19,cex=1.25)
-        
+      
       #Daily
       Da.daily=list(All.preds.creep$`Base case`$daily[[s]],
                     All.preds.creep$`All vessels & blocks`$daily[[s]],
                     All.preds.creep$`No efficiency`$daily[[s]])
       names(Da.daily)=sens$Scenario
-      aaa.daily=Stand.out.daily[[Tar.sp[s]]]$DATA%>%mutate(finyear=as.numeric(substr(finyear,1,4)))
-      
-      
-      
       Plot.cpue.tweedie(cpuedata=Da.daily,CL=c("black","forestgreen","red"),
                         CxS=1.15,Yvar="finyear",
                         add.lines="YES",firstyear=2006,
@@ -5628,9 +5720,9 @@ if(Model.run=="First")
     dev.off()
     
   }
-
+  
   stopCluster(cl)
-}   
+}  
 
 
 #-- Deviance explained 
@@ -6900,7 +6992,7 @@ if(Use.Tweedie)
   
   if(show.how=='together')
   {
-    fn.fig("Annual_Index",1800, 2400)  
+    fn.fig("Figure 3.Annual_Index",1800, 2400)  
     par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
     for(s in Tar.sp)
     {
@@ -7072,7 +7164,8 @@ if(Use.Tweedie)
           mutate(lower.CL=lowCL/mean(mean),
                  upper.CL=uppCL/mean(mean),
                  response=mean/mean(mean))%>%
-          rename(finyear=FINYEAR)
+          rename(finyear=FINYEAR)%>%
+          filter(finyear%in%Pred.daily.normlzd[[s]]$finyear)
         
         Plot.cpue(cpuedata=list(Standardised=Pred.normlzd[[s]]),
                   cpuedata.daily=list(Standardised=Pred.daily.normlzd[[s]]),
@@ -7328,7 +7421,7 @@ if(Use.Tweedie)
       
     }
     CL.sens=c("black","grey50","white")
-    fn.fig("Annual_Index_normalised_Tweedie_Delta_lognormal",1800, 2400)  
+    fn.fig("Appendix 5_Annual_Index_normalised_Tweedie_Delta_lognormal",1800, 2400)  
     par(mfrow=c(4,1),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
     for(s in Tar.sp)
     {
@@ -7987,20 +8080,41 @@ if(Model.run=="First")
      }
   }
   
+  #Cluster
+  if(Use.Tweedie)  
+  {
+    Store.cluster=vector('list',length(Tar.sp))
+    for(i in 1:length(Tar.sp))
+    {
+      s=Tar.sp[i]
+      d=Stand.out.daily[[s]]$DATA
+      if(length(grep("cluster_clara",attr(terms(Best.Model.daily[[s]]), "term.labels")))>0)
+      {
+        a=pred.fun(Stand.out.daily[[s]]$res.gam,biascor="NO",PRED='cluster_clara')%>%
+          arrange(response)
+        Mn=mean(a$response)
+        Store.cluster[[i]]=a%>%
+          mutate(response=response/Mn,
+                 lower.CL=lower.CL/Mn,
+                 upper.CL=upper.CL/Mn)
+      }
+      
+    }
+  } 
   
   #Plot effects  
   if(Use.Tweedie)
   {
-    CX.t=1.35
+    CX.t=1.25
     show.vessel=TRUE
     
-    fn.fig("Figure 2.Other terms effect",2400, 2400)    #ACA
+    fn.fig("Figure 2.Other terms effect",2400, 2400)   
     if(show.vessel) 
     {
-      par(mfrow=c(4,4),mar=c(2.5,2,1.2,1),oma=c(1,2.5,.5,.2),las=1,mgp=c(1.9,.65,0),cex.axis=1.25)
+      par(mfrow=c(5,4),mar=c(2.5,2,1.2,1),oma=c(1,2.5,.5,.2),las=1,mgp=c(1.9,.65,0),cex.axis=1.25)
     }else
     {
-      par(mfrow=c(3,4),mar=c(2.5,2,1.2,1),oma=c(1,2.5,.5,.2),las=1,mgp=c(1.9,.65,0),cex.axis=1.25)
+      par(mfrow=c(4,4),mar=c(2.5,2,1.2,1),oma=c(1,2.5,.5,.2),las=1,mgp=c(1.9,.65,0),cex.axis=1.25)
     }
     
     #Vessel effect
@@ -8017,6 +8131,19 @@ if(Model.run=="First")
         if(i==2) mtext("                             Vessel",
                        side=1,line=2,font=1,las=0,cex=CX.t)
       }
+    }
+    
+    #Cluster effect
+    for(i in 1:length(Tar.sp))
+    {
+      s=Tar.sp[i]
+      a=Store.cluster[[i]]
+      plot(1:nrow(a),a$response,pch=19,cex=1.5,ylim=c(min(a$lower.CL),max(a$upper.CL)),
+           ylab='',xlab='',xaxt='n',xlim=c(0.5,2.5))
+      arrows(1:nrow(a), a$lower.CL,1:nrow(a), a$upper.CL,code=3, angle=90, length=0.05)
+      axis(1,1:2,c("Group 1","Group 2"))
+      if(i==2) mtext("                             Fishing tactic",
+                     side=1,line=2,font=1,las=0,cex=CX.t)
     }
 
     #Month effect    
@@ -8443,7 +8570,7 @@ if(do.influence=="YES")
   }
 }
 
-
+#ACA
 # CONSTRUCT SPATIAL STANDARDISED INDEX ---------------------------------------------------------
 if(Use.Delta)  
 { system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))  
@@ -8762,6 +8889,7 @@ if(Use.Tweedie)
         {
           d=DATA.list.LIVEWT.c.daily[[s]]%>%
             filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]] & zone==zns[z])
+          d=d%>%filter(!FINYEAR=="2006-07")
           Terms=Predictors_daily
           Continuous=Covariates.daily
           colnames(d)=tolower(colnames(d))
@@ -9123,105 +9251,108 @@ if(Explore.why.dusky.sandbar.uncertain)
 {
   #s=5
   s=6
-  
-  d=DATA.list.LIVEWT.c.daily[[s]]%>%
-    filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]] & FINYEAR%in%theseyears)
-  Terms=Predictors_daily
-  Continuous=Covariates.daily
-  colnames(d)=tolower(colnames(d))
-  Terms=tolower(Terms)
-  Continuous=tolower(Continuous)
-  Factors=Terms[!Terms%in%Continuous]
-  Terms=all.vars(Best.Model.daily[[s]])[-1]
-  d <- d%>%
-    dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
-    mutate(cpue=catch.target/km.gillnet.hours.c)
-  d <- makecategorical(Factors[Factors%in%Terms],d)
-  
-  
-  #Best.Model.daily[[s]]
-  What="finyear+ vessel + month + depth + lat long"
-  mod<-bam(cpue ~ finyear+ s(vessel, bs = "re")+ 
-             s(month, k = 12,bs = "cc")+ s(mean.depth)+ s(long10.corner, lat10.corner),data=d,family='tw',method="fREML",discrete=TRUE)
-  
-  #2.Make predictions
-  lsmeas=pred.fun(mod=mod,biascor="NO",PRED="finyear")
-  
-  
-  #nominal
-  out.mean = d %>%
-    group_by(finyear) %>%
-    summarise(mean = mean(cpue),
-              n = length(cpue),
-              sd = sd(cpue)) %>%
-    mutate(lowCL = mean - 1.96*sd/sqrt(n),
-           uppCL = mean + 1.96*sd/sqrt(n)) %>%
-    data.frame
-  
-  out.delta.log = d %>%
-    mutate(cpue.target=cpue)%>%
-    group_by(finyear) %>%
-    summarise(n = length(cpue.target),
-              m = length(cpue.target[cpue.target>0]),
-              mean.lognz = mean(log(cpue.target[cpue.target>0])),
-              sd.lognz = sd(log(cpue.target[cpue.target>0]))) %>%
-    mutate(p.nz = m/n,
-           theta = log(p.nz)+mean.lognz+sd.lognz^2/2,
-           c = (1-p.nz)^(n-1),
-           d = 1+(n-1)*p.nz,
-           vartheta = ((d-c)*(1-c*d)-m*(1-c)^2)/(m*(1-c*d)^2)+
-             sd.lognz^2/m+sd.lognz^4/(2*(m+1)),
-           mean = exp(theta),
-           lowCL = exp(theta - 1.96*sqrt(vartheta)),
-           uppCL = exp(theta + 1.96*sqrt(vartheta))) %>%
-    as.data.frame
-  
-  
-  NRMLIZD="YES"
-  Y=as.numeric(substr(lsmeas$finyear,1,4))  
-  
-  hndl.crap='C:/Matias/Analyses/Catch and effort/Outputs/Paper/why dusky and sandbar daily so uncertain/'
-  fn.fig(paste(hndl.crap,Nms.sp[s],"_",What,sep=""),2000, 2400)
-  with(lsmeas,
-       {
-         if(NRMLIZD=="NO")Mn=1
-         if(NRMLIZD=="YES")Mn=mean(response)
-         if(NRMLIZD=="NO")
+  for()
+  {
+    d=DATA.list.LIVEWT.c.daily[[s]]%>%
+      filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]] & FINYEAR%in%theseyears)
+    Terms=Predictors_daily
+    Continuous=Covariates.daily
+    colnames(d)=tolower(colnames(d))
+    Terms=tolower(Terms)
+    Continuous=tolower(Continuous)
+    Factors=Terms[!Terms%in%Continuous]
+    Terms=all.vars(Best.Model.daily[[s]])[-1]
+    d <- d%>%
+      dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+      mutate(cpue=catch.target/km.gillnet.hours.c)
+    d <- makecategorical(Factors[Factors%in%Terms],d)
+    
+    
+    #Best.Model.daily[[s]]
+    What="finyear+ vessel + month + depth + lat long"
+    mod<-bam(cpue ~ finyear+ s(vessel, bs = "re")+ 
+               s(month, k = 12,bs = "cc")+ s(mean.depth)+ s(long10.corner, lat10.corner),data=d,family='tw',method="fREML",discrete=TRUE)
+    
+    #2.Make predictions
+    lsmeas=pred.fun(mod=mod,biascor="NO",PRED="finyear")
+    
+    
+    #nominal
+    out.mean = d %>%
+      group_by(finyear) %>%
+      summarise(mean = mean(cpue),
+                n = length(cpue),
+                sd = sd(cpue)) %>%
+      mutate(lowCL = mean - 1.96*sd/sqrt(n),
+             uppCL = mean + 1.96*sd/sqrt(n)) %>%
+      data.frame
+    
+    out.delta.log = d %>%
+      mutate(cpue.target=cpue)%>%
+      group_by(finyear) %>%
+      summarise(n = length(cpue.target),
+                m = length(cpue.target[cpue.target>0]),
+                mean.lognz = mean(log(cpue.target[cpue.target>0])),
+                sd.lognz = sd(log(cpue.target[cpue.target>0]))) %>%
+      mutate(p.nz = m/n,
+             theta = log(p.nz)+mean.lognz+sd.lognz^2/2,
+             c = (1-p.nz)^(n-1),
+             d = 1+(n-1)*p.nz,
+             vartheta = ((d-c)*(1-c*d)-m*(1-c)^2)/(m*(1-c*d)^2)+
+               sd.lognz^2/m+sd.lognz^4/(2*(m+1)),
+             mean = exp(theta),
+             lowCL = exp(theta - 1.96*sqrt(vartheta)),
+             uppCL = exp(theta + 1.96*sqrt(vartheta))) %>%
+      as.data.frame
+    
+    
+    NRMLIZD="YES"
+    Y=as.numeric(substr(lsmeas$finyear,1,4))  
+    
+    hndl.crap='C:/Matias/Analyses/Catch and effort/Outputs/Paper/why dusky and sandbar daily so uncertain/'
+    fn.fig(paste(hndl.crap,Nms.sp[s],"_",What,sep=""),2000, 2400)
+    with(lsmeas,
          {
-           YMAX=max(response+1.96*SE/Mn)
-           YMIN=min(response-1.96*SE/Mn)
-         }
-         
-         if(NRMLIZD=="YES")
+           if(NRMLIZD=="NO")Mn=1
+           if(NRMLIZD=="YES")Mn=mean(response)
+           if(NRMLIZD=="NO")
+           {
+             YMAX=max(response+1.96*SE/Mn)
+             YMIN=min(response-1.96*SE/Mn)
+           }
+           
+           if(NRMLIZD=="YES")
+           {
+             YMAX=2
+             YMIN=0
+           }
+           
+           plot(Y-.1,response/Mn,col="orange",pch=19,cex=1.5,lwd=1.5,type='o',main=Nms.sp[s],xlab='financial year',
+                ylab='relative cpue',ylim=c(YMIN,YMAX))
+           segments(Y-.1,(response+1.96*SE)/Mn,
+                    Y-.1,(response-1.96*SE)/Mn,col="orange")
+         })
+    with(out.mean,
          {
-           YMAX=2
-           YMIN=0
-         }
-         
-         plot(Y-.1,response/Mn,col="orange",pch=19,cex=1.5,lwd=1.5,type='o',main=Nms.sp[s],xlab='financial year',
-              ylab='relative cpue',ylim=c(YMIN,YMAX))
-         segments(Y-.1,(response+1.96*SE)/Mn,
-                  Y-.1,(response-1.96*SE)/Mn,col="orange")
-       })
-  with(out.mean,
-       {
-         if(NRMLIZD=="NO")Mn=1
-         if(NRMLIZD=="YES")Mn=mean(mean)
-         points(Y,mean/Mn,col="grey60",pch=19,type='o')
-         segments(Y,(lowCL)/Mn,
-                  Y,(uppCL)/Mn,col="grey60")
-       })
-  with(out.delta.log,
-       {
-         if(NRMLIZD=="NO")Mn=1
-         if(NRMLIZD=="YES")Mn=mean(mean)
-         points(Y+.15,mean/Mn,col="grey80",pch=19,type='o')
-         segments(Y+.15,(lowCL)/Mn,
-                  Y+.15,(uppCL)/Mn,col="grey80")
-       })
-  legend('topright',c("lsmeans","nominal.mean","nominal.delta.log"),
-         lty=1,col=c('orange',"grey50","grey80"),bty='n')
-  dev.off()
+           if(NRMLIZD=="NO")Mn=1
+           if(NRMLIZD=="YES")Mn=mean(mean)
+           points(Y,mean/Mn,col="grey60",pch=19,type='o')
+           segments(Y,(lowCL)/Mn,
+                    Y,(uppCL)/Mn,col="grey60")
+         })
+    with(out.delta.log,
+         {
+           if(NRMLIZD=="NO")Mn=1
+           if(NRMLIZD=="YES")Mn=mean(mean)
+           points(Y+.15,mean/Mn,col="grey80",pch=19,type='o')
+           segments(Y+.15,(lowCL)/Mn,
+                    Y+.15,(uppCL)/Mn,col="grey80")
+         })
+    legend('topright',c("lsmeans","nominal.mean","nominal.delta.log"),
+           lty=1,col=c('orange',"grey50","grey80"),bty='n')
+    dev.off()
+  }
+
   
 }
 

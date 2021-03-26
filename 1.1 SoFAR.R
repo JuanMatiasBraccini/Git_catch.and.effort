@@ -10,6 +10,7 @@ library(gapminder)
 library(tidyr)
 library(dplyr)
 library(RColorBrewer)
+library(Hmisc)
 source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R")
 
 #note:  TDGDLF is defined as METHOD= "GN" or "LL" and non-estuaries and south of 26 S. 
@@ -33,7 +34,7 @@ source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R")
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)
 
-Current.yr="2018-19"
+Current.yr="2019-20"
 
 Percent.fin.of.livewt=0.03
 TDGDLF.lat.range=c(-26,-40)
@@ -491,30 +492,39 @@ Table1.SoFar.Scalies[Table1.SoFar.Scalies==0] = "<0.1"
 #      manually scan comments for matching what was reported in columns and in comments
 setwd(handle.Sofar)
 
+these.yrs=sort(unique(Data.monthly$FINYEAR))
+these.yrs=these.yrs[1:match(Current.yr,these.yrs)]
 fun.Tab2.SoFaR=function(Dat)
 {
-  Dat$finyear=as.character(Dat$finyear)
-  Dat$Status=as.character(Dat$Status)
-  Dat$Status=with(Dat,ifelse(Status=="a","A",
-                             ifelse(Status=="d","D",Status)))
-  Dat$Ali.Ded.yr=with(Dat,paste(finyear,Status))
+  Dat=Dat%>%
+    mutate(Status=ifelse(Status=="a","A",
+                  ifelse(Status=="d","D",Status)),
+           Ali.Ded.yr=paste(finyear,Status),
+           CommonName=ifelse(CommonName=='Muttonbird','Shearwater',CommonName))%>%
+    filter(finyear%in%these.yrs) 
   
-  TABLA=aggregate(Number~SpeciesCode+Ali.Ded.yr,data=Dat,sum,na.rm=T)
-  Species.id=Dat[,match(c("SpeciesCode","DataEntryName"),names(Dat))]
-  Species.id=Species.id[!(duplicated(Species.id$SpeciesCode)),]
-  
-  wide <- reshape(TABLA,v.names="Number",timevar="Ali.Ded.yr",idvar="SpeciesCode",direction="wide")
-  wide=wide[order(wide$SpeciesCode),]
-  wide=merge(Species.id,wide,by="SpeciesCode",all.x=T)
-  wide=wide[-match("SpeciesCode",names(wide))]
-  names(wide)=c("Species",paste("alive.",unique(Dat$finyear),sep=""),paste("dead.",unique(Dat$finyear),sep=""))
-  return(wide)
+  TABLA=Dat%>%
+        group_by(SpeciesCode,Ali.Ded.yr)%>%
+        summarise(Number=sum(Number,na.rm=T))%>%
+        spread(Ali.Ded.yr,Number,fill='')%>%
+        left_join(Dat%>%distinct(SpeciesCode,CommonName),by='SpeciesCode')%>%
+        data.frame%>%
+        arrange(SpeciesCode)%>% 
+        relocate(CommonName, .after = SpeciesCode)
+  oldnames=colnames(TABLA)[-(1:2)]
+  newnames=gsub("X","",oldnames)
+  newnames=gsub(x = newnames, pattern = "A", replacement = "Alive")
+  newnames=gsub(x = newnames, pattern = "D", replacement = "Dead")
+  TABLA=TABLA%>%
+    rename_at(vars(oldnames), ~ newnames)%>%
+    rename(Species=CommonName)%>%
+    mutate(Species=capitalize(tolower(Species)))
+
+  return(TABLA)
 }
 
-TEPS.WC.SC=subset(TEPS.current,fishery%in%c("SGL","WCGL") & finyear==Current.yr)
+TEPS.WC.SC=subset(TEPS.current,fishery%in%c("SGL","WCGL"))
 
-#Fix typo. change whales to whaler sharks
-TEPS.WC.SC$SpeciesCode=with(TEPS.WC.SC,ifelse(DataEntryName=="DUSKY WHALER OVERSIZE",18003,SpeciesCode))
 
 #review comments in case reported in comments and not in logbook columns
 if(!file.exists("scan.teps.csv"))   
@@ -522,37 +532,45 @@ if(!file.exists("scan.teps.csv"))
   # look at comments and see if comments match what is recorded in number; 
   #     if not, maybe it is a new interaction record.
   # Remember that comments are duplicated so only use unique record. 
-  Scan.current=TEPS.WC.SC[,match(c("DailySheetNumber","Status","Number","DataEntryName","Comments"),names(TEPS.WC.SC))]
-  Scan.current=subset(Scan.current,!is.na(Comments))                                                                                                 
-  Scan.current=Scan.current[order(Scan.current$DailySheetNumber),]
+  Scan.current=TEPS.WC.SC%>%
+                filter(finyear==Current.yr & !is.na(Comments))%>%
+    dplyr::select(DailySheetNumber,Status,Number,CommonName,RSCommonName,Comments)%>%
+    arrange(DailySheetNumber)
   write.csv(Scan.current,"scan.teps.csv",row.names=F) 
   cat(paste("scan.teps.csv FILE LOCATED IN",getwd()))
 }
 
+#remove sightings from interactions
 Sighting.only=which(grepl("sighting", tolower(TEPS.WC.SC$Comments)))
-TEPS.WC.SC.without.sightings=TEPS.WC.SC
-if(length(Sighting.only)>0) TEPS.WC.SC.without.sightings=TEPS.WC.SC[-Sighting.only,]
-TEP.table=fun.Tab2.SoFaR(TEPS.WC.SC.without.sightings)
-TEP.table$Species=with(TEP.table,ifelse(Species=="WHITE POINTER","WHITE SHARK",Species))  
+if(length(Sighting.only)>0) TEPS.WC.SC=TEPS.WC.SC[-Sighting.only,]
 
-#remove current in case overwrote historic
-II=match(paste(c("alive.","dead."),paste(substr(Current.yr,1,4),substr(Current.yr,6,7),sep="."),sep=""),colnames(TEPS.pre.current))
-if(sum(II,na.rm=T)>0) TEPS.pre.current=TEPS.pre.current[,-II]
-
-id=which(!(TEPS.pre.current$Species%in%TEP.table$Species))
-Add.this=as.character(TEPS.pre.current$Species[id])
-Add.this=data.frame(Species=Add.this,Alive=NA,Dead=NA)
-names(Add.this)[2:3]=c(names(TEP.table)[2],names(TEP.table)[3])
-TEP.table=rbind(TEP.table,Add.this)
-TEP.table=TEP.table[order(TEP.table$Species),]
-TEP.table=subset(TEP.table,!(Species=="DUSKY WHALER OVERSIZE"))  #not reporting oversized whalers
-TEPS=merge(TEPS.pre.current,TEP.table,by="Species")
-TEPS[is.na(TEPS)] = ""
+#tabulate interactions
+TEPS=fun.Tab2.SoFaR(Dat=TEPS.WC.SC)
+  
+#reconcile species
+TEPS=TEPS%>%
+  mutate(Species=case_when(SpeciesCode==37008001 ~ "Greynurse shark",
+                           SpeciesCode==37010003 ~ "White shark",
+                           SpeciesCode==37018001 ~ "Bronze whaler",
+                           SpeciesCode==37018003 ~ "Dusky shark",
+                           SpeciesCode==37018022 ~ "Tiger shark",
+                           SpeciesCode==37025000 ~ "Sawfishes",
+                           SpeciesCode==37041004 ~ "Giant manta ray",
+                           SpeciesCode==37990030 ~ "Stingrays",
+                           SpeciesCode==40041050 ~ "Shearwaters",
+                           SpeciesCode==41131001 ~ "New zealand fur seal",
+                           SpeciesCode==41131005 ~ "Australian Sea lion",
+                           SpeciesCode==39125000 ~ "Sea snakes",
+                           TRUE~Species))
+                                           
+#remove whalers
+TEPS.whalers=TEPS%>%filter(SpeciesCode%in%37018001:37018025)
+TEPS=TEPS%>%filter(!SpeciesCode%in%37018001:37018025)
 
 
 #Export tables
 
-#Main features
+  #Main features
 FIN.yr.slash=paste(substr(Current.yr,1,4),"/",substr(Current.yr,6,7),sep="")
 MainFeatures$SPECIES=as.character(MainFeatures$SPECIES)
 MainFeatures.doc=rbind(MainFeatures[1:3,],MainFeatures)
@@ -631,7 +649,8 @@ write.table(Table1.SoFar.Effort,"2.Table1.SoFar.Effort.csv",sep = ",",row.names 
 if(file.exists("scan.teps.csv"))
 {
   write.table(TEPS,"3.Table2.TEPS.csv",sep = ",",row.names = F)
-  write.csv(TEPS,"C:/Matias/Data/Catch and Effort/Historic/Historic.TEPS.res.csv",row.names = F)  
+  write.table(TEPS.whalers,"3.TEPS_whalers.csv",sep = ",",row.names = F)
+ #  write.csv(TEPS,"C:/Matias/Data/Catch and Effort/Historic/Historic.TEPS.res.csv",row.names = F)  
 }
 
 
@@ -888,6 +907,37 @@ mtext("Financial year",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
 mtext("RELATIVE CPUE",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
 dev.off()
 
+#Number of trips using longline or gillnet by year
+a=Effort.monthly%>%
+  filter(METHOD%in%c("LL","GN"))%>%
+  distinct(FINYEAR,Same.return,METHOD)%>%
+  mutate(N=1,
+         Yr=as.numeric(substr(FINYEAR,1,4)))
+b=Effort.daily%>%
+  filter(method%in%c("LL","GN"))%>%
+  distinct(finyear,Same.return,method)%>%
+  mutate(N=1,
+         Yr=as.numeric(substr(finyear,1,4)))%>%
+  rename(METHOD=method,
+         FINYEAR=finyear)
+
+jpeg(file="Proportion.trips.GN.LL.jpeg",width=2400,height=2200,units="px",res=300)
+rbind(a,b)%>% 
+  group_by(Yr,METHOD)%>%
+  summarise(N=sum(N))%>%
+  mutate(METHOD=case_when(METHOD=="GN"~"Gillnet",
+                          METHOD=="LL"~"Longline"))%>%
+  ggplot(aes(fill=METHOD, y=N, x=Yr)) + 
+  geom_bar(position="stack", stat="identity")+
+  ylab("Number of trips")+
+  xlab("Financial year")+
+  theme(axis.text= element_text( size = 14),
+        axis.title=element_text( size = 20),
+        legend.text = element_text(size = 13),
+        legend.title=element_blank(),
+        legend.position="top",
+        plot.margin=unit(c(.5,.5,.5,.5),"cm"))
+dev.off()
 
 # For ERA -----------------------------------------------------------------
 
@@ -919,7 +969,7 @@ Data.monthly%>%
   ggplot(aes(Yr,Catch.tons))+
   geom_line(aes(colour=Names),size=1.5)+
   ylab("Catch (tonnes live wt.)")+
-  xlab("Finacial year")+
+  xlab("Financial year")+
   theme(axis.text= element_text( size = 14),
         axis.title=element_text( size = 20),
         legend.text = element_text(size = 13),

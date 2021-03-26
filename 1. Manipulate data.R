@@ -197,7 +197,7 @@ if(!is.na(match("DSNo",names(Comments.TEPS.current))))
 }
 
 TEPS.current=TEPS.current%>%left_join(Comments.TEPS.current,
-                                      by=c("DailySheetNumber","fishery","vessel","year","month"))
+                                      by=c("DailySheetNumber"="DSNo","fishery","vessel","year","month"))
 if(!is.na(match("financial year",names(TEPS.current))))
 {
   names(TEPS.current)[match("financial year",names(TEPS.current))]="finyear"
