@@ -1986,6 +1986,7 @@ if(do_cluster=="YES")
   #       reduce the computation time in the case of large data set.
   Store.cluster=vector('list',length(SP.list)) 
   names(Store.cluster)=names(SP.list)
+  check.clustrbl="NO"
   
   #Using catch rates of all species
   N.clus=c(2,2,2,2)  #from initial optimum number
@@ -2078,7 +2079,7 @@ if(do_cluster=="YES")
   }
   
   
-  #Using aggregated catch by main species #Not used
+  #Using aggregated catch by main species             #Not used
   Clus.vars=c("Catch.Target","Catch.Gummy","Catch.Whiskery","Catch.Dusky","Catch.Sandbar",
               "Catch.Groper","Catch.Snapper","Catch.Blue_mor")
   Tar.clus.vars=c("Catch.Whiskery","Catch.Gummy","Catch.Dusky","Catch.Sandbar")
