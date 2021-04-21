@@ -11,7 +11,9 @@ library(tidyr)
 library(dplyr)
 library(RColorBrewer)
 library(Hmisc)
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R")
+handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
+
+source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R"))
 
 #note:  TDGDLF is defined as METHOD= "GN" or "LL" and non-estuaries and south of 26 S. 
 #       'Other fisheries' are extracted from 'Other.fishery.catch' (this includes 'Data.monthly'  
@@ -40,7 +42,7 @@ Percent.fin.of.livewt=0.03
 TDGDLF.lat.range=c(-26,-40)
 
 #bring in data from 1.Manipulate data.R
-setwd("C:/Matias/Analyses/Data_outs")
+setwd(handl_OneDrive("Analyses/Data_outs"))
 
 Data.monthly=read.csv("Data.monthly.csv")
 daily.other=read.csv("Data.daily.other.fisheries.csv")
@@ -60,7 +62,7 @@ Effort.daily=read.csv("Effort.daily.csv")
 LL.equiv.Eff.days.zone=read.csv("LL.equiv.Eff.days.zone.csv")
 
 
-All.species.names=read.csv("C:/Matias/Data/Species.code.csv")
+All.species.names=read.csv(handl_OneDrive("Data/Species.code.csv"))
 Ray.species=25000:31000
 Elasmo.species=5001:31000
 Gummy=17001;Dusky_whaler=c(18003,18001);Whiskery=17003;Sandbar=18007;Hammerheads=19000;
@@ -112,7 +114,7 @@ Catch.range.key.species=data.frame(SPECIES=c("Gummy","Whiskery","Bronzy.Dusky","
 
 
   
-handle.Sofar=paste("C:/Matias/Analyses/Catch and effort/State of fisheries/",Current.yr,sep="")
+handle.Sofar=paste(handl_OneDrive("Analyses/Catch and effort/State of fisheries/"),Current.yr,sep="")
 if(!file.exists(handle.Sofar))dir.create(handle.Sofar)
 
 Display.current.yr=paste(substr(Current.yr,1,4),"/",substr(Current.yr,6,7),sep="")
@@ -650,7 +652,7 @@ if(file.exists("scan.teps.csv"))
 {
   write.table(TEPS,"3.Table2.TEPS.csv",sep = ",",row.names = F)
   write.table(TEPS.whalers,"3.TEPS_whalers.csv",sep = ",",row.names = F)
- #  write.csv(TEPS,"C:/Matias/Data/Catch and Effort/Historic/Historic.TEPS.res.csv",row.names = F)  
+ #  write.csv(TEPS,handl_OneDrive("Data/Catch and Effort/Historic/Historic.TEPS.res.csv"),row.names = F)  
 }
 
 
@@ -806,7 +808,7 @@ dev.off()
 
 #Figures 5-8. Standardised cpue (zones combined)
   #read in data
-HNDL="C:/Matias/Analyses/Data_outs/"
+HNDL=handl_OneDrive("Analyses/Data_outs/")
 #Whiskery
 whis.mon=read.csv(paste(HNDL,"Whiskery shark/Whiskery Shark.annual.abundance.basecase.monthly_relative.csv",sep=""),stringsAsFactors=F)
 whis.daily=read.csv(paste(HNDL,"Whiskery shark/Whiskery Shark.annual.abundance.basecase.daily_relative.csv",sep=""),stringsAsFactors=F)
@@ -1069,7 +1071,7 @@ do.AMM=FALSE
 if(do.AMM)
 {
   library(stringr)
-  Management=read.csv('C:/Matias/Management/Sharks/Timeline management measures/Management_timeline.csv')
+  Management=read.csv(handl_OneDrive('Management/Sharks/Timeline management measures/Management_timeline.csv'))
   Management=Management%>%
   mutate(date=as.POSIXct(StartDate,format="%d/%m/%Y"),
          finyear=decimal_date(date))

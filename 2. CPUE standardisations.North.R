@@ -21,14 +21,15 @@ library(mvtnorm)
 library(doParallel)
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)   
+handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
 
 
 ##############--- 1. DATA SECTION ---###################
 
-fn.in=function(NM)read.csv(paste('C:/Matias/Analyses/Data_outs/',NM,sep=""))
+fn.in=function(NM)read.csv(paste(handl_OneDrive('Analyses/Data_outs/'),NM,sep=""))
 Effort=fn.in(NM='Effort.monthly.NSF.csv')
 Data=fn.in(NM='Data.monthly.NSF.csv')
-Species.names=read.csv('C:/Matias/Data/Species_names_shark.only.csv')
+Species.names=read.csv(handl_OneDrive('Data/Species_names_shark.only.csv'))
 
 ##############--- 2. PARAMETERS SECTION ---###################
 Min.rec.per.yr=10  #minimum records per year
@@ -300,12 +301,12 @@ for (s in 1:length(Keep.sp))
   NM=ifelse(NM=='Blacktips','Blacktip sharks',
      ifelse(NM=='Spot tail shark','Spot-tail shark',
             NM))
-  write.csv(cpue.stand,paste("C:/Matias/Analyses/Data_outs/",NM,'/',NM,".annual.abundance.NSF_relative.csv",sep=""),row.names=F) 
+  write.csv(cpue.stand,paste(handl_OneDrive("Analyses/Data_outs/"),NM,'/',NM,".annual.abundance.NSF_relative.csv",sep=""),row.names=F) 
 }
 
 
 ##############--- 5. PLOT INDEX ---###################
-setwd("C:/Matias/Analyses/Catch and effort/Outputs/NSF")
+setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/NSF"))
 smart.par=function(n.plots,MAR,OMA,MGP) return(par(mfrow=n2mfrow(n.plots),mar=MAR,oma=OMA,las=1,mgp=MGP))
 
 

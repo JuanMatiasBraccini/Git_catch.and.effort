@@ -1,8 +1,9 @@
 
 #Script for evaluating spatial catch
 
+handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
 
-setwd("C:/Matias/Analyses/Catch and effort")
+setwd(handl_OneDrive("Analyses/Catch and effort"))
 library(PBSmapping)   #for polygon
 
 #DATA SECTION
@@ -17,13 +18,13 @@ Depth.catch=read.csv("Daily.log.depth.csv")
 
 #Onboard observing
     #Sharks data base
-Observer=read.csv("C:/Matias/Analyses/Size and sex patterns/DATA.csv")
+Observer=read.csv(handl_OneDrive("Analyses/Size and sex patterns/DATA.csv"))
 
 
 #SST
-Temp=read.csv("C:/Matias/Data/SST.nice.format.csv")
+Temp=read.csv(handl_OneDrive("Data/SST.nice.format.csv"))
 
-PerthIs=read.table("C:/Matias/Data/Mapping/WAislandsPointsNew.txt", header=T) #function for reading txt file
+PerthIs=read.table(handl_OneDrive("Data/Mapping/WAislandsPointsNew.txt"), header=T) #function for reading txt file
 Rottnest.Is=subset(PerthIs,ID%in%c("ROTT1"))
 Garden.Is=subset(PerthIs,ID%in%c("ROTT3"))
 
@@ -49,7 +50,7 @@ fn.plot.Temp=function()
   axis(1,seq(1,nrow(Tem1),12),unique(Tem1$Year),tck=-0.035)
   axis(1,1:nrow(Tem1),F,tck=-0.01)
   axis(1,seq(1,nrow(Tem1),6),F,tck=-0.02)
-  mtext("Mean temperature (°C)",2,line=3,las=3,cex=1.25)
+  mtext("Mean temperature (?C)",2,line=3,las=3,cex=1.25)
 }
 
 
@@ -191,7 +192,7 @@ col2="lightblue"
 #col1="olivedrab1"
 #col2="olivedrab4"
   
-setwd("C:/Matias/Analyses/Spatial catch")
+setwd(handl_OneDrive("Analyses/Spatial catch"))
 
 #Sandbar
 
@@ -202,9 +203,9 @@ dat$Yr.Mn=with(dat,paste(YEAR.c,MONTH))
 tiff(file="Sandbar.range.tiff",width = 2400, height = 2000,units = "px", res = 300,compression = "lzw")
 par(mfcol=c(2,1),mai=c(.2,.6,.3,.05),oma=c(3,3,.1,.1),las=1)
 fun.long.dist(dat,'range',"LONG",col1,col2,"Yes")
-mtext("Longitude (°E)",2,line=3,las=3,cex=2)
+mtext("Longitude (?E)",2,line=3,las=3,cex=2)
 fun.lat.dist(dat,'range',"LAT",col1,col2,"No")
-mtext("Latitude (°S)",2,line=3,las=3,cex=2)
+mtext("Latitude (?S)",2,line=3,las=3,cex=2)
 mtext("Year",1,outer=T,line=2,cex=2)
 dev.off()
 
@@ -213,10 +214,10 @@ tiff(file="Sandbar.raw.max.lat.long.tiff",width = 2400, height = 2000,units = "p
 par(mfcol=c(3,1),mai=c(.2,.5,.3,.05),oma=c(3,3,.1,.1),las=1)
 fun.long.dist(subset(Data.monthly,SPECIES==18007 & METHOD=="GN" & YEAR.c>2005),
               'raw',"LONG",col1,col2,"Yes")
-mtext("Longitude (°E)",2,line=3,las=3,cex=1.25)
+mtext("Longitude (?E)",2,line=3,las=3,cex=1.25)
 fun.lat.dist(subset(Data.monthly,SPECIES==18007 & METHOD=="GN" & YEAR.c>2005),
              'raw',"LAT",col1,col2,"No")
-mtext("Latitude (°S)",2,line=3,las=3,cex=1.25)
+mtext("Latitude (?S)",2,line=3,las=3,cex=1.25)
 fn.plot.Temp()
 mtext("Year",1,outer=T,line=2,cex=2)
 dev.off()
@@ -225,10 +226,10 @@ dev.off()
 par(mfcol=c(3,1),mai=c(.2,.6,.3,.05),oma=c(3,3,.1,.1),las=1)
 fun.long.dist(subset(Data.monthly,SPECIES==18007 & METHOD=="GN" & YEAR.c>2005),
               'standardised',"LONG",col1,col2,"Yes")
-mtext("Longitude (°E)",2,line=3,las=3,cex=2)
+mtext("Longitude (?E)",2,line=3,las=3,cex=2)
 fun.lat.dist(subset(Data.monthly,SPECIES==18007 & METHOD=="GN" & YEAR.c>2005),
              'standardised',"LAT",col1,col2,"No")
-mtext("Latitude (°S)",2,line=3,las=3,cex=2)
+mtext("Latitude (?S)",2,line=3,las=3,cex=2)
 fn.plot.Temp()
 mtext("Year",1,outer=T,line=2,cex=2)
 
@@ -242,9 +243,9 @@ dat$Yr.Mn=with(dat,paste(YEAR.c,MONTH))
 tiff(file="Dusky.range.tiff",width = 2400, height = 2000,units = "px", res = 300,compression = "lzw")
 par(mfcol=c(2,1),mai=c(.2,.6,.3,.05),oma=c(3,3,.1,.1),las=1)
 fun.long.dist(dat,'range',"LONG",col1,col2,"Yes")
-mtext("Longitude (°E)",2,line=3,las=3,cex=2)
+mtext("Longitude (?E)",2,line=3,las=3,cex=2)
 fun.lat.dist(dat,'range',"LAT",col1,col2,"No")
-mtext("Latitude (°S)",2,line=3,las=3,cex=2)
+mtext("Latitude (?S)",2,line=3,las=3,cex=2)
 mtext("Year",1,outer=T,line=2,cex=2)
 dev.off()
 
@@ -254,10 +255,10 @@ tiff(file="Dusky.raw.max.lat.long.tiff",width = 2400, height = 2000,units = "px"
 par(mfcol=c(3,1),mai=c(.2,.5,.3,.05),oma=c(3,3,.1,.1),las=1)
 fun.long.dist(subset(Data.monthly,SPECIES==18003 & METHOD=="GN" & YEAR.c>2005),
               'raw',"LONG",col1,col2,"Yes")
-mtext("Longitude (°E)",2,line=3,las=3,cex=1.25)
+mtext("Longitude (?E)",2,line=3,las=3,cex=1.25)
 fun.lat.dist(subset(Data.monthly,SPECIES==18003 & METHOD=="GN" & YEAR.c>2005),
              'raw',"LAT",col1,col2,"No")
-mtext("Latitude (°S)",2,line=3,las=3,cex=1.25)
+mtext("Latitude (?S)",2,line=3,las=3,cex=1.25)
 fn.plot.Temp()
 mtext("Year",1,outer=T,line=2,cex=2)
 dev.off()
@@ -307,8 +308,8 @@ fn.map=function(PLY,Blks)
     polygon(c(l[3],l[4],l[4],l[3]),c(l[2],l[2],l[1],l[1]),col=3)
     text(mean(l[3:4]),mean(l[1:2]),Blks[x])
   }
-  mtext("Latitude (ºS)",side=2,line=3,font=1,las=0,cex=1.5)
-  mtext("Longitude (ºE)",side=1,line=3,font=1,las=0,cex=1.5)
+  mtext("Latitude (?S)",side=2,line=3,font=1,las=0,cex=1.5)
+  mtext("Longitude (?E)",side=1,line=3,font=1,las=0,cex=1.5)
     
 }
 
@@ -367,7 +368,7 @@ fn.prop.ktc.all=function(dat,do3D,N)
     Matrix.r=Matrix.r[order(Matrix.r$MONTH),]
     z=as.matrix(Matrix.r[,c(2:ncol(Matrix.r))])
     persp(x=Matrix.r$MONTH,y=LGs,z, theta = 40,
-          phi = 30, expand = 0.8, col = "cadetblue",ylab="Longitude (°E)",
+          phi = 30, expand = 0.8, col = "cadetblue",ylab="Longitude (?E)",
           xlab="Month",zlab="Proportion of annual catch", ticktype = "detailed",
           cex.axis=1,cex.lab=1.55,border="cadetblue2",zlim=c(0,1))
   }
@@ -380,7 +381,7 @@ fn.prop.ktc.all=function(dat,do3D,N)
       a=subset(Prop,Long==LGs[i])
 #      plot(c(1,12),c(0,max(a$stand)),col="transparent",cex.main=1.5,
       plot(c(1,12),c(0,1),col="transparent",cex.main=1.5,
-           ylab="",xlab="",main=paste(LGs[i],"-",(LGs[i]+1),"° East",sep=""),cex.axis=1.3)    
+           ylab="",xlab="",main=paste(LGs[i],"-",(LGs[i]+1),"? East",sep=""),cex.axis=1.3)    
       lines(a$MONTH,a$stand,lwd=3,col=col1)
     }
   }
@@ -460,7 +461,7 @@ fn.depth=function(dat)
   Matrix.r=Matrix.r[order(Matrix.r$month),]
   z=as.matrix(Matrix.r[,c(2:ncol(Matrix.r))])
   persp(x=Matrix.r$month,y=sort(unique(d1$LongDeg)),z, theta = 40,
-        phi = 30, expand = 0.8, col = "cadetblue",ylab="Longitude (°E)",
+        phi = 30, expand = 0.8, col = "cadetblue",ylab="Longitude (?E)",
         xlab="Month",zlab="Depth (m)", ticktype = "detailed",
         cex.axis=1,cex.lab=1.55,border="cadetblue2")
   mtext("Depth (m)",2,outer=T,las=3,cex=2,line=-2.5)
@@ -493,7 +494,7 @@ fn.obs.long=function(dat,METHOD)
 #   Matrix.r=Matrix.r[order(Matrix.r$Month),]
 #   z=as.matrix(Matrix.r[,c(2:ncol(Matrix.r))])
 #   persp(x=Matrix.r$Month,y=sort(unique(d1$Long.round)),z, theta = 40,
-#         phi = 30, expand = 0.8, col = "cadetblue",ylab="Longitude (°E)",
+#         phi = 30, expand = 0.8, col = "cadetblue",ylab="Longitude (?E)",
 #         xlab="Month",zlab="Depth (m)", ticktype = "detailed",
 #         cex.axis=1,cex.lab=1.55,border="cadetblue2")
    mtext("FL (cm)",2,outer=T,las=3,cex=2,line=-3)

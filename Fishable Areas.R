@@ -7,8 +7,9 @@ library(PBSmapping)    	#needed to obtain maps
 par.default=par()
 
 
+handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
 
-setwd("C:/Matias/Data/Catch and Effort")  # working directory
+setwd(handl_OneDrive("Data/Catch and Effort"))  # working directory
 
 
 
@@ -49,8 +50,8 @@ Data.daily.2012.13=subset(Data.daily.2012.13,finyear=="2012-13")
 
 #bathymetry data
 #    bathymetry data downloaded from http://topex.ucsd.edu/cgi-bin/get_data.cgi (Topography option)
-Bathymetry_120=read.table("C:/Matias/Data/Mapping/get_data112_120.cgi")
-Bathymetry_138=read.table("C:/Matias/Data/Mapping/get_data120.05_138.cgi")
+Bathymetry_120=read.table(handl_OneDrive("Data/Mapping/get_data112_120.cgi"))
+Bathymetry_138=read.table(handl_OneDrive("Data/Mapping/get_data120.05_138.cgi"))
 Bathymetry=rbind(Bathymetry_120,Bathymetry_138)
 
 
@@ -118,7 +119,7 @@ Data.daily$blockx=with(Data.daily,ifelse(blockx%in%c(96021),25120,     #Shark Ba
 Data.daily$blockx=as.numeric(substr(Data.daily$blockx,1,4))
 
 
-setwd("C:/Matias/Analyses/Catch and effort/Outputs/Fishable Area")
+setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/Fishable Area"))
 
 #Histogram by species
 fun.hist=function(Sp,blk,Spname)

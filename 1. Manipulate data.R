@@ -83,14 +83,15 @@ library(rgdal)
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240,dplyr.summarise.inform = FALSE) 
 par.default=par()
 
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R")
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/send.emails.R")
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_Population.dynamics/fn.fig.R")
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Smart_par.R")
+handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
+source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R"))
+source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R"))
+source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/send.emails.R"))
+source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_Population.dynamics/fn.fig.R"))
+source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/Smart_par.R"))
 fn.scale=function(x,scaler) ((x/max(x,na.rm=T))^0.5)*scaler
 
-setwd("C:/Matias/Data/Catch and Effort")  # working directory
+setwd(handl_OneDrive("Data/Catch and Effort"))  # working directory
 
 
 
@@ -221,30 +222,30 @@ PRICES=read.csv(paste(Current.yr.dat,"/PriceComparison.csv",sep=""),stringsAsFac
 
 #7. bathymetry data
 #    bathymetry data downloaded from http://topex.ucsd.edu/cgi-bin/get_data.cgi (Topography option)
-Bathymetry_120=read.table("C:/Matias/Data/Mapping/get_data112_120.cgi")
-Bathymetry_138=read.table("C:/Matias/Data/Mapping/get_data120.05_138.cgi")
+Bathymetry_120=read.table(handl_OneDrive("Data/Mapping/get_data112_120.cgi"))
+Bathymetry_138=read.table(handl_OneDrive("Data/Mapping/get_data120.05_138.cgi"))
 Bathymetry=rbind(Bathymetry_120,Bathymetry_138)
 
 
 #8. Block10 locations
-BlOCK_10=read.csv("C:/Matias/Data/Mapping/Blocks_10NM.csv")
+BlOCK_10=read.csv(handl_OneDrive("Data/Mapping/Blocks_10NM.csv"))
 
 
 #9. All block 60 lat and long, including estuaries
-BLOCK_60=read.csv("C:/Matias/Data/Mapping/Block60s.csv")
+BLOCK_60=read.csv(handl_OneDrive("Data/Mapping/Block60s.csv"))
 
 
 #10. Weight ranges
-Wei.range=read.csv("C:/Matias/Data/Length_Weights/Data.Ranges.csv")
-Wei.range.names=read.csv("C:/Matias/Data/Length_Weights/Species.names.csv")
+Wei.range=read.csv(handl_OneDrive("Data/Length_Weights/Data.Ranges.csv"))
+Wei.range.names=read.csv(handl_OneDrive("Data/Length_Weights/Species.names.csv"))
 
 
 #11. Conditions
-Conditions=read.csv("C:/Matias/Data/Catch and Effort/Conditions.csv")
+Conditions=read.csv(handl_OneDrive("Data/Catch and Effort/Conditions.csv"))
 
 
 #12. Rory's manual changes to netlen and nlines
-Rory_Alex_net_val=read.csv("C:/Matias/Data/Catch and Effort/Rory_Alex_net/Book2.csv",stringsAsFactors=F)
+Rory_Alex_net_val=read.csv(handl_OneDrive("Data/Catch and Effort/Rory_Alex_net/Book2.csv"),stringsAsFactors=F)
 
 
 #13. ASL block10 closures
@@ -419,7 +420,7 @@ yr=as.numeric(substr(Current.yr,1,4))
 #Quick check to determine samples size catch age composition
 if(explore.Catch.compo=="YES")
 {
-  hnd.compo="C:/Matias/Fieldwork and workplans/Catch age composition/"
+  hnd.compo=handl_OneDrive("Fieldwork and workplans/Catch age composition/")
     #Albany
   fun.sample.catch.age.com=function(d)
   {
@@ -828,7 +829,7 @@ if(do.financial.ass=="YES")
   A=A[,match(c("vessel","BoatName","MastersName","crew","fdays.c" ,"landwt","Revenue_annual","Revenue_per_fishing_day","Costs"),names(A))]
   names(A)[match(c("crew","fdays.c","landwt","Revenue_annual","Revenue_per_fishing_day"),names(A))]=
     c("crew_average","fishing_days_annual","livewt_annual(kg)","Revenue_annual (AUD$)","Revenue_per_fishing_day (AUD$)")
-  write.csv(A,paste("C:/Matias/Analyses/Catch and effort/Annual.revenue.",Current.yr,".csv",sep=""),row.names=F)
+  write.csv(A,paste(handl_OneDrive("Analyses/Catch and effort/Annual.revenue."),Current.yr,".csv",sep=""),row.names=F)
   
 }
 
@@ -1301,7 +1302,8 @@ Effort.daily$LONG=Effort.daily$LongDeg+(Effort.daily$LongMin/60)
 Effort.daily=Effort.daily[,-match(c("LatDeg","LongDeg","LatMin","LongMin"),names(Effort.daily))]
 
 #Export reported depth data
-write.csv(subset(Data.daily,species%in%c(17003,17001,18003,18007)),"C:/Matias/Analyses/Data_outs/Daily.log.depth.csv",row.names=F)
+write.csv(subset(Data.daily,species%in%c(17003,17001,18003,18007)),
+          handl_OneDrive("Analyses/Data_outs/Daily.log.depth.csv"),row.names=F)
 
 
 # B.1. Catch Inspections             
@@ -1324,7 +1326,7 @@ Data.current.Sofar=Data.current.Sofar[,-match(c("LatMin","LongMin"),names(Data.c
 if(Inspect.New.dat=="YES")
 {
   #create file and path for checking new data
-  handle=paste("C:/Matias/Data/Catch and Effort/Check_these_vars/Daily/",Current.yr,sep="")
+  handle=paste(handl_OneDrive("Data/Catch and Effort/Check_these_vars/Daily/"),Current.yr,sep="")
   if(!file.exists(handle)) dir.create(handle)
   
   Top.mon.ktch=mean(c(15000,20000))
@@ -1565,7 +1567,7 @@ Mn.wght.dat$Keep=with(Mn.wght.dat,
                       ifelse(is.na(livewt) | livewt<=0,"NO","YES"))))))                     
 Mn.wght.dat=subset(Mn.wght.dat,Keep=="YES")               
 Mn.wght.dat=Mn.wght.dat[,-match(c("Avrg.w","Keep"),names(Mn.wght.dat))]
-write.csv(Mn.wght.dat,file ="C:/Matias/Analyses/Catch and effort/Logbook.data.mean.weight.csv")
+write.csv(Mn.wght.dat,file =handl_OneDrive("Analyses/Catch and effort/Logbook.data.mean.weight.csv"))
 
 
 #Fix weights with NA weight, zero weight or condition 'SC' (self consumed) but with nfish
@@ -1672,12 +1674,12 @@ TDGDLF.vessels.daily=subset(Data.daily, METHOD=="GN"& LAT<=(-26) & Estuary=="NO"
 TDGDLF.vessels=c(as.character(TDGDLF.vessels.month$VESSEL),
                  as.character(TDGDLF.vessels.daily$VESSEL))
 TDGDLF.vessels=data.frame(VESSEL=sort(unique(TDGDLF.vessels)))
-write.csv(TDGDLF.vessels,"C:/Matias/Data/Fishing power/TDGDLF.vessels.csv",row.names=F)
+write.csv(TDGDLF.vessels,handl_OneDrive("Data/Fishing power/TDGDLF.vessels.csv"),row.names=F)
 
 #Get skippers
 SKIPPERS=subset(Data.daily.1, method=="GN"& LatDeg>=(26) ,select=MastersName)
 SKIPERS=data.frame(SKIPPERS=unique(as.character(SKIPPERS$MastersName)))
-write.csv(SKIPERS,"C:/Matias/Data/Fishing power/TDGDLF.SKIPERS.csv",row.names=F)
+write.csv(SKIPERS,handl_OneDrive("Data/Fishing power/TDGDLF.SKIPERS.csv"),row.names=F)
 
 
 # C.2. Merge Monthly and Aggregated Daily data sets
@@ -1857,7 +1859,7 @@ if(out.ratios)
     arrange(SPECIES)%>%
     rename(condition=CONDITN,Species=SNAME,Conversion.factor=Factor.c)%>%
     dplyr::select(c(Species,condition,Description,Conversion.factor))
-  write.csv(out1,"C:\\Matias\\Presentations\\DoF\\AMM\\2019\\Conversion.ratios.csv",row.names = F)
+  write.csv(out1,handl_OneDrive("Presentations\\DoF\\AMM\\2019\\Conversion.ratios.csv"),row.names = F)
 }
 
 
@@ -3124,7 +3126,8 @@ rm(d2)
 
 # Export percentage of GN records reapportioned by year
 Table.Reporter=table(Data.monthly$Reporter.old)
-write.csv(round(100*Table.Reporter[1]/sum(Table.Reporter),1),"C:/Matias/Analyses/Catch and effort/Outputs/Paper/Percent.GN.reapportioned.csv")
+write.csv(round(100*Table.Reporter[1]/sum(Table.Reporter),1),
+          handl_OneDrive("Analyses/Catch and effort/Outputs/Paper/Percent.GN.reapportioned.csv"))
 
 
 #_LONGLINE REAPPORTIONING (within TDGDLF)_
@@ -4297,7 +4300,7 @@ Data.monthly=subset(Data.monthly,!is.na(LIVEWT.reap))
 Data.daily=subset(Data.daily,!is.na(LIVEWT.reap))
 
 #by zone
-Hndl="C:/Matias/Analyses/Catch and effort/Compare_to_previous_approach/"
+Hndl=handl_OneDrive("Analyses/Catch and effort/Compare_to_previous_approach/")
 if(First.run=="YES")
 {
   fun.compare.weight=function(SPEC)
@@ -4502,7 +4505,7 @@ if(First.run=="YES")
 #by zone and species
 if(First.run=="YES")
 {
-  Read=read.csv("C:/Matias/Data/Catch and Effort/Historic/Spec.catch.zone.csv")
+  Read=read.csv(handl_OneDrive("Data/Catch and Effort/Historic/Spec.catch.zone.csv"))
   fn.by.species=function(dat,WHAT)
   {
     FInYEAR=unique(Read$Fin.yr)
@@ -5081,7 +5084,7 @@ if(Inspect.New.dat=="YES")
   ChEck.nline_netlen="NO"
   if(ChEck.nline_netlen=="NO")
   {
-    hndl.net_line="C:\\Matias\\Analyses\\Catch and effort\\Outputs\\Netlen_nlines\\"
+    hndl.net_line=handl_OneDrive("Analyses\\Catch and effort\\Outputs\\Netlen_nlines\\")
     fun.plot.nlines.netlen=function(Data,YRS,lim1,lim2,lim11,lim22,threshold,threshold1)     
     {
       Data=subset(Data, FINYEAR%in% YRS & LAT<=(-26) & LAT >=(-40) & METHOD=="GN")
@@ -6108,7 +6111,8 @@ Per.Eff.wrong.net=100*(1-fn.compare.eff("NETLEN","NETLEN.c","netlen","netlen.c")
 
 # Export percentage of GN records reapportioned by year
 Table.Eff.Reporter=table(Effort.monthly$Eff.Reporter)
-write.csv(round(100*Table.Eff.Reporter[1]/sum(Table.Eff.Reporter),1),"C:/Matias/Analyses/Catch and effort/Outputs/Paper/Percent.GN.effort.fixed.csv")
+write.csv(round(100*Table.Eff.Reporter[1]/sum(Table.Eff.Reporter),1),
+          handl_OneDrive("Analyses/Catch and effort/Outputs/Paper/Percent.GN.effort.fixed.csv"))
 
 # Effort for Alex's ASL model
 if(do.Alexs=="YES")
@@ -6442,7 +6446,7 @@ get.eff.pro.mesh=function(a)
   return(a)
 }
 
-hnl.msh="C:/Matias/Analyses/Catch and effort/"
+hnl.msh=handl_OneDrive("Analyses/Catch and effort/")
 
 #Overall
 AGG="YES"   #aggregate meshes
@@ -7114,7 +7118,7 @@ names(Total.effort_NFS)=c("FINYEAR","Hook days","Hook hours")
 #Compare Rory's effort and current script's effort
 if(Inspect.New.dat=="YES")
 {
-  Results.pre.2013=read.csv("C:/Matias/Data/Catch and Effort/Historic/Historic.res.csv")
+  Results.pre.2013=read.csv(handl_OneDrive("Data/Catch and Effort/Historic/Historic.res.csv"))
   B=Total.effort.zone.days.monthly
   A=Total.effort.days.monthly
   COLs=2:4
@@ -7264,7 +7268,7 @@ Data.daily.other=subset(Data.daily,!(METHOD=="LL"|METHOD=="GN")
 #Check use of different gears by year and zone for main species
 fn.check.method.contrib=function(D,SPEC)
 {
-  hndl.gear="C:/Matias/Analyses/Catch and effort/Outputs/"
+  hndl.gear=handl_OneDrive("Analyses/Catch and effort/Outputs/")
   a=subset(D,  Estuary=="NO" & LIVEWT.c>0 & LAT<=(-26) & SPECIES==SPEC)
   a$METHOD1=with(a,ifelse(!METHOD%in%c("GN","HL","LL"),"Other",METHOD))
   Rcrds.yr.mthd=with(a,table(FINYEAR,METHOD1))
@@ -7363,7 +7367,7 @@ Data.monthly.GN$Boundary.blk=with(Data.monthly.GN,
 
 #SECTION F 2. ---- EXPORT DATA FOR ASSESSMENT AND CPUE STANDARDISATION ----
 
-setwd("C:/Matias/Analyses/Data_outs")
+setwd(handl_OneDrive("Analyses/Data_outs"))
 
 #some final amendments
 crap=c("GoodsplitID","Prop.sandbar","SanBar.rep",            
@@ -7445,7 +7449,7 @@ if(Export.SAFS=="YES")
 #------ SECTION G 1. SPATIO TEMPORAL CATCH AND EFFORT DISTRIBUTION ------
 if(do.spatio.temporal.ktch.effort=="YES")
 {
-  setwd("C:/Matias/Analyses/Catch and effort/Outputs/Spatio.temporal_Catch")
+  setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/Spatio.temporal_Catch"))
   
   # Plot spatio-temporal catches of 4 main shark species
   do.bubble.plots=TRUE
@@ -7781,7 +7785,7 @@ if(do.spatio.temporal.ktch.effort=="YES")
     if(add.depth=="YES") contour(xbat, ybat, reshaped[,2:ncol(reshaped)],ylim=South.WA.lat,xlim=South.WA.long, zlim=c(-1,-300),
                                  nlevels = 1,labcex=0.1,lty = c(1,2,3),col=c("gray20","gray20","gray20","transparent"),add=T)
   }
-  hndl.sptl.ktch="C:/Matias/Analyses/Catch and effort/Outputs/Spatio.temporal_Catch/"
+  hndl.sptl.ktch=handl_OneDrive("Analyses/Catch and effort/Outputs/Spatio.temporal_Catch/")
   Tar=TARGETS
   Tar[[3]]=18003
     #1.1 by indicator species
@@ -7982,7 +7986,7 @@ if(do.spatio.temporal.ktch.effort=="YES")
     color.legend(quantile(a,probs=.25),quantile(b,probs=.95),quantile(a,probs=.6),quantile(b,probs=.25),
                  paste(round(Breaks,0),"t"),rect.col=Couleurs,gradient="y",col=colLeg,cex=.75)
   }
-  HnD.ctch.exp="C:/Matias/Analyses/Catch and effort/Outputs/Spatio.temporal_Catch"
+  HnD.ctch.exp=handl_OneDrive("Analyses/Catch and effort/Outputs/Spatio.temporal_Catch")
   
     #2.1 by indicator species
   for(i in 1:length(Tar))
@@ -8272,7 +8276,7 @@ if(do.spatio.temporal.ktch.effort=="YES")
     box()
     
   }
-  HnD.eff.exp="C:/Matias/Analyses/Catch and effort/Outputs/Spatio.temporal_Effort"
+  HnD.eff.exp=handl_OneDrive("Analyses/Catch and effort/Outputs/Spatio.temporal_Effort")
   
       #Monthly
   s1=subset(Eff.monthly.c,LAT<=(-26) & !FINYEAR%in%FINYEAR.daily)
@@ -8557,7 +8561,7 @@ if(do.spatio.temporal.ktch.effort=="YES")
 
 
 #------ SECTION G 2. DATA REQUESTS ------
-hndl="C:/Matias/Analyses/Catch and effort/Data_Resquests"
+hndl=handl_OneDrive("Analyses/Catch and effort/Data_Resquests")
 
 #G 4.1 AUDITS
 if(do.audit=="YES")
@@ -9387,7 +9391,7 @@ if(do.Jodies.scalies=="YES")
 #G 4.9 FishCUBE                 
 if(Extract.data.FishCUBE=="YES")
 {
-  hndl="C:/Matias/Analyses/Catch and effort/Data_Resquests"
+  hndl=handl_OneDrive("Analyses/Catch and effort/Data_Resquests")
   
   #add variables
     #Daily
@@ -9649,8 +9653,8 @@ if (do.Steves=="YES")
   b=seq(South.WA.lat[1],South.WA.lat[2],length.out=length(a))
   
   GRID="Y"
-  if(GRID=="Y")tiff(file="C:/Matias/Analyses/Catch and effort/Outputs/for Steve/Steve,map.grid.tiff",width = 2400, height = 2400,units = "px", res = 300,compression = "lzw")
-  if(GRID=="N")tiff(file="C:/Matias/Analyses/Catch and effort/Outputs/for Steve/Steve,map.NoGrid.tiff",width = 2400, height = 2400,units = "px", res = 300,compression = "lzw")
+  if(GRID=="Y")tiff(file=handl_OneDrive("Analyses/Catch and effort/Outputs/for Steve/Steve,map.grid.tiff"),width = 2400, height = 2400,units = "px", res = 300,compression = "lzw")
+  if(GRID=="N")tiff(file=handl_OneDrive("Analyses/Catch and effort/Outputs/for Steve/Steve,map.NoGrid.tiff"),width = 2400, height = 2400,units = "px", res = 300,compression = "lzw")
   
   plotmap(a,b,PLATE,"dark grey",South.WA.long,South.WA.lat)
   if(add.depth=="YES") contour(xbat, ybat, reshaped[,2:ncol(reshaped)],ylim=South.WA.lat,xlim=South.WA.long, zlim=c(-1,-300),
@@ -10055,7 +10059,7 @@ if(do.ABARES="YES")
   SP.abare=D.abr[!duplicated(D.abr$SPECIES),match(c("SPECIES","SNAME"),names(D.abr))]
   Ktch.ab=aggregate(LIVEWT.c~FINYEAR+SPECIES,D.abr,sum)
   Ktch.ab=merge(Ktch.ab,SP.abare,by="SPECIES",all.x=T)
-  Scien.names.abrs=read.csv("C:/Matias/Data/Comm.sp.Scientific.csv")
+  Scien.names.abrs=read.csv(handl_OneDrive("Data/Comm.sp.Scientific.csv"))
   Scien.names.abrs=subset(Scien.names.abrs,select=c(SPECIES,Scientific.name))
   Ktch.ab=merge(Ktch.ab,Scien.names.abrs,by="SPECIES",all.x=T)
   
@@ -10405,7 +10409,7 @@ if(do.ASL.action.2018=="YES")
 TEP.yr=2018
 if(do.annual.TEPS.extraction=="YES")
 {
-  These.TEPS=read.csv("C:/Matias/Analyses/Data_outs/TEPS.current.csv",stringsAsFactors = F)
+  These.TEPS=read.csv(handl_OneDrive("Analyses/Data_outs/TEPS.current.csv"),stringsAsFactors = F)
   TEPs=These.TEPS%>%filter(fishery%in%c("SGL","WCGL") & year==TEP.yr)%>%
     mutate(LAT=-(as.numeric(substr(block10,1,2))+(as.numeric(substr(block10,3,3))/6)),
            LONG=100+as.numeric(substr(block10,4,5))+(as.numeric(substr(block10,6,6))/6),
@@ -10648,7 +10652,7 @@ if(do.Paul.Rogers_ASL=="YES")
 if(do.ASL.closure_effort_overlap)
 {
   hndl.ASL.closures.overlap=paste(hndl,'ASL/ASL_overlap.closure.effort',sep='/')
-  paz="C:/Matias/Data/Mapping/Closures/"
+  paz=handl_OneDrive("Data/Mapping/Closures/")
   ASL_Closures=readOGR(paste(paz,"ASL_Closures/ASL_Closures.shp",sep=''),
                        layer="ASL_Closures") 
   ASL_Closures_west.coast=data.frame(
@@ -10681,9 +10685,9 @@ if(do.ASL.closure_effort_overlap)
           
           -30.50578,-30.52662,-30.59515,-30.67653,
           -30.75267,-30.80168,-30.81597,-30.79598))
-  paz="C:/Matias/Data/Mapping/Closures/"
+  paz=handl_OneDrive("Data/Mapping/Closures/")
   Closed.ASL=read.csv(paste(paz,'ASL_Closures_Block_Intersection.csv',sep=""))
-  source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
+  source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R"))
   
   if(!Use.Date=="YES") Effrt=aggregate(Km.Gillnet.Days.c~Same.return.SNo+vessel+finyear+month+
                                          LAT+LONG+block10,data=subset(Effort.daily,netlen.c>100 & method=="GN"),max,na.rm=T)    
@@ -10840,7 +10844,7 @@ if(Check.school.shark.targeting=="YES")
 if(do.Ref.Points=="YES")
 {
   for (i in 1:length(TARGETS))write.csv(STORE.Tot.Catch[[i]],
-    paste("C:/Matias/Analyses/Reference Points/Tot.c.",sp[i],".csv",sep=""),row.names=F)  
+    paste(handl_OneDrive("Analyses/Reference Points/Tot.c."),sp[i],".csv",sep=""),row.names=F)  
 }
 
 
@@ -10848,7 +10852,7 @@ if(do.Ref.Points=="YES")
 ###########  SECTION I. ----  EXPLORATORY ANALYSES ---   ###########
 if(do.exploratory=="YES")
 {
-  setwd("C:/Matias/Analyses/Catch and effort/Outputs/Exploratory")
+  setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/Exploratory"))
   
   #5.1 Annual spatial expansion
   tiff(file="Figure 1.Proportion of blocks fished.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")

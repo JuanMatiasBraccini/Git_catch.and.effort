@@ -8,6 +8,7 @@ library(RODBC)				#include ODBC library for importing Acccess data
 
 
 
+handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
 
 #DATA
 setwd("M:/Fisheries Research/Production Databases/Shark")  
@@ -22,7 +23,7 @@ close(channel)
 Boat_hdr$year=as.numeric(substr(Boat_hdr$DATE,1,4))
 
 
-setwd("C:/Matias/Data")
+setwd(handl_OneDrive("Data"))
 Species_Code=read.csv("Species_names.csv")
 Len.Wt.scale=read.csv("Length_Weights/SCALEY LENGTH-WEIGHT.csv")
 Len.Wt.shark=read.csv("Length_Weights/SHARK LENGTH-WEIGHT.csv")
@@ -110,7 +111,7 @@ for (i in 1:length(These.sp)) Russel.size=rbind(Russel.size,Size.Freq(These.sp[i
 id=subset(Species_Code,SPECIES%in%These.sp,select=c(SPECIES,Species_name))
 Russel.size=merge(Russel.size,id,by="SPECIES")
 
-write.csv(Russel.size,"C:/Matias/Analyses/Catch and effort/Data_Resquests/Russel.observer.size.freq.csv",row.names=F)
+write.csv(Russel.size,handl_OneDrive("Analyses/Catch and effort/Data_Resquests/Russel.observer.size.freq.csv"),row.names=F)
 
 
 
@@ -232,7 +233,7 @@ Size.matrix$Sname=Uniq.sp.nam
 
 
 
-write.csv(Size.matrix,"C:/Matias/Data/Length_Weights/Data.Ranges.csv",row.names=F)
+write.csv(Size.matrix,handl_OneDrive("Data/Length_Weights/Data.Ranges.csv"),row.names=F)
 
 
 
@@ -319,7 +320,7 @@ for(i in 1:length(Sel.species))
                   Size.props[[i]]$ALL$size*1.1,Size.props[[i]]$ALL$size*.9,Size.props[[i]]$ALL$prob)
   }
 
-setwd("C:/Matias/Analyses/Catch and effort/Catch composition")
+setwd(handl_OneDrive("Analyses/Catch and effort/Catch composition"))
 
 SPECIES=c("whiskery","dusky","sandbar")
 
@@ -332,5 +333,5 @@ for(i in 1:length(Sel.species))
   plot(Selectivity[[i]]$pred.FL, Selectivity[[i]]$Sel,xlab="PRed FL",ylab="Selectivity")
   dev.off()
   
-  write.csv(Selectivity[[i]],paste("C:/Matias/Data/Selectivity/",SPECIES[i],"Sel.csv",sel=""),row.names=F)
+  write.csv(Selectivity[[i]],paste(handl_OneDrive("Data/Selectivity/"),SPECIES[i],"Sel.csv",sel=""),row.names=F)
 }

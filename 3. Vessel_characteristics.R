@@ -4,7 +4,9 @@ library('stringr')
 library('lubridate')
 
 # DATA SECTION
-setwd("C:/Matias/Data/Fishing power")
+handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
+
+setwd(handl_OneDrive("Data/Fishing power"))
 
 TDGDLF.vessels=read.csv("TDGDLF.vessels.csv",stringsAsFactors=F)
 TDGDLF.skippers=read.csv("TDGDLF.SKIPERS.csv",stringsAsFactors=F)

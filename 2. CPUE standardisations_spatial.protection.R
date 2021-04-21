@@ -13,10 +13,12 @@ library(treemapify)
 library(gridExtra)
 library(rgdal)
 
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
+handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
+
+source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R"))
 
 # 2. Data section ---------------------------------------------------------
-setwd('C:/Matias/Analyses/Data_outs')
+setwd(handl_OneDrive('Analyses/Data_outs'))
 
   #TDGDLF catch and effort used for cpue standardisation
 Data.monthly=read.csv("Data.monthly.GN.csv")
@@ -32,7 +34,7 @@ Effort.daily.NSF=read.csv("Effort.daily.NSF.csv")
 
 
   #Shape files. Spatial closures and marine parks   
-paz="C:/Matias/Data/Mapping/Closures/"
+paz=handl_OneDrive("Data/Mapping/Closures/")
 ASL_Closures=readOGR(paste(paz,"ASL_Closures/ASL_Closures.shp",sep=''),
                      layer="ASL_Closures") 
 WA_Commonwealth_Marine_Parks=readOGR(paste(paz,"WA_Commonwealth_Marine_Parks/WA_Commonwealth_Marine_Parks.shp",sep=''),
@@ -40,7 +42,7 @@ WA_Commonwealth_Marine_Parks=readOGR(paste(paz,"WA_Commonwealth_Marine_Parks/WA_
 Shark_Fishery_Closures=readOGR(paste(paz,"Shark_Fishery_Closures/Shark_Fishery_Closures.shp",sep=''),
                                layer="Shark_Fishery_Closures") 
 
-paz="C:/Matias/Data/Mapping/Closures/"
+paz=handl_OneDrive("Data/Mapping/Closures/")
 Closed.commonwealth=read.csv(paste(paz,'Commonwealth_Marine_Parks_WA_Block_Intersection.csv',sep=""))
 Closed.Shark=read.csv(paste(paz,'Shark_Fishery_Closures_Block_Intersection.csv',sep=""))
 Closed.ASL=read.csv(paste(paz,'ASL_Closures_Block_Intersection.csv',sep=""))
@@ -365,7 +367,7 @@ Overlap.daily_scenario2=fn.overlap(dd=All.pred.daily,scen="S2")
 
 
 # 5. Outputs section ---------------------------------------------------------
-setwd('C:\\Matias\\Analyses\\Catch and effort\\Outputs\\Spatial protection')
+setwd(handl_OneDrive('Analyses\\Catch and effort\\Outputs\\Spatial protection'))
 
 #Closure map
 South.WA.long=c(109,129)

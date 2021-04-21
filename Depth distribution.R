@@ -1,5 +1,7 @@
 #---DATA SECTION-----
-setwd("C:/Matias/Analyses/Catch and effort")
+handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
+
+setwd(handl_OneDrive("Analyses/Catch and effort"))
 
 #OBSERVERS DATA
 Survey=read.csv("Survey.weight.csv")
@@ -44,7 +46,7 @@ Zona=c("West coast","Zone 1","Zone 2")
 Zns=c("WC","1","2")
 COls=2:4
 
-setwd("C:/Matias/Analyses/Depth distribution")
+setwd(handl_OneDrive("Analyses/Depth distribution"))
 tiff(file="Depth distribution.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
 par(mfrow=c(4,3),mar=c(1,1.25,1.5,1.25),oma=c(2.5,3,.1,.5),las=1,mgp=c(1.9,.55,0))
 for(i in 1:length(Spec))

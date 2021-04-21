@@ -20,18 +20,19 @@ library(stringr)
 library(yarrr)
 
 # 1. Data ---------------------------------------------------------
+handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
 
 # Observers data
 User="Matias"
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Source_Shark_bio.R")
+source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/Source_Shark_bio.R"))
 
 # Species names
-All.species.names=read.csv("C:/Matias/Data/Species_names_shark.only.csv") #for catch
+All.species.names=read.csv(handl_OneDrive("Data/Species_names_shark.only.csv")) #for catch
 
-setwd('C:/Matias/Analyses/Catch and effort/Observer_TDGDLF')
+setwd(handl_OneDrive('Analyses/Catch and effort/Observer_TDGDLF'))
 
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Smart_par.R")
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_Population.dynamics/Nominal_cpue_functions.R")
+source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/Smart_par.R"))
+source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_Population.dynamics/Nominal_cpue_functions.R"))
 
 # Parameters section ---------------------------------------------------------
 
@@ -683,7 +684,7 @@ dev.off()
 #   geom_point(data=subset(b,Catch>0),aes(Mid.Long,Mid.Lat,color=year))
 
 # Export --------------------------------------------------------------------
-hndl="C:/Matias/Analyses/Data_outs"
+hndl=handl_OneDrive("Analyses/Data_outs")
 for(s in 1:length(this.sp.enough))
 {
   nm=unique(Dat_obs%>%filter(SPECIES==names(PREDS)[s])%>%pull(Name))

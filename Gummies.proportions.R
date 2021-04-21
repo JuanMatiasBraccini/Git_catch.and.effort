@@ -1,9 +1,10 @@
 
 library(RODBC)
 require(lubridate)  #for dates manipulation
+handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
 
 #Species names
-SPECIES.names=read.csv("C:/Matias/Data/Species.code.csv")
+SPECIES.names=read.csv(handl_OneDrive("Data/Species.code.csv"))
 
 #Sharks data base
 setwd("M:/Fisheries Research/Production Databases/Shark")  # working directory
@@ -72,4 +73,4 @@ Prop=merge(ag,ag1,by="Bioregion")
 Prop$Prop=round(Prop$Number.x/Prop$Number.y,2)
 
 
-write.csv(Prop,"C:/Matias/Analyses/Catch and effort/Gummies.prop.csv",row.names=F)
+write.csv(Prop,handl_OneDrive("Analyses/Catch and effort/Gummies.prop.csv"),row.names=F)

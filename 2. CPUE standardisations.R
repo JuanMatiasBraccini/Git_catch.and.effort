@@ -58,23 +58,23 @@ library(mgcViz)
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240,dplyr.summarise.inform = FALSE)   
 
-
-setwd("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other")
+handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
+setwd(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other"))
 source("Compare.error.structure.R")
 source("Deviance.explained.R")
 source("Sorting.objects.R")
 source("MS.Office.outputs.R")
-setwd("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_Population.dynamics")
+setwd(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_Population.dynamics"))
 source("fn.fig.R")
 source("Nominal_cpue_functions.R")
-source("C:\\Matias\\R\\Sort ls by size.R")
-source("C:/Matias/Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R")
+source(handl_OneDrive("R\\Sort ls by size.R"))
+source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R"))
 
 
 
 
 # DATA SECTION -----------------------------------------------------------------------
-setwd('C:/Matias/Analyses/Data_outs')
+setwd(handl_OneDrive('Analyses/Data_outs'))
 Data.daily.original=fread("Data.daily.original.csv",data.table=FALSE)
 Data.monthly.GN=fread("Data.monthly.GN.csv",data.table=FALSE)
 Data.daily.GN=fread("Data.daily.GN.csv",data.table=FALSE)
@@ -92,34 +92,34 @@ Data.daily.GN$TSNo <- sapply(lst, '[', 3)
 rm(lst)
 
 #Block10 locations
-BlOCK_10=fread("C:/Matias/Data/Mapping/Blocks_10NM.csv",data.table=FALSE)
+BlOCK_10=fread(handl_OneDrive("Data/Mapping/Blocks_10NM.csv",data.table=FALSE))
 names(BlOCK_10)=c("block10","LAT","LONG")
 Metro_BlOCK_10=subset(BlOCK_10, LAT>(-33) & LAT<=(-31) & LONG<116)
 
 #Southern Oscillation Index (index of La Niña, El Niño events)
 #note: negative values of SOI below −7 indicate El Niño episodes
 #      positive values of SOI above +7 are typical of La Niña episode
-SOI=fread("C:/Matias/Data/Oceanography/SOI.csv",data.table=FALSE)
+SOI=fread(handl_OneDrive("Data/Oceanography/SOI.csv",data.table=FALSE))
 
 #Mean Freo sea level (index of Leeuwin Current)
-Freo=fread("C:/Matias/Data/Oceanography/Freo_mean_sea_level.csv",data.table=FALSE)  
+Freo=fread(handl_OneDrive("Data/Oceanography/Freo_mean_sea_level.csv",data.table=FALSE))  
 
 #SST
-SST=fread("C:/Matias/Data/Oceanography/SST.csv",data.table=FALSE) 
+SST=fread(handl_OneDrive("Data/Oceanography/SST.csv",data.table=FALSE)) 
 
 #Fishable areas       
 Depth.range="species_specific"
 #Depth.range=200
 if(Depth.range==200)
 {
-  Whis.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_whiskery_200.csv",data.table=FALSE)
-  Gum.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_gummy_200.csv",data.table=FALSE)
-  Dusky.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_dusky_200.csv",data.table=FALSE)
-  Sand.fishArea=fread("C:/Matias/Data/Catch and Effort/FishableArea/BLOCKX_sandbar_200.csv",data.table=FALSE)  
+  Whis.fishArea=fread(handl_OneDrive("Data/Catch and Effort/FishableArea/BLOCKX_whiskery_200.csv"),data.table=FALSE)
+  Gum.fishArea=fread(handl_OneDrive("Data/Catch and Effort/FishableArea/BLOCKX_gummy_200.csv"),data.table=FALSE)
+  Dusky.fishArea=fread(handl_OneDrive("Data/Catch and Effort/FishableArea/BLOCKX_dusky_200.csv"),data.table=FALSE)
+  Sand.fishArea=fread(handl_OneDrive("Data/Catch and Effort/FishableArea/BLOCKX_sandbar_200.csv"),data.table=FALSE)  
 }
 if(Depth.range=="species_specific")
 {
-  Grab.Area="C:/Matias/Data/Catch and Effort/FishableArea/"
+  Grab.Area=handl_OneDrive("Data/Catch and Effort/FishableArea/")
   Whis.fishArea=fread(paste(Grab.Area,"BLOCKX_whiskery_30_70.csv",sep=""),data.table=FALSE)
   Gum.fishArea=fread(paste(Grab.Area,"BLOCKX_gummy_les_70.csv",sep=""),data.table=FALSE)
   Dusky.fishArea=fread(paste(Grab.Area,"BLOCKX_dusky_less_60.csv",sep=""),data.table=FALSE)
@@ -586,7 +586,7 @@ if(do.Exploratory=="YES")
       ggtitle(Titl)
     print(p)
   }
-  pdf('C:/Matias/Analyses/Catch and effort/Outputs/Species selection/Selection.pdf')
+  pdf(handl_OneDrive('Analyses/Catch and effort/Outputs/Species selection/Selection.pdf'))
   fn.choose.sp(d=Data.monthly.GN%>%filter(SPECIES%in%Shark.species),
                crit='Same.return',Titl='Monthly')
   
@@ -672,8 +672,8 @@ rm(d,d.daily)
 Prop.ktch=do.call(rbind,Prop.ktch)
 Prop.ktch.daily=do.call(rbind,Prop.ktch.daily)
 
-write.csv(Prop.ktch,"C:/Matias/Analyses/Catch and effort/Outputs/Paper/Prop.records.with.catch.by.year.csv")
-write.csv(Prop.ktch.daily,"C:/Matias/Analyses/Catch and effort/Outputs/Paper/Prop.records.with.catch.daily.by.year.csv")
+write.csv(Prop.ktch,handl_OneDrive("Analyses/Catch and effort/Outputs/Paper/Prop.records.with.catch.by.year.csv"))
+write.csv(Prop.ktch.daily,handl_OneDrive("Analyses/Catch and effort/Outputs/Paper/Prop.records.with.catch.daily.by.year.csv"))
 
 #keep species with at least 10 of years with Min.annual.prop.zero
 Prop.ktch[Prop.ktch>=Min.annual.prop.zero]=1
@@ -712,7 +712,7 @@ Tar.sp=match(TARGETS,SP.list)
 fn.scale=function(x,scaler) ((x/max(x,na.rm=T))^0.5)*scaler
 
 Core=SP.list
-pdf('C:/Matias/Analyses/Catch and effort/Outputs/Species core areas/cores.pdf')
+pdf(handl_OneDrive('Analyses/Catch and effort/Outputs/Species core areas/cores.pdf'))
 for(s in nnn)
 {
   Kr=core.per
@@ -764,7 +764,7 @@ if(Model.run=="First")
     plot_list[[nnn.i[s]]]=p2
   }
   multi.page <-ggarrange(plotlist=plot_list, nrow = 2, ncol = 1)
-  ggexport(multi.page, filename = "C:/Matias/Analyses/Catch and effort/Outputs/species core areas/raster.pdf")
+  ggexport(multi.page, filename = handl_OneDrive("Analyses/Catch and effort/Outputs/species core areas/raster.pdf"))
 }
 
 
@@ -772,7 +772,7 @@ if(Model.run=="First")
 if(Model.run=="First")
 {
   whis.q.period1=c("1975-76","1976-77","1977-78","1978-79","1979-80","1980-81","1981-82")
-  pdf('C:/Matias/Analyses/Catch and effort/Outputs/Paper/Whiskery_targeting.pdf')
+  pdf(handl_OneDrive('Analyses/Catch and effort/Outputs/Paper/Whiskery_targeting.pdf'))
   d=Data.monthly.GN%>%filter(!FINYEAR%in%Data.daily.GN$FINYEAR)%>%
     mutate(LAT=round(LAT),LONG=round(LONG))
   prop_period1=d%>%filter(FINYEAR%in%whis.q.period1)%>%
@@ -1140,7 +1140,7 @@ for(i in nnn)
   if(!is.null(Species.list.daily[[i]]))b=unique(subset(Species.list.daily[[i]],SPECIES%in%SP.list[[i]])$VESSEL)
   N.VES[,i]=length(unique(c(a,b)))
 }
-setwd('C:/Matias/Analyses/Catch and effort')
+setwd(handl_OneDrive('Analyses/Catch and effort'))
 hndl=paste(getwd(),"/Outputs/Paper/",sep="")
 write.csv(N.VES,paste(hndl,"All.Vessels.by.species.csv",sep=""),row.names=T)
 
@@ -1254,7 +1254,7 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
     ZZ[ZZ>=Min.ktch]=1
     Yrs.with.ktch=colSums(ZZ,na.rm=T)
     
-    pdf(paste("C:/Matias/Analyses/Catch and effort/Outputs/Kept_blocks_vessels/Vessel_pos_records_by_yr/",paste(NM,what,sep=""),".pdf",sep="")) 
+    pdf(paste(handl_OneDrive("Analyses/Catch and effort/Outputs/Kept_blocks_vessels/Vessel_pos_records_by_yr/"),paste(NM,what,sep=""),".pdf",sep="")) 
     
     #Ves.sel.BC
     par(mar=c(3,3.5,.8,.8))
@@ -1522,7 +1522,7 @@ if(Remove.blk.by=="blk_only")
                                 length(vsl.used),length(vsl.not.used)),ncol=2,nrow=2),2),
             col=c("grey80","grey40"),names.arg=NMS.arg)
   }
-  fn.fig("C:/Matias/Analyses/Catch and effort/Outputs/Kept_blocks_vessels/Used_not.used_blocks_vessels",1400,2400)
+  fn.fig(handl_OneDrive("Analyses/Catch and effort/Outputs/Kept_blocks_vessels/Used_not.used_blocks_vessels"),1400,2400)
   par(mfrow=c(length(nnn),2),mar=c(1,1,.1,.3),oma=c(2,2,1,.1),las=1,mgp=c(1,.5,0),xpd=T)
   for(i in nnn)
   {
@@ -1545,7 +1545,7 @@ if(Remove.blk.by=="blk_only")
 # ILLUSTRATE FOLLY EFFECT (MEAN vs SUM) AND CATCH RATE VARIABILITY---------------------------
 if(Show.folly.eg=="YES")
 {
-  setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper/MeanVsSum")
+  setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/Paper/MeanVsSum"))
   
   #5.1.1 Dummy example
   n=10
@@ -1601,7 +1601,7 @@ if(Show.folly.eg=="YES")
 }
 if(Show.variability.cpue.eg=="YES")
 {
-  setwd("C:/Matias/Analyses/Catch and effort/Outputs")
+  setwd(handl_OneDrive("Analyses/Catch and effort/Outputs"))
   
   fn.fig("E.g.variability.cpue.presentation",2400,2000)
   par(mfcol=c(2,1),mai=c(.45,.6,.2,.1),oma=c(.8,.8,.1,.1),mgp=c(2.5,.65,0))
@@ -1937,7 +1937,7 @@ Nms.sp[match(c("Smooth hammerhead shark","Dusky whaler"),Nms.sp)]=c("Smooth hamm
 # IDENTIFY FISHING ON DIFFERENT HABITATS (~TARGETING BEHAVIOUR) ----------------------------------------------
 #note:  more code in 2.CPUE standardisations_delta.R)
 #      this uses all species accounting for 95% of catch
-HndL.Species_targeting="C:/Matias/Analyses/Catch and effort/Outputs/Species targeting/"
+HndL.Species_targeting=handl_OneDrive("Analyses/Catch and effort/Outputs/Species targeting/")
 if(Model.run=="First")
 {
   theme_set(theme_pubr())
@@ -2505,7 +2505,7 @@ fn.out.nominal=function(d,method)
 Store_nom_cpues_monthly=vector('list',length(SP.list)) 
 names(Store_nom_cpues_monthly)=names(SP.list)
 Store_nom_cpues_daily=Store_nom_cpues_monthly
-Hnd.ains="C:/Matias/Analyses/Catch and effort/Outputs/Paper/Ainsline_different_cpues/"
+Hnd.ains=handl_OneDrive("Analyses/Catch and effort/Outputs/Paper/Ainsline_different_cpues/")
 smart.par=function(n.plots,MAR,OMA,MGP) return(par(mfrow=n2mfrow(n.plots),mar=MAR,oma=OMA,las=1,mgp=MGP))
 
 fn.ainslie=function(dat,Ktch.targt,Effrt,explr,QL_prop_ktch,Prop.Malcolm,cpue.units,spname,BLks,VesL,Type)
@@ -2687,7 +2687,7 @@ if(!exists('BLKS.used.indi'))
   BLKS.used.daily.indi=BLKS.used.daily
   VES.used.daily.indi=VES.used.daily
 }
-hndl.kept="C:/Matias/Analyses/Catch and effort/Outputs/Kept_blocks_vessels/"
+hndl.kept=handl_OneDrive("Analyses/Catch and effort/Outputs/Kept_blocks_vessels/")
 HndL=paste(hndl.kept,'QL_balanced_design/',sep="")
 fn.check.balanced=function(d,SP,what,MN.YR,pLot)
 {
@@ -2822,7 +2822,7 @@ mtext("Latitude",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
 dev.off()
 
 
-setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper")
+setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/Paper"))
 
 # SHOW EFFECT OF USING km gn d VS km g h for gummy ----------------------------------------------
 Show.gummy.hour=FALSE     
@@ -3101,7 +3101,7 @@ Export.tbl(WD=getwd(),Tbl=Table.nsamp,Doc.nm="Sample_sizes",caption=NA,paragph=N
 explore.Oceanographic=FALSE
 if(explore.Oceanographic)
 {
-  pdf('C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/Oceanographic variables/Temperature.pdf')
+  pdf(handl_OneDrive('Analyses/Catch and effort/Outputs/Exploratory/Oceanographic variables/Temperature.pdf'))
   SST%>%
     group_by(Long,Lat,year)%>%
     summarise(Temperature=mean(Temperature))%>%
@@ -3204,7 +3204,7 @@ if(explore.Oceanographic)
 #SOI
 if(explore.Oceanographic)
 {
-  pdf('C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/Oceanographic variables/SOI.pdf')
+  pdf(handl_OneDrive('Analyses/Catch and effort/Outputs/Exploratory/Oceanographic variables/SOI.pdf'))
   SOI%>%
     mutate(year=Year+Month/13,
            Sign=as.factor(ifelse(SOI<0,'neg','pos')))%>%
@@ -3221,7 +3221,7 @@ if(explore.Oceanographic)
 #Freo
 if(explore.Oceanographic)
 {
-  pdf('C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/Oceanographic variables/Freo.pdf')
+  pdf(handl_OneDrive('Analyses/Catch and effort/Outputs/Exploratory/Oceanographic variables/Freo.pdf'))
   Freo%>%
     mutate(year=Year+Month/13,
            Sign=as.factor(ifelse(Freo<0,'neg','pos')))%>%
@@ -3244,7 +3244,7 @@ clog=function(x) log(x+0.05)        #function for applying log
 
 if(do.Exploratory=="YES")
 {
-  hndl.expl="C:/Matias/Analyses/Catch and effort/Outputs/Exploratory/"
+  hndl.expl=handl_OneDrive("Analyses/Catch and effort/Outputs/Exploratory/")
   
   # Standard exploratory analyses
   fn.box.plt.year=function(d)
@@ -3928,7 +3928,7 @@ Best.Model.daily=Best.Model.daily.gam=Best.Model_delta=Best.Model.daily.gam_delt
 Store.Best.Model=Store.Best.Model.daily=Best.Model
 if(Def.mod.Str=="YES")     
 {
-  hndl.modl.sel="C:/Matias/Analyses/Catch and effort/Outputs/Model Selection/"
+  hndl.modl.sel=handl_OneDrive("Analyses/Catch and effort/Outputs/Model Selection/")
   if(Use.Tweedie)       #takes 3.5 hours
   {
     cl <- makeCluster(detectCores()-1)
@@ -4339,7 +4339,7 @@ if(Def.mod.Str=="YES")
         }
         
         #4.22.3.3. show selection outcomes
-        hndl.modl.sel="C:/Matias/Analyses/Catch and effort/Outputs/Model Selection/"
+        hndl.modl.sel=handl_OneDrive("Analyses/Catch and effort/Outputs/Model Selection/")
         for(s in Tar.sp)
         {
           pdf(paste(hndl.modl.sel,names(SP.list)[s],"_monthly.pdf",sep=""))
@@ -8472,7 +8472,7 @@ if(do.influence=="YES")
   }
   if(Use.Delta)
   {
-    HnDll="C:/Matias/Analyses/Catch and effort/Outputs/Influence.plot/"
+    HnDll=handl_OneDrive("Analyses/Catch and effort/Outputs/Influence.plot/")
     Store.Influence=vector('list',length(SP.list)) 
     names(Store.Influence)=names(SP.list)
     Store.Influence.daily=Store.Influence
@@ -8964,7 +8964,7 @@ if(Explore.smooth.HH)
   colnames(d)=tolower(colnames(d))
   
   
-  hndl.ZmuHH='C:/Matias/Analyses/Catch and effort/Outputs/Paper/smooth HH_explore/'
+  hndl.ZmuHH=handl_OneDrive('Analyses/Catch and effort/Outputs/Paper/smooth HH_explore/')
   
   fn.fig(paste(hndl.ZmuHH,"annual records distribution_vessel"),2000, 2400)   
   fn.bubl(Tab1=table(d$vessel,d$finyear))
@@ -9310,7 +9310,7 @@ if(Explore.why.dusky.sandbar.uncertain)
     NRMLIZD="YES"
     Y=as.numeric(substr(lsmeas$finyear,1,4))  
     
-    hndl.crap='C:/Matias/Analyses/Catch and effort/Outputs/Paper/why dusky and sandbar daily so uncertain/'
+    hndl.crap=handl_OneDrive('Analyses/Catch and effort/Outputs/Paper/why dusky and sandbar daily so uncertain/')
     fn.fig(paste(hndl.crap,Nms.sp[s],"_",What,sep=""),2000, 2400)
     with(lsmeas,
          {
@@ -9359,7 +9359,7 @@ if(Explore.why.dusky.sandbar.uncertain)
 
 
 # EXPORT INDICES -----------------------------------------------------------------------
-setwd("C:/Matias/Analyses/Data_outs")
+setwd(handl_OneDrive("Analyses/Data_outs"))
 Sel.vars=c("finyear","response","CV","lower.CL","upper.CL")
 nams.Sel.vars=c("Finyear","Mean","CV","LOW.CI","UP.CI")
 
@@ -9493,7 +9493,7 @@ for (s in nnn[-sort(Tar.sp)])
 # REPORT SECTION FROM 1.Manipulate data.R -----------------------------------------------------------------------
 if (plot.cpue.paper.figures=="YES")
 {
-  setwd("C:/Matias/Analyses/Catch and effort/Outputs/Paper")
+  setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/Paper"))
   
   #Some functions
   
@@ -9958,7 +9958,7 @@ if (plot.cpue.paper.figures=="YES")
     
     
     #Appendix 2. Flowchart diagram 
-    source("C:/Matias/Analyses/SOURCE_SCRIPTS/flow_chart.R")
+    source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/flow_chart.R"))
     #text
     LABELS <- list("raw data",
                    c("Exclude records from estuaries, non-gillnet gear","and school shark and dogfish targeting"),

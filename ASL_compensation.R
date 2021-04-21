@@ -9,15 +9,16 @@ library(mgcv)
 library(emmeans) 
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240) 
+handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
 
 
 # Data section ------------------------------------------------------------
-setwd('C:/Matias/Analyses/Data_outs')
+setwd(handl_OneDrive('Analyses/Data_outs'))
 Data.daily.GN=fread("Data.daily.GN.csv",data.table=FALSE)
-BlOCK_10=read.csv("C:/Matias/Data/Mapping/Blocks_10NM.csv")
+BlOCK_10=read.csv(handl_OneDrive("Data/Mapping/Blocks_10NM.csv"))
 
 #ports
-Ports=read.csv('C:/Matias/Data/Ports.csv')
+Ports=read.csv(handl_OneDrive('Data/Ports.csv'))
 
 n.trips=1  #minimum number of trips per year
 N.min=1  #minimum number of months per year
@@ -102,7 +103,7 @@ Dist.trvl.sumery=Distance.travld%>%
                 mutate(Yr.mnz=YEAR.c+MONTH/13)
 
 #Output mean distance and error for full data set
-setwd('C:\\Matias\\Analyses\\Catch and effort\\ASL.closure_compensation')
+setwd(handl_OneDrive('Analyses\\Catch and effort\\ASL.closure_compensation'))
 
 #export data
 write.csv(Distance.travld,'Distance.travld.csv',row.names = F)
