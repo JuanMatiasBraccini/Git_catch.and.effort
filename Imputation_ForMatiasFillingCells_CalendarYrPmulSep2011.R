@@ -3,9 +3,10 @@
 
 # The function 'Impute.Block' imputes catches for blocks for missing years
 # in the series, following C. Walters algorithm in Carruthers et al. 2011.
+if(!exists('handl_OneDrive')) source('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias/Analyses/SOURCE_SCRIPTS/Git_other/handl_OneDrive.R')
 
-setwd(
-'C:/Matias/Analyses/Catch and effort/other scripts/Ross_Marriot_Imputation')
+
+setwd(handl_OneDrive('Analyses/Catch and effort/other scripts/Ross_Marriot_Imputation'))
 
 Blocks <- as.vector(read.csv('BlockNames.csv', header = F))
 Years <- as.vector(c(seq(1993,2008,by=1)))

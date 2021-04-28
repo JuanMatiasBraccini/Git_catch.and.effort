@@ -83,7 +83,8 @@ library(rgdal)
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240,dplyr.summarise.inform = FALSE) 
 par.default=par()
 
-handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
+if(!exists('handl_OneDrive')) source('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias/Analyses/SOURCE_SCRIPTS/Git_other/handl_OneDrive.R')
+
 source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R"))
 source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R"))
 source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/send.emails.R"))

@@ -84,8 +84,9 @@ Folly.catch=aggregate(Catch.Target~FINYEAR,a,sum,na.rm=T)
 Folly.eff=aggregate(Km.Gillnet.Days.c~FINYEAR,a,sum,na.rm=T)
 Folly.cpue=Folly.catch$Catch.Target/Folly.eff$Km.Gillnet.Days.c
 
+if(!exists('handl_OneDrive')) source('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias/Analyses/SOURCE_SCRIPTS/Git_other/handl_OneDrive.R')
 
-setwd("C:/Matias/Analyses/Catch and effort/Outputs/CompareCPUES")
+setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/CompareCPUES"))
 tiff(file=paste(SPEC,".tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
 par(mfcol=c(2,1),mai=c(1,1.25,.1,.1),oma=c(1,1,.1,.1),las=1)
 

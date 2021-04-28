@@ -9,7 +9,7 @@ library(mgcv)
 library(emmeans) 
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240) 
-handl_OneDrive=function(x)paste('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias',x,sep='/')
+if(!exists('handl_OneDrive')) source('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias/Analyses/SOURCE_SCRIPTS/Git_other/handl_OneDrive.R')
 
 
 # Data section ------------------------------------------------------------
