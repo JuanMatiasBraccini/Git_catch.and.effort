@@ -93,20 +93,20 @@ Data.daily.GN$TSNo <- sapply(lst, '[', 3)
 rm(lst)
 
 #Block10 locations
-BlOCK_10=fread(handl_OneDrive("Data/Mapping/Blocks_10NM.csv",data.table=FALSE))
+BlOCK_10=fread(handl_OneDrive("Data/Mapping/Blocks_10NM.csv"),data.table=FALSE)
 names(BlOCK_10)=c("block10","LAT","LONG")
 Metro_BlOCK_10=subset(BlOCK_10, LAT>(-33) & LAT<=(-31) & LONG<116)
 
 #Southern Oscillation Index (index of La Niña, El Niño events)
 #note: negative values of SOI below −7 indicate El Niño episodes
 #      positive values of SOI above +7 are typical of La Niña episode
-SOI=fread(handl_OneDrive("Data/Oceanography/SOI.csv",data.table=FALSE))
+SOI=fread(handl_OneDrive("Data/Oceanography/SOI.csv"),data.table=FALSE)
 
 #Mean Freo sea level (index of Leeuwin Current)
-Freo=fread(handl_OneDrive("Data/Oceanography/Freo_mean_sea_level.csv",data.table=FALSE))  
+Freo=fread(handl_OneDrive("Data/Oceanography/Freo_mean_sea_level.csv"),data.table=FALSE)  
 
 #SST
-SST=fread(handl_OneDrive("Data/Oceanography/SST.csv",data.table=FALSE)) 
+SST=fread(handl_OneDrive("Data/Oceanography/SST.csv"),data.table=FALSE) 
 
 #Fishable areas       
 Depth.range="species_specific"
@@ -6804,7 +6804,7 @@ for(s in nnn)
   }
 }
 
-#Keep only meaningfull years
+#Keep only meaningful years
 for(s in nnn)
 {
   if(!is.null(Unstandardised[[s]]))
@@ -8126,7 +8126,8 @@ if(Model.run=="First")
       {
         s=Tar.sp[i]
         a=Store.vessel[[i]]
-        plot(1:nrow(a),a$response,pch=19,cex=1.5,ylim=c(min(a$lower.CL),max(a$upper.CL)),
+        plot(1:nrow(a),a$response,pch=19,cex=1.5,ylim=c(0,max(a$upper.CL)),
+        #plot(1:nrow(a),a$response,pch=19,cex=1.5,ylim=c(min(a$lower.CL),max(a$upper.CL)),
              ylab='',xlab='')
         arrows(1:nrow(a), a$lower.CL,1:nrow(a), a$upper.CL,code=3, angle=90, length=0.05)
         mtext(Nms.sp[s],3,0.15,cex=1.25)
@@ -8140,7 +8141,8 @@ if(Model.run=="First")
     {
       s=Tar.sp[i]
       a=Store.cluster[[i]]
-      plot(1:nrow(a),a$response,pch=19,cex=1.5,ylim=c(min(a$lower.CL),max(a$upper.CL)),
+      plot(1:nrow(a),a$response,pch=19,cex=1.5,ylim=c(0,max(a$upper.CL)),
+      #plot(1:nrow(a),a$response,pch=19,cex=1.5,ylim=c(min(a$lower.CL),max(a$upper.CL)),
            ylab='',xlab='',xaxt='n',xlim=c(0.5,2.5))
       arrows(1:nrow(a), a$lower.CL,1:nrow(a), a$upper.CL,code=3, angle=90, length=0.05)
       axis(1,1:2,c("Group 1","Group 2"))
@@ -8160,7 +8162,8 @@ if(Model.run=="First")
                  Lower=(Pred-1.96*Pred.SE)/MN)
       with(PRED,
            {
-             plot(month,Mean,type='l',lwd=2,ylim=c(min(Lower),max(Upper)),xlab='')
+             plot(month,Mean,type='l',lwd=2,ylim=c(0,max(Upper)),xlab='')
+             #plot(month,Mean,type='l',lwd=2,ylim=c(min(Lower),max(Upper)),xlab='')
              polygon(c(month,rev(month)),
                        c(Upper,rev(Lower)),
                        col=rgb(.1,.1,.1,alpha=.2),border=rgb(.1,.1,.1,alpha=.4))
@@ -8185,7 +8188,8 @@ if(Model.run=="First")
                  Lower=(Pred-1.96*Pred.SE)/MN)
         with(PRED,
              {
-               plot(mean.depth,Mean,type='l',lwd=2,ylim=c(min(Lower),max(Upper)),xlab='')
+               plot(mean.depth,Mean,type='l',lwd=2,ylim=c(0,max(Upper)),xlab='')
+               #plot(mean.depth,Mean,type='l',lwd=2,ylim=c(min(Lower),max(Upper)),xlab='')
                polygon(c(mean.depth,rev(mean.depth)),
                        c(Upper,rev(Lower)),
                        col=rgb(.1,.1,.1,alpha=.2),border=rgb(.1,.1,.1,alpha=.4))
