@@ -1204,7 +1204,7 @@ if(do.AMM)
   
   
   #2. Effort and management measures timeline
-  AMM.eff.managmtnt=function(dat,MGMT,SEP,Lab.font,Lab.back,Effort.lab,OUT)
+  AMM.eff.managmtnt=function(dat,MGMT,SEP,Lab.font,Lab.back,Effort.lab)
   {
     Man=MGMT%>%dplyr::select(Event,finyear,Category)%>%mutate(id=1:nrow(MGMT))
     d=dat%>%
@@ -1236,34 +1236,42 @@ if(do.AMM)
             axis.title=element_text(size=14)
       )+
       scale_color_manual(values = colors)
-    p
-    ggsave(OUT, width = 8,height = 5, dpi = 300, compression = "lzw")
-    
+    return(print(p))
   }
   
-    #TDGDFL
+  #TDGDFL
   set.seed(11)
-  AMM.eff.managmtnt(dat=Total.effort.days.monthly,
-                    MGMT=Management,
-                    SEP=.15,
-                    Lab.font=3,
-                    Lab.back="white",
-                    Effort.lab="Effort (1000 km gn d)",
-                    OUT="AMM_effort.management_TDGDLF.tiff") 
+  p=AMM.eff.managmtnt(dat=Total.effort.days.monthly,
+                      MGMT=Management,
+                      SEP=.15,
+                      Lab.font=3,
+                      Lab.back="white",
+                      Effort.lab="Effort (1000 km gn d)")
   
-    #NSF
+  ggsave(handl_OneDrive('Management/Sharks/Timeline management measures/Effort.management_TDGDLF.tiff'), 
+         width = 8,height = 5, dpi = 300, compression = "lzw")
+  
+  
+  #NSF
   Total.effort.NSF=read.csv(paste(HNDL,"Annual.total.eff_NSF.csv",sep=""),stringsAsFactors=F)
   Total.effort.NSF=Total.effort.NSF%>%
-                      mutate(Total=Hook.days)
+    mutate(Total=Hook.days)
   set.seed(666)
-  AMM.eff.managmtnt(dat=Total.effort.NSF,
-                    MGMT=Management.north,
-                    SEP=.15,
-                    Lab.font=3,
-                    Lab.back="white",
-                    Effort.lab="Effort (1000 hook d)",
-                    OUT="AMM_effort.management_NSF.tiff")
-
+  p.N=AMM.eff.managmtnt(dat=Total.effort.NSF,
+                        MGMT=Management.north,
+                        SEP=.15,
+                        Lab.font=3,
+                        Lab.back="white",
+                        Effort.lab="Effort (1000 hook d)")
+  ggsave(handl_OneDrive('Management/Sharks/Timeline management measures/Effort.management_NSF.tiff'),
+         width = 8,height = 5, dpi = 300, compression = "lzw")
+  
+  
+  #Two fisheries combined
+  library(ggpubr)
+  ggarrange(p, p.N, ncol = 1, nrow = 2)
+  ggsave(handl_OneDrive('Management/Sharks/Timeline management measures/Effort.management_TDGDLF & NSF.tiff'),
+         width = 8,height = 8, dpi = 300, compression = "lzw")
   
   
   #3. Summary landed weight

@@ -802,6 +802,66 @@ Data.monthly=Data.monthly%>%filter(!(is.na(YEAR) & is.na(MONTH) & FINYEAR=='' & 
 
 #SECTION B. ---- DAILY LOGBOOKS ----
 
+#Check catch composition deeper than 100 m
+#only using Daily logbooks, Monthly return have very little data (mostly 'shark other')
+do.ktch.deep=FALSE
+if(do.ktch.deep)
+{
+  Deep.ktch=Data.daily%>%
+    filter(method%in%c('GN','LL'))%>%
+    mutate(LatDeg=ifelse(blockx<35600 & LatDeg==0,as.numeric(substr(blockx,1,2)),LatDeg),
+           LatMin=ifelse(is.na(LatMin),10*as.numeric(substr(block10,3,3)),LatMin),
+           LongDeg=ifelse(blockx<35600 & LongDeg==0,100+as.numeric(substr(blockx,3,4)),LongDeg),
+           LongMin=ifelse(is.na(LongMin),10*as.numeric(substr(block10,6,6)),LongMin),
+           LAT=LatDeg+(LatMin/60),
+           LON=LongDeg+(LongMin/60),
+           LAT=-abs(LAT))%>%
+    filter(depthMax>100 & LAT<=(-26) & !is.na(sname1))%>%
+    mutate(zone=ifelse(zone=='*','west',paste('zone',zone)),
+           Depth.interval=10*round(depthMax/10),
+           Depth.interval=ifelse(Depth.interval>150,'>150',Depth.interval),
+           Depth.interval=paste(Depth.interval,'m'),
+           Depth.interval=factor(Depth.interval,levels=c('100 m','110 m','120 m',
+                                                         '130 m','140 m','150 m',
+                                                         '>150 m')))%>%
+    dplyr::select(species,RSCommonName,livewt,method,zone,depthMax,Depth.interval)%>%
+    filter(!is.na(livewt))
+  
+  dummy=Deep.ktch%>%
+    group_by(RSCommonName)%>%
+    summarise(livewt=sum(livewt)/1000)%>%
+    arrange(-livewt)%>%
+    mutate(CumKtch=100*cumsum(livewt)/sum(livewt))%>%
+    filter(CumKtch>95)%>%pull(RSCommonName)
+  
+  Deep.ktch1=Deep.ktch%>%
+    mutate(RSCommonName1=ifelse(RSCommonName%in%dummy,"Other",RSCommonName),
+           RSCommonName1=ifelse(RSCommonName1=="Gulper sharks, Sleeper Sharks & Dogfishes",'Dogfishes',RSCommonName1),
+           Zone.method=paste(zone,method,sep='-'))%>%
+    group_by(Zone.method,method,zone,Depth.interval,RSCommonName1)%>%
+    summarise(livewt=sum(livewt)/1000)
+  
+  tiff(file=handl_OneDrive('Analyses/Catch and effort/Data_Resquests/Catch_comp_deeper100_Daily.tiff') ,
+       width=2400,height=2000,units="px",res=300,compression="lzw")
+  Deep.ktch1%>%
+    ggplot(aes(x = RSCommonName1, y = livewt))+
+    geom_col(aes(fill = Zone.method), width = 0.7)+
+    facet_wrap(~Depth.interval,scales='free_x')+
+    coord_flip()+
+    ylab("Total catch (tonnes)")+xlab('')+
+    theme(legend.position = "top",
+          legend.title = element_blank(),
+          legend.text=element_text(size=12),
+          axis.text=element_text(size=7),
+          axis.title=element_text(size=14))+
+    scale_fill_manual("legend", 
+                      values = c("west-GN" = "brown1", "west-LL" = "brown4",
+                                 "zone 1-GN" = "dodgerblue3",
+                                 "zone 2-GN" = "green3","zone 2-LL" = "darkgreen"))
+  dev.off()
+  
+}
+
 #simple financial assessment
 if(do.financial.ass=="YES")
 {
@@ -1166,7 +1226,7 @@ Data.daily$LongDeg=floor(Data.daily$LongDeg)
 Data.daily$Estuary=with(Data.daily,ifelse(blockx%in%Estuaries,"YES","NO"))
 
 # fix blocks 
-#note: this creates a dummy blockx just for extracting lat and long, it gets reset below
+#note: this creates a dummy blockx just for extracting lat and long, it gets reset below in '#reset blockx to original'
 Data.daily$blockx=with(Data.daily,ifelse(blockx%in%c(96021),25120,     #Shark Bay
                   ifelse(blockx%in%c(96022,96023),26131,
                   ifelse(blockx%in%c(97011),27132,                        #Abrolhos
@@ -1176,6 +1236,33 @@ Data.daily$blockx=with(Data.daily,ifelse(blockx%in%c(96021),25120,     #Shark Ba
                   ifelse(blockx%in%c(96000),32150,                        #Cockburn sound
                   ifelse(blockx%in%c(96030),35181,blockx)))))))))         # King George sound
 
+#Extact reported ray catches in West and South coast estuaries
+do.ray.ktch.estuary=FALSE
+if(do.ray.ktch.estuary)
+{
+  Data.daily%>%
+    filter(blockx%in%c(96010,96000,96030) & species%in%Ray.species)%>%
+    mutate(Est=case_when(blockx==96000~'Cockburn sound',
+                         blockx==96010~'Geographe Bay',
+                         blockx==96030~'King George Sound'))%>%
+    group_by(finyear,RSCommonName,Est)%>%
+    summarise(Tot=sum(livewt)/1000)%>%
+    mutate(year=as.numeric(substr(finyear,1,4)))%>%
+    filter(!RSCommonName=='Guitarfishes')%>%
+    ggplot(aes(year,Tot,color=RSCommonName))+
+    geom_line(size=1.5)+
+    facet_wrap(~Est)+
+    theme(strip.text.x = element_text(size = 14),
+          axis.text=element_text(size=12),
+          legend.position="top",
+          legend.title = element_blank(),
+          legend.key=element_blank(),
+          legend.text = element_text(size = 14),
+          title=element_text(size=16))+
+    xlab("Financial year") +ylab("Catch (tonnes)")
+  ggsave("C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Desktop/Ray catches.tiff", width = 14,height = 10, dpi = 300, compression = "lzw")
+  
+}
 #Fix 0 lat degrees or long degrees
 Data.daily$LatDeg=with(Data.daily,ifelse(blockx<35600 & LatDeg==0,as.numeric(substr(blockx,1,2)),LatDeg))  
 Data.daily$LongDeg=with(Data.daily,ifelse(blockx<35600 & LongDeg==0,100+as.numeric(substr(blockx,3,4)),LongDeg))
@@ -1568,7 +1655,12 @@ Mn.wght.dat$Keep=with(Mn.wght.dat,
                       ifelse(is.na(livewt) | livewt<=0,"NO","YES"))))))                     
 Mn.wght.dat=subset(Mn.wght.dat,Keep=="YES")               
 Mn.wght.dat=Mn.wght.dat[,-match(c("Avrg.w","Keep"),names(Mn.wght.dat))]
-write.csv(Mn.wght.dat,file =handl_OneDrive("Analyses/Catch and effort/Logbook.data.mean.weight.csv"))
+write.csv(Mn.wght.dat%>%
+            left_join(Mesh.size%>%
+            mutate(mshigh=round(mshigh))%>%
+            dplyr::distinct(DSNo,TSNo,SNo,mshigh),
+            by = c("SNo", "DSNo", "TSNo")),
+          file =handl_OneDrive("Analyses/Catch and effort/Logbook.data.mean.weight.csv"))
 
 
 #Fix weights with NA weight, zero weight or condition 'SC' (self consumed) but with nfish
