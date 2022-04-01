@@ -8,6 +8,9 @@
 # HEADER -----------------------------------------------------------------------
 rm(list=ls(all=TRUE))
 
+if(!exists('handl_OneDrive')) source('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias/Analyses/SOURCE_SCRIPTS/Git_other/handl_OneDrive.R')
+
+
 #library(glmmADMB)
 library(lattice)
 library(bbmle) #for AIC comparisons
@@ -39,7 +42,7 @@ library(tidyr)
 library(corrplot)
 library(cluster)
 library(factoextra) #for plotting
-library(cede)     #Malcolm Haddon's
+#library(cede)     #Malcolm Haddon's
 library(gridExtra)
 library(glmulti)  #model selection
 library(fitdistrplus)  #select distribution
@@ -58,13 +61,12 @@ library(mgcViz)
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240,dplyr.summarise.inform = FALSE)   
 
-if(!exists('handl_OneDrive')) source('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias/Analyses/SOURCE_SCRIPTS/Git_other/handl_OneDrive.R')
 
 setwd(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other"))
 source("Compare.error.structure.R")
 source("Deviance.explained.R")
 source("Sorting.objects.R")
-source("MS.Office.outputs.R")
+#source("MS.Office.outputs.R")
 setwd(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_Population.dynamics"))
 source("fn.fig.R")
 source("Nominal_cpue_functions.R")
@@ -239,7 +241,7 @@ use.blok.area='NO'
 #Criteria for keeping species for analysis
 N.keep=5      #in years
 Min.kg=100   #in kg
-Min.annual.prop.zero=0.2  #minimum annual proportion of zero records to be meaningful
+Min.annual.prop.zero=0.2  #minimum annual proportion of zero records to be selected for analysis
 core.per=90
 
 
@@ -249,7 +251,7 @@ Max.km.gn.h.monthly=24*20*Net.max/1000
 Max.km.gn.h.daily=24*Net.max/1000
 
 #Species definitions
-Shark.species=5001:24900
+Shark.species=c(5001:24900)  #note: rays are reported as a mixed so standardisation for Eagle rays (39001) is not possible
 Indicator.sp=c(17001,17003,18003,18007)
 Greynurse.protection='1999-00'
 TARGETS.name=c("SHARK, WHISKERY","SHARK, GUMMY","SHARK, DUSKY WHALER","SHARK, THICKSKIN (SANDBAR)")
@@ -523,6 +525,16 @@ Data.monthly.GN=Data.monthly.GN%>%
                      SNAME=ifelse(SPECIES==19004,"SHARK, SMOOTH HAMMERHEAD",SNAME),
                      RSCommonName=ifelse(SPECIES==19004,"Smooth Hammerhead Shark",RSCommonName))
 
+# Define skates and rays as eagle rays following interviews with fishers for PA project
+Data.daily.GN=Data.daily.GN%>%
+  mutate(SPECIES=ifelse(LAT<=(-30.5) & SPECIES%in%c(31000,990001),39001,SPECIES),
+         SNAME=ifelse(SPECIES==39001,"Eagle ray",SNAME),
+         RSCommonName=ifelse(SPECIES==39001,"Eagle ray",RSCommonName))
+Data.monthly.GN=Data.monthly.GN%>%
+  mutate(SPECIES=ifelse(LAT<=(-30.5) & SPECIES%in%c(31000,990001),39001,SPECIES),
+         SNAME=ifelse(SPECIES==39001,"Eagle ray",SNAME),
+         RSCommonName=ifelse(SPECIES==39001,"Eagle ray",RSCommonName))
+
 
 
 # SELECT SPECIES (at least 'N.keep' years of catches of at least 'Min.kg') and put into species list -----------------------------------------------------------------------
@@ -684,6 +696,7 @@ Prop.ktch.daily[Prop.ktch.daily>=Min.annual.prop.zero]=1
 Prop.ktch.daily[Prop.ktch.daily<Min.annual.prop.zero]=0
 
 First.year.catch=apply(Prop.ktch,1, function(x) head(x[x!=0],1))
+if(Min.annual.prop.zero<0.2) names(First.year.catch$'18007')='1986-87'  #cannot estimate coef for 1985
 First.year.catch.daily=apply(Prop.ktch.daily,1, function(x) head(x[x!=0],1))
 
 Annual.year.sp=names(which(rowSums(Prop.ktch)>10))
@@ -703,6 +716,8 @@ SP.list=SP.list[-match(c("Wobbegong","Hammerhead Sharks"),names(SP.list))]
 First.year.catch=First.year.catch[match(unlist(SP.list),names(First.year.catch))]
 First.year.catch.daily=First.year.catch.daily[match(unlist(SP.list),names(First.year.catch.daily))]
 
+First.year.catch=First.year.catch[!is.na(names(First.year.catch))]
+First.year.catch.daily=First.year.catch.daily[!is.na(names(First.year.catch.daily))]
 
 nnn=1:length(SP.list)
 
@@ -1040,6 +1055,7 @@ fn.cpue.data.daily=function(Dat,EffrrT,sp)
 #      #remove Bronze Whaler due to few records and uncertain species ID prior to Daily logbooks
 cl <- makeCluster(detectCores()-1)
 registerDoParallel(cl)
+clusterEvalQ(cl, .libPaths("C:/~/R/win-library/4.0"))  #added bit to point where doparallel is 
 system.time({Species.list=foreach(s=nnn,.packages=c('dplyr','doParallel')) %dopar%
   {
     if(!SP.list[[s]]==18001) return(fn.cpue.data(Dat=Data.monthly.GN %>% filter(LAT>=Core[[s]]$Lat[1] & LAT<=Core[[s]]$Lat[2] &
@@ -1055,7 +1071,6 @@ names(Species.list)=names(SP.list)
   #Daily 
 #note: select species within CORE area and add effort by date or ID (==Same.return.SNo). Note that for catch aggregating by date
 #       or by ID makes no difference but it's needed for merging with effort
-registerDoParallel(cl)
 system.time({Species.list.daily=foreach(s=nnn,.packages=c('dplyr','doParallel')) %dopar%
   {
     return(fn.cpue.data.daily(Dat=Data.daily.GN %>% filter(LAT>=Core[[s]]$Lat[1] & LAT<=Core[[s]]$Lat[2] &
@@ -1066,7 +1081,7 @@ system.time({Species.list.daily=foreach(s=nnn,.packages=c('dplyr','doParallel'))
   }
 })
 names(Species.list.daily)=names(SP.list) 
-stopCluster(cl)
+
 
 
 #Unbalanced raw data
@@ -1074,8 +1089,6 @@ get.raw=TRUE
 if(get.raw)
 {
   #Monthly
-  cl <- makeCluster(detectCores()-1)
-  registerDoParallel(cl)
   system.time({Species.list.raw=foreach(s= 1:length(Tar.sp),.packages=c('dplyr','doParallel')) %dopar%
     {
       a=fn.cpue.data(Dat=Data.monthly.GN,
@@ -1089,7 +1102,6 @@ if(get.raw)
   names(Species.list.raw)=names(SP.list)[Tar.sp] 
   
   #Daily 
-  registerDoParallel(cl)
   system.time({Species.list.daily.raw=foreach(s= 1:length(Tar.sp),.packages=c('dplyr','doParallel')) %dopar%
     {
       a=fn.cpue.data.daily(Dat=Data.daily.GN,
@@ -1101,7 +1113,7 @@ if(get.raw)
     }
   })
   names(Species.list.daily.raw)=names(SP.list)[Tar.sp] 
-  stopCluster(cl) 
+  
 }
 
 #Remove irrelevant variables (not used after prelim analysis)
@@ -2311,10 +2323,10 @@ Tab.Sensi=data.frame(Scenario=c("Base case","Nominal","All vessels & blocks","No
                      Efficiency_increase=c(rep("Yes",3),"No"))
 
 setwd(paste(getwd(),"/Outputs/Paper",sep=""))
-fn.word.table(WD=getwd(),TBL=Tab.Sensi,Doc.nm="Sensitivity tests",caption=NA,paragph=NA,
-              HdR.col='black',HdR.bg='white',Hdr.fnt.sze=10,Hdr.bld='normal',body.fnt.sze=10,
-              Zebra='NO',Zebra.col='grey60',Grid.col='black',
-              Fnt.hdr= "Times New Roman",Fnt.body= "Times New Roman")
+# fn.word.table(WD=getwd(),TBL=Tab.Sensi,Doc.nm="Sensitivity tests",caption=NA,paragph=NA,
+#               HdR.col='black',HdR.bg='white',Hdr.fnt.sze=10,Hdr.bld='normal',body.fnt.sze=10,
+#               Zebra='NO',Zebra.col='grey60',Grid.col='black',
+#               Fnt.hdr= "Times New Roman",Fnt.body= "Times New Roman")
 
 
 
@@ -2981,113 +2993,118 @@ if(Exprt_Ainslie=="YES")
 
 # OUTPUT DATA TABLES ----------------------------------------------
 #Output table with number of records available in effective area and numbers used in standardisation
-Export.tbl=function(WD,Tbl,Doc.nm,caption,paragph,HdR.col,HdR.bg,Hdr.fnt.sze,Hdr.bld,
-                    body.fnt.sze,Zebra,Zebra.col,Grid.col,Fnt.hdr,Fnt.body,
-                    HDR.names,HDR.span,HDR.2nd)
+do.this=FALSE  #need to update package Reporter not available anymore
+if(do.this)
 {
-  mydoc = docx(Doc.nm)  #create r object
-  mydoc = addSection( mydoc, landscape = T )   #landscape table
-  # add title
-  if(!is.na(caption))mydoc = addParagraph(mydoc, caption, stylename = "TitleDoc" )
+  Export.tbl=function(WD,Tbl,Doc.nm,caption,paragph,HdR.col,HdR.bg,Hdr.fnt.sze,Hdr.bld,
+                      body.fnt.sze,Zebra,Zebra.col,Grid.col,Fnt.hdr,Fnt.body,
+                      HDR.names,HDR.span,HDR.2nd)
+  {
+    mydoc = docx(Doc.nm)  #create r object
+    mydoc = addSection( mydoc, landscape = T )   #landscape table
+    # add title
+    if(!is.na(caption))mydoc = addParagraph(mydoc, caption, stylename = "TitleDoc" )
+    
+    # add a paragraph
+    if(!is.na(paragph))mydoc = addParagraph(mydoc , paragph, stylename="Citationintense")
+    
+    #add table
+    MyFTable=FlexTable(Tbl,header.column=F,add.rownames =F,
+                       header.cell.props = cellProperties(background.color=HdR.bg), 
+                       header.text.props = textProperties(color=HdR.col,font.size=Hdr.fnt.sze,
+                                                          font.weight="bold",font.family =Fnt.hdr), 
+                       body.text.props = textProperties(font.size=body.fnt.sze,font.family =Fnt.body))
+    
+    #Add header
+    MyFTable = addHeaderRow(MyFTable,text.properties=textBold(),value=HDR.names,colspan=HDR.span)
+    
+    #Add second header
+    MyFTable = addHeaderRow(MyFTable, text.properties = textBold(),value =HDR.2nd)
+    
+    
+    # zebra stripes - alternate colored backgrounds on table rows
+    if(Zebra=="YES") MyFTable = setZebraStyle(MyFTable, odd = Zebra.col, even = "white" )
+    
+    # table borders
+    MyFTable = setFlexTableBorders(MyFTable,
+                                   inner.vertical = borderNone(),inner.horizontal = borderNone(),
+                                   outer.vertical = borderNone(),
+                                   outer.horizontal = borderProperties(color=Grid.col, style="solid", width=4))
+    
+    # set columns widths (in inches)
+    #MyFTable = setFlexTableWidths( MyFTable, widths = Col.width)
+    
+    mydoc = addFlexTable( mydoc, MyFTable)   
+    mydoc = addSection( mydoc, landscape = F ) 
+    
+    # write the doc 
+    writeDoc( mydoc, file = paste(Doc.nm,".docx",sep=''))
+  }
   
-  # add a paragraph
-  if(!is.na(paragph))mydoc = addParagraph(mydoc , paragph, stylename="Citationintense")
+  TABle=vector('list',length(SP.list))
+  names(TABle)=names(SP.list)
+  for(s in Tar.sp)
+  {
+    
+    #total records
+    Tot.m=table(DATA.list.LIVEWT.c_all_reporters[[s]]$FINYEAR)
+    Tot.d=table(DATA.list.LIVEWT.c.daily_all_reporters[[s]]$FINYEAR)
+    
+    Good.m=table(DATA.list.LIVEWT.c[[s]]$FINYEAR)
+    Good.d=table(DATA.list.LIVEWT.c.daily[[s]]$FINYEAR)
+    
+    
+    #Used in Standardisation after selecting blocks and vessels
+    DD=DATA.list.LIVEWT.c[[s]]
+    DD=subset(DD,BLOCKX%in%as.numeric(BLKS.used[[s]]))      
+    DD=subset(DD,VESSEL%in%VES.used[[s]])
+    
+    DD_daily=DATA.list.LIVEWT.c.daily[[s]]
+    DD_daily=subset(DD_daily,BLOCKX%in%as.numeric(BLKS.used.daily[[s]]))      
+    DD_daily=subset(DD_daily,VESSEL%in%VES.used.daily[[s]])
+    
+    Stand.m=table(DD$FINYEAR)
+    Stand.d=table(DD_daily$FINYEAR)
+    
+    a=table(DD$FINYEAR,DD$VESSEL)
+    a[a>0]=1
+    a=rowSums(a)
+    a[a<Threshold.n.vessls.per.yr]=NA
+    Stand.m[which(is.na(a))]=NA
+    
+    a=table(DD_daily$FINYEAR,DD_daily$VESSEL)
+    a[a>0]=1
+    a=rowSums(a)
+    a[a<Threshold.n.vessls.per.yr]=NA
+    Stand.d[which(is.na(a))]=NA
+    
+    Tot.m=Tot.m[match(names(Good.m),names(Tot.m))]
+    TaBs=data.frame(Year=c(names(Tot.m),names(Tot.d)),
+                    Record=c(rep("Monthly",length(Tot.m)),rep("Daily",length(Tot.d))),
+                    A_Total.num.rec.eff.area=c(Tot.m,Tot.d),
+                    B_Good.num.rec.eff.area=round(c(Good.m/Tot.m,Good.d/Tot.d),2),
+                    C_Used.fo.stand=round(c(Stand.m/Tot.m,Stand.d/Tot.d),2))
+    
+    names(TaBs)[3:ncol(TaBs)]=paste(names(TaBs)[3:ncol(TaBs)],names(DATA.list.LIVEWT.c)[s],sep="_")
+    
+    rm(DD,DD_daily)
+    TABle[[s]]=TaBs
+    
+  }
   
-  #add table
-  MyFTable=FlexTable(Tbl,header.column=F,add.rownames =F,
-                     header.cell.props = cellProperties(background.color=HdR.bg), 
-                     header.text.props = textProperties(color=HdR.col,font.size=Hdr.fnt.sze,
-                                                        font.weight="bold",font.family =Fnt.hdr), 
-                     body.text.props = textProperties(font.size=body.fnt.sze,font.family =Fnt.body))
+  TABle=TABle[lengths(TABle) != 0]
+  Table.nsamp <- Reduce(function(x, y) merge(x, y, all=T,by=c("Year", "Record")), TABle, accumulate=F)
+  Table.nsamp=Table.nsamp[,c("Year", "Record",sort(names(Table.nsamp[3:ncol(Table.nsamp)])))]
+  Export.tbl(WD=getwd(),Tbl=Table.nsamp,Doc.nm="Sample_sizes",caption=NA,paragph=NA,
+             HdR.col='black',HdR.bg='white',Hdr.fnt.sze=10,Hdr.bld='normal',body.fnt.sze=10,
+             Zebra='NO',Zebra.col='grey60',Grid.col='black',
+             Fnt.hdr= "Times New Roman",Fnt.body= "Times New Roman",
+             HDR.names=c('Year', 'Record','Total number of records within eff. area',
+                         'Proportion reliable','Proportion used in standardisation'),
+             HDR.span=c(1,1,N.species,N.species,N.species),
+             HDR.2nd=c("","",rep(c("Dusky","Gummy","Sandbar","Whiskery"),3)))
   
-  #Add header
-  MyFTable = addHeaderRow(MyFTable,text.properties=textBold(),value=HDR.names,colspan=HDR.span)
-  
-  #Add second header
-  MyFTable = addHeaderRow(MyFTable, text.properties = textBold(),value =HDR.2nd)
-  
-  
-  # zebra stripes - alternate colored backgrounds on table rows
-  if(Zebra=="YES") MyFTable = setZebraStyle(MyFTable, odd = Zebra.col, even = "white" )
-  
-  # table borders
-  MyFTable = setFlexTableBorders(MyFTable,
-                                 inner.vertical = borderNone(),inner.horizontal = borderNone(),
-                                 outer.vertical = borderNone(),
-                                 outer.horizontal = borderProperties(color=Grid.col, style="solid", width=4))
-  
-  # set columns widths (in inches)
-  #MyFTable = setFlexTableWidths( MyFTable, widths = Col.width)
-  
-  mydoc = addFlexTable( mydoc, MyFTable)   
-  mydoc = addSection( mydoc, landscape = F ) 
-  
-  # write the doc 
-  writeDoc( mydoc, file = paste(Doc.nm,".docx",sep=''))
 }
-
-TABle=vector('list',length(SP.list))
-names(TABle)=names(SP.list)
-for(s in Tar.sp)
-{
-  
-  #total records
-  Tot.m=table(DATA.list.LIVEWT.c_all_reporters[[s]]$FINYEAR)
-  Tot.d=table(DATA.list.LIVEWT.c.daily_all_reporters[[s]]$FINYEAR)
-  
-  Good.m=table(DATA.list.LIVEWT.c[[s]]$FINYEAR)
-  Good.d=table(DATA.list.LIVEWT.c.daily[[s]]$FINYEAR)
-  
-  
-  #Used in Standardisation after selecting blocks and vessels
-  DD=DATA.list.LIVEWT.c[[s]]
-  DD=subset(DD,BLOCKX%in%as.numeric(BLKS.used[[s]]))      
-  DD=subset(DD,VESSEL%in%VES.used[[s]])
-  
-  DD_daily=DATA.list.LIVEWT.c.daily[[s]]
-  DD_daily=subset(DD_daily,BLOCKX%in%as.numeric(BLKS.used.daily[[s]]))      
-  DD_daily=subset(DD_daily,VESSEL%in%VES.used.daily[[s]])
-  
-  Stand.m=table(DD$FINYEAR)
-  Stand.d=table(DD_daily$FINYEAR)
-  
-  a=table(DD$FINYEAR,DD$VESSEL)
-  a[a>0]=1
-  a=rowSums(a)
-  a[a<Threshold.n.vessls.per.yr]=NA
-  Stand.m[which(is.na(a))]=NA
-  
-  a=table(DD_daily$FINYEAR,DD_daily$VESSEL)
-  a[a>0]=1
-  a=rowSums(a)
-  a[a<Threshold.n.vessls.per.yr]=NA
-  Stand.d[which(is.na(a))]=NA
-  
-  Tot.m=Tot.m[match(names(Good.m),names(Tot.m))]
-  TaBs=data.frame(Year=c(names(Tot.m),names(Tot.d)),
-                  Record=c(rep("Monthly",length(Tot.m)),rep("Daily",length(Tot.d))),
-                  A_Total.num.rec.eff.area=c(Tot.m,Tot.d),
-                  B_Good.num.rec.eff.area=round(c(Good.m/Tot.m,Good.d/Tot.d),2),
-                  C_Used.fo.stand=round(c(Stand.m/Tot.m,Stand.d/Tot.d),2))
-  
-  names(TaBs)[3:ncol(TaBs)]=paste(names(TaBs)[3:ncol(TaBs)],names(DATA.list.LIVEWT.c)[s],sep="_")
-  
-  rm(DD,DD_daily)
-  TABle[[s]]=TaBs
-  
-}
-
-TABle=TABle[lengths(TABle) != 0]
-Table.nsamp <- Reduce(function(x, y) merge(x, y, all=T,by=c("Year", "Record")), TABle, accumulate=F)
-Table.nsamp=Table.nsamp[,c("Year", "Record",sort(names(Table.nsamp[3:ncol(Table.nsamp)])))]
-Export.tbl(WD=getwd(),Tbl=Table.nsamp,Doc.nm="Sample_sizes",caption=NA,paragph=NA,
-           HdR.col='black',HdR.bg='white',Hdr.fnt.sze=10,Hdr.bld='normal',body.fnt.sze=10,
-           Zebra='NO',Zebra.col='grey60',Grid.col='black',
-           Fnt.hdr= "Times New Roman",Fnt.body= "Times New Roman",
-           HDR.names=c('Year', 'Record','Total number of records within eff. area',
-                       'Proportion reliable','Proportion used in standardisation'),
-           HDR.span=c(1,1,N.species,N.species,N.species),
-           HDR.2nd=c("","",rep(c("Dusky","Gummy","Sandbar","Whiskery"),3)))
 
 
 
@@ -3243,6 +3260,22 @@ cfac=function(x,breaks=NULL)    #function for converting continuous var to facto
 }
 clog=function(x) log(x+0.05)        #function for applying log
 
+makecategorical=function (labelModel, indat) 
+{
+  Interact <- grep(":", labelModel)
+  nInteract <- length(Interact)
+  numvars <- length(labelModel) - nInteract
+  for (fac in 1:numvars) {
+    if (length(indat[, labelModel[fac]]) > 0) {
+      indat[, labelModel[fac]] <- factor(indat[, labelModel[fac]])
+    }
+    else {
+      warning(paste0("Factor name ", labelModel[fac], 
+                     "does not appear in data.frame"))
+    }
+  }
+  return(indat)
+}
 if(do.Exploratory=="YES")
 {
   hndl.expl=handl_OneDrive("Analyses/Catch and effort/Outputs/Exploratory/")
@@ -3932,11 +3965,8 @@ if(Def.mod.Str=="YES")
   hndl.modl.sel=handl_OneDrive("Analyses/Catch and effort/Outputs/Model Selection/")
   if(Use.Tweedie)       #takes 3.5 hours
   {
-    cl <- makeCluster(detectCores()-1)
-    registerDoParallel(cl)
-    
       #target species   #takes 45 mins per species
-    system.time({foreach(s=Tar.sp,.packages=c('cede','dplyr','mgcv','doParallel')) %do%
+    system.time({foreach(s=Tar.sp,.packages=c('dplyr','mgcv','doParallel')) %do%
         {
           #Monthly
           do.monthly=FALSE
@@ -3963,7 +3993,7 @@ if(Def.mod.Str=="YES")
               dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
               mutate(cpue=catch.target/km.gillnet.hours.c)
             d <- makecategorical(Factors,d)
-            MODS=foreach(i=1:length(Fmula),.packages=c('cede','dplyr','mgcv','doParallel')) %dopar%
+            MODS=foreach(i=1:length(Fmula),.packages=c('dplyr','mgcv','doParallel')) %dopar%
               {
                 mod<-gam(formula(Fmula[[i]]),data=d,family=Family,select=TRUE,method="REML")
                 return(mod)
@@ -4024,7 +4054,7 @@ if(Def.mod.Str=="YES")
             dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
             mutate(cpue=catch.target/km.gillnet.hours.c)
           d <- makecategorical(Factors,d)
-          MODS=foreach(i=1:length(Fmula),.packages=c('cede','dplyr','mgcv')) %dopar%
+          MODS=foreach(i=1:length(Fmula),.packages=c('dplyr','mgcv')) %dopar%
             {
               mod<-gam(formula(Fmula[[i]]),data=d,family=Family,select=TRUE,method="REML")
               return(mod)
@@ -4056,7 +4086,7 @@ if(Def.mod.Str=="YES")
     })
     
       #other species    #takes 2 mins per species
-    system.time({foreach(s=nnn[-sort(Tar.sp)],.packages=c('cede','dplyr','mgcv','doParallel')) %do%
+    system.time({foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr','mgcv','doParallel')) %do%
         {
           #Monthly
           if(!is.null(BLKS.used[[s]]))
@@ -4081,7 +4111,7 @@ if(Def.mod.Str=="YES")
               mutate(cpue=catch.target/km.gillnet.hours.c)
             d <- makecategorical(Factors,d)
             
-            MODS=foreach(i=1:length(Fmula),.packages=c('cede','dplyr','mgcv','doParallel')) %dopar%
+            MODS=foreach(i=1:length(Fmula),.packages=c('dplyr','mgcv','doParallel')) %dopar%
               {
                 mod<-gam(formula(Fmula[[i]]),data=d,family=Family,select=TRUE,method="REML")
                 return(mod)
@@ -4133,7 +4163,7 @@ if(Def.mod.Str=="YES")
               dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
               mutate(cpue=catch.target/km.gillnet.hours.c)
             d <- makecategorical(Factors,d)
-            MODS=foreach(i=1:length(Fmula),.packages=c('cede','dplyr','mgcv')) %dopar%
+            MODS=foreach(i=1:length(Fmula),.packages=c('dplyr','mgcv')) %dopar%
               {
                 mod<-gam(formula(Fmula[[i]]),data=d,family=Family,select=TRUE,method="REML")
                 return(mod)
@@ -4165,7 +4195,7 @@ if(Def.mod.Str=="YES")
         }
     })
     
-    stopCluster(cl)
+    
   }
   
   if(Use.Delta)
@@ -4201,9 +4231,7 @@ if(Def.mod.Str=="YES")
         return(mod)
       }
       efrt="km.gillnet.hours.c"
-      cl <- makeCluster(detectCores()-1)
-      registerDoParallel(cl)
-      system.time({Model.structure=foreach(s=Tar.sp,.packages=c('cede','dplyr','mgcv')) %dopar%
+      system.time({Model.structure=foreach(s=Tar.sp,.packages=c('dplyr','mgcv')) %dopar%
         {
           #need for only daily 
           d=DATA.list.LIVEWT.c.daily[[s]]%>%filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]])
@@ -4362,11 +4390,16 @@ if(Def.mod.Str=="NO")
   {
     #Monthly        
     for(s in nnn) Best.Model[[s]]=formula(cpue~finyear + blockx + s(vessel,bs='re') + s(month,k=12,bs='cc'))
-    Best.Model['Bronze Whaler']=list(NULL)
+    Best.Model['Bronze Whaler']=list(NULL)  #no species code 
     Best.Model$`Tiger Shark`=formula(cpue~finyear + blockx + vessel + s(month,k=12,bs='cc'))
     Best.Model$`Dusky Whaler`=Best.Model$`Whiskery Shark`=formula(cpue~finyear + blockx + s(vessel,bs='re'))
     
     #Daily
+    for(s in nnn) Best.Model.daily[[s]]=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
+                                                  s(long10.corner,lat10.corner)+s(mean.depth))
+    if("Greynurse Shark"%in%names(Best.Model.daily)) Best.Model.daily['Greynurse Shark']=list(NULL)  #protected
+    
+    #add targeting to target species
     Best.Model.daily$`Sandbar Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
                                                s(long10.corner,lat10.corner)+s(mean.depth)+cluster_clara)
     Best.Model.daily$`Whiskery Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
@@ -4376,11 +4409,7 @@ if(Def.mod.Str=="NO")
     Best.Model.daily$`Dusky Whaler`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
                                               s(long10.corner,lat10.corner)+s(mean.depth)+cluster_clara)
     
-    Best.Model.daily$`Smooth Hammerhead Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                                         s(long10.corner,lat10.corner)+s(mean.depth))
-    Best.Model.daily$`Tiger Shark`=Best.Model.daily$`Spinner Shark`=
-      Best.Model.daily$`Bronze Whaler`=Best.Model.daily$`Smooth Hammerhead Shark`
-    
+
   }
   
   if(Use.Delta)
@@ -4572,10 +4601,6 @@ if(Model.run=="First")
 
 
 #-- Run standardisation on selected model 
-
-cl <- makeCluster(detectCores()-1)
-registerDoParallel(cl)
-
 if(Use.Qualif.level)
 {
   pred.fun=function(MOD,biascor,PRED,Pred.type)             
@@ -4613,7 +4638,7 @@ if(Use.Qualif.level)
   }
 
   #monthly
-  system.time({Stand.out=foreach(s=Tar.sp,.packages=c('dplyr','cede')) %dopar%
+  system.time({Stand.out=foreach(s=Tar.sp,.packages=c('dplyr')) %dopar%
     {
       DAT=subset(Store_nom_cpues_monthly[[s]]$QL_dat,vessel%in%VES.used[[s]])  #selet blocks and vessels
       DAT=subset(DAT,blockx%in%BLKS.used[[s]])
@@ -4625,7 +4650,7 @@ if(Use.Qualif.level)
   })
   
   #daily
-  system.time({Stand.out.daily=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv')) %dopar%
+  system.time({Stand.out.daily=foreach(s=Tar.sp,.packages=c('dplyr','mgcv')) %dopar%
     {
       if(Model.run=="First") this.form=Best.Model.daily[[s]] else
         this.form=NULL
@@ -4990,7 +5015,7 @@ if(Use.Delta)
   
   #Target species
     #monthly
-  system.time({Stand.out=foreach(s=Tar.sp,.packages=c('dplyr','cede')) %dopar%
+  system.time({Stand.out=foreach(s=Tar.sp,.packages=c('dplyr')) %dopar%
     {
       DAT=DATA.list.LIVEWT.c[[s]]%>%filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]])
       colnames(DAT)=tolower(colnames(DAT))
@@ -5012,7 +5037,7 @@ if(Use.Delta)
   })   
 
     #daily
-  system.time({Stand.out.daily=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv')) %dopar%
+  system.time({Stand.out.daily=foreach(s=Tar.sp,.packages=c('dplyr','mgcv')) %dopar%
     {
       DAT=DATA.list.LIVEWT.c.daily[[s]]%>%filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]])
       colnames(DAT)=tolower(colnames(DAT))
@@ -5044,7 +5069,7 @@ if(Use.Delta)
   
   # Other species (based on delta method due to excess zeros)
     #monthly          takes 2 sec
-  system.time({Stand.out.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr','cede')) %dopar%
+  system.time({Stand.out.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr')) %dopar%
     {
       if(!is.null(DATA.list.LIVEWT.c[[s]]) & !is.null(BLKS.used[[s]]))
       {
@@ -5058,7 +5083,7 @@ if(Use.Delta)
     }
   })
     #daily            takes 3.5 sec
-  system.time({Stand.out.daily.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr','cede','mgcv')) %dopar%
+  system.time({Stand.out.daily.other=foreach(s=nnn[-sort(Tar.sp)],.packages=c('dplyr','mgcv')) %dopar%
     {
       if(!is.null(DATA.list.LIVEWT.c.daily[[s]])& !is.null(BLKS.used.daily[[s]]))
       {
@@ -5155,8 +5180,8 @@ if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
   }
   
   
-  #monthly
-  system.time({Stand.out=foreach(s=nnn,.packages=c('dplyr','cede','mgcv')) %dopar%
+  #monthly  
+  system.time({Stand.out=foreach(s=nnn,.packages=c('dplyr','mgcv')) %dopar%
     {
       if(!is.null(BLKS.used[[s]]))
       {
@@ -5192,7 +5217,7 @@ if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
   })   
   
   #daily
-  system.time({Stand.out.daily=foreach(s=nnn,.packages=c('dplyr','cede','mgcv')) %dopar%
+  system.time({Stand.out.daily=foreach(s=nnn,.packages=c('dplyr','mgcv')) %dopar%
     {
       if(!is.null(BLKS.used.daily[[s]]))
       {
@@ -5229,7 +5254,7 @@ if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
   names(Stand.out)=names(Stand.out.daily)=names(SP.list)
 }
 
-stopCluster(cl)
+
 
 
 # rm(Species.list.daily,Species.list,Data.daily.GN,
@@ -5247,15 +5272,13 @@ if(Model.run=="First")
   names(Sens.pred)=names(SP.list)
   Sens.pred.daily=Sens.pred.normlzd=Sens.pred.daily.normlzd=Sens.pred
   
-  cl <- makeCluster(detectCores()-1)
-  registerDoParallel(cl)
-  
+
   if(Use.Qualif.level)
   {
     system.time({for(s in Tar.sp)   #takes 55 secs
     {
       #1. Fit models
-      sens_monthly=foreach(o=1:nrow(sens),.packages=c('dplyr','cede')) %dopar%   
+      sens_monthly=foreach(o=1:nrow(sens),.packages=c('dplyr')) %dopar%   
         {
           MiN.YR=as.numeric(substr(sens$Vessels_used[o],1,1))
           EFrT=sens$Efrt.used[o]
@@ -5269,7 +5292,7 @@ if(Model.run=="First")
                           Formula=Best.Model[[s]],Formula.gam=NULL))
           rm(DAT)
         }
-      sens_daily=foreach(o=1:nrow(sens),.packages=c('dplyr','cede')) %dopar%
+      sens_daily=foreach(o=1:nrow(sens),.packages=c('dplyr')) %dopar%
         {
           MiN.YR=as.numeric(substr(sens$Vessels_used[o],1,1))
           EFrT=sens$Efrt.used[o]
@@ -5389,7 +5412,7 @@ if(Model.run=="First")
   {
     #1. Fit models
     #monthly
-    system.time({sens_monthly=foreach(s=Tar.sp,.packages=c('dplyr','cede')) %dopar%
+    system.time({sens_monthly=foreach(s=Tar.sp,.packages=c('dplyr')) %dopar%
       {
         DAT=DATA.list.LIVEWT.c[[s]]
         if(Nms.sp[s]=="Sandbar Shark") DAT=DAT%>%filter(!BLOCKX==9600 & 
@@ -5412,7 +5435,7 @@ if(Model.run=="First")
       }
     })
     #daily
-    system.time({sens_daily=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv')) %dopar%
+    system.time({sens_daily=foreach(s=Tar.sp,.packages=c('dplyr','mgcv')) %dopar%
       {
         DAT=DATA.list.LIVEWT.c.daily[[s]]
         colnames(DAT)=tolower(colnames(DAT))
@@ -5535,7 +5558,7 @@ if(Model.run=="First")
   {
     #1. Fit models
     #monthly
-    system.time({sens_monthly=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv')) %dopar%
+    system.time({sens_monthly=foreach(s=Tar.sp,.packages=c('dplyr','mgcv')) %dopar%
       {
         d=DATA.list.LIVEWT.c[[s]]
         if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
@@ -5559,7 +5582,7 @@ if(Model.run=="First")
     })
     
     #daily
-    system.time({sens_daily=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv')) %do%
+    system.time({sens_daily=foreach(s=Tar.sp,.packages=c('dplyr','mgcv')) %do%
       {
         theseyears=as.character(unique(Stand.out.daily[[s]]$DATA$finyear))
         d=DATA.list.LIVEWT.c.daily[[s]]%>%
@@ -5800,8 +5823,7 @@ if(Model.run=="First")  #takes 4 mins
     
     #calculate gam deviance explained by each term
     gam.list=Stand.out.daily
-    cl <- makeCluster(detectCores()-1)
-    registerDoParallel(cl)
+
     system.time({dummy1=foreach(s=nnn,.packages=c('mgcv')) %dopar%
       {
         if(!is.null(gam.list[[s]]))
@@ -5920,9 +5942,6 @@ if(Model.run=="First")  #takes 4 mins
   
   if(Use.Tweedie)     #takes 7 mins
   {
-    cl <- makeCluster(detectCores()-1)
-    registerDoParallel(cl)
-    
     Anova.and.Dev.exp=function(MOD,SP,Dev.Exp)   #function for extracting term significance and deviance explained
     {
       Anova.tab=anova(MOD)
@@ -5983,7 +6002,7 @@ if(Model.run=="First")  #takes 4 mins
     }
     
     #monthly
-    system.time({Dev.monthly=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv','stringr')) %dopar%
+    system.time({Dev.monthly=foreach(s=Tar.sp,.packages=c('dplyr','mgcv','stringr')) %dopar%
       {
         if(!is.null(BLKS.used[[s]]))
         {
@@ -6022,7 +6041,7 @@ if(Model.run=="First")  #takes 4 mins
     })   
     
     #daily
-    system.time({Dev.daily=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv','stringr')) %dopar%
+    system.time({Dev.daily=foreach(s=Tar.sp,.packages=c('dplyr','mgcv','stringr')) %dopar%
       {
         if(!is.null(BLKS.used.daily[[s]]))
         {
@@ -6581,9 +6600,6 @@ if(compare.glm.gam_spatial=="YES")
 }
 
 #Predict year effect (considering log bias corr if required)
-cl <- makeCluster(detectCores()-1)
-registerDoParallel(cl)
-
 if(Use.Qualif.level)
 {
   #Target species  
@@ -6713,7 +6729,7 @@ if(Use.Tweedie)     #takes <1 min
   names(Pred)=names(Pred.daily)=names(SP.list)
 }
 
-stopCluster(cl) 
+
 
 
 #Remove early effective years for sandbar and gummy shark
@@ -7191,12 +7207,9 @@ if(Use.Tweedie)
 {
   if(Model.run=="First") 
   {
-    cl <- makeCluster(detectCores()-1)
-    registerDoParallel(cl)
-    
     #1. Run standardisation
     #monthly
-    system.time({Stand.out.Tweedie.sens=foreach(s=nnn,.packages=c('dplyr','cede','mgcv')) %dopar%
+    system.time({Stand.out.Tweedie.sens=foreach(s=nnn,.packages=c('dplyr','mgcv')) %dopar%
       {
         if(s %in% Tar.sp)
         {
@@ -7255,7 +7268,7 @@ if(Use.Tweedie)
     })   
     
     #daily
-    system.time({Stand.out.daily.Tweedie.sens=foreach(s=nnn,.packages=c('dplyr','cede','mgcv')) %dopar%
+    system.time({Stand.out.daily.Tweedie.sens=foreach(s=nnn,.packages=c('dplyr','mgcv')) %dopar%
       {
         if(s %in% Tar.sp)
         {
@@ -7608,10 +7621,6 @@ if(Use.Delta)
 # -- Show effects for other terms 
 if(Model.run=="First")
 {
-  
-  cl <- makeCluster(detectCores()-1)
-  registerDoParallel(cl)
-  
   #Vessel effect
   if(Use.Qualif.level)
   {
@@ -8226,9 +8235,9 @@ if(Model.run=="First")
     dev.off() 
   }
   
-  stopCluster(cl) 
+  
 }
-
+stopCluster(cl) 
 
 # INFLUENCE PLOTS ---------------------------------------------------------
 # Bentley et al 2012; not useful for delta-MC method   
@@ -8576,7 +8585,6 @@ if(do.influence=="YES")
   }
 }
 
-#ACA
 # CONSTRUCT SPATIAL STANDARDISED INDEX ---------------------------------------------------------
 if(Use.Delta)  
 { system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))  
@@ -8673,10 +8681,8 @@ if(Use.Delta)
     
   }
 
-    cl <- makeCluster(detectCores()-1)
-    registerDoParallel(cl)
     #monthly
-    system.time({Zone_preds.monthly=foreach(s=Tar.sp,.packages=c('dplyr','cede','mvtnorm')) %dopar%
+    system.time({Zone_preds.monthly=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm')) %dopar%
       {
         zns=sort(unique(DATA.list.LIVEWT.c[[s]]$zone))
         if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #no enough observations 
@@ -8739,7 +8745,7 @@ if(Use.Delta)
     names(Zone_preds.monthly)=names(SP.list)[Tar.sp]
     
     #daily
-    system.time({Zone_preds.daily=foreach(s=Tar.sp,.packages=c('dplyr','cede','mvtnorm','mgcv')) %dopar%
+    system.time({Zone_preds.daily=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm','mgcv')) %dopar%
       {
         zns=sort(unique(DATA.list.LIVEWT.c.daily[[s]]$zone))
         if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #no enough observations 
@@ -8811,11 +8817,8 @@ if(Use.Delta)
   }
 if(Use.Tweedie)  
 {
-  cl <- makeCluster(detectCores()-1)
-  registerDoParallel(cl)
-  
     #monthly
-  system.time({Zone_preds.monthly=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv','emmeans')) %do%
+  system.time({Zone_preds.monthly=foreach(s=Tar.sp,.packages=c('dplyr','mgcv','emmeans')) %do%
     {
       if(!is.null(BLKS.used[[s]]))
       {
@@ -8880,7 +8883,7 @@ if(Use.Tweedie)
   names(Zone_preds.monthly)=names(SP.list)[Tar.sp]
   
     #daily
-  system.time({Zone_preds.daily=foreach(s=Tar.sp,.packages=c('dplyr','cede','mgcv','emmeans')) %do%
+  system.time({Zone_preds.daily=foreach(s=Tar.sp,.packages=c('dplyr','mgcv','emmeans')) %do%
     {
       if(!is.null(BLKS.used.daily[[s]]))
       {

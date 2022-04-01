@@ -33,13 +33,14 @@ source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R"))
 
 #     Before executing SOFAR script, run "2.CPUE standardisations.R" to construct latest standardised cpue
 
-#MISSING for 2020: add daily.other to the catch of other (this is daily not reported in CAES for other methods)
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)
 
 Current.yr="2019-20"
 
 Percent.fin.of.livewt=0.03
+Shark.Fin.Price.List=read.csv(handl_OneDrive("Data/Catch and Effort/Shark Fin Price List.csv")) #provided by Rory to Eva Lai
+
 TDGDLF.lat.range=c(-26,-40)
 
 #bring in data from 1.Manipulate data.R
@@ -56,7 +57,7 @@ Total.effort.zone.hours.monthly=read.csv("Annual.zone.eff.hours.csv")
 Total.effort.zone.days.monthly=read.csv("Annual.zone.eff.days.csv")
 TEPS.current=read.csv("TEPS.current.csv")
 Suite=read.csv("suite.csv")$Suite
-TEPS.pre.current=read.csv("TEPS.pre.current.csv")
+#TEPS.pre.current=read.csv("TEPS.pre.current.csv")
 Results.pre.2013=read.csv("Results.pre.2013.csv")
 Effort.monthly=read.csv("Effort.monthly.csv")   
 Effort.daily=read.csv("Effort.daily.csv")
@@ -285,9 +286,16 @@ PRICES=PRICES%>%mutate(dolar.per.kg=Beach.Price..Adjusted.,
                        dolar.per.kg=as.numeric(gsub("\\$", "", dolar.per.kg)),
                        SPECIES=ASA.Species.Code)
             #%>%select(-uv1718)
-
-Fin.Weight=subset(DAT,SPECIES%in%Elasmo.species,select=c(SPECIES,SNAME,RSCommonName,zone,LIVEWT.c))
-Fin.Weight=subset(Fin.Weight,!(SPECIES%in%c(13000,20000,31000,26999))) #remove no fin species (wobbies, spurdog,rays except shovelnose)
+Shark.Fin.Price.List=Shark.Fin.Price.List%>%
+  rename(Percent="ï..Percent")%>%
+  mutate(Prop=Percent/100)%>%
+  dplyr::select(Percent,Prop,species)
+Fin.Weight=subset(DAT,SPECIES%in%Elasmo.species,select=c(SPECIES,SNAME,RSCommonName,zone,LIVEWT.c))%>%
+              filter(!SPECIES%in%c(22998))%>%
+              left_join(Shark.Fin.Price.List,by=c('SPECIES'='species'))%>%
+              mutate(Per.fin.livewt=Prop,
+                     Per.fin.livewt=ifelse(is.na(Per.fin.livewt),Percent.fin.of.livewt,Per.fin.livewt))%>%
+              filter(!Per.fin.livewt==0)
 Fin.Weight$dolar.per.kg.fin=PRICES[match(22998,PRICES$SPECIES),match('dolar.per.kg',names(PRICES))]
 Fin.Weight$fin.weight=Percent.fin.of.livewt*Fin.Weight$LIVEWT.c 
 Fin.Weight$Total.price=Fin.Weight$dolar.per.kg.fin*Fin.Weight$fin.weight
@@ -526,7 +534,7 @@ fun.Tab2.SoFaR=function(Dat)
   return(TABLA)
 }
 
-TEPS.WC.SC=subset(TEPS.current,fishery%in%c("SGL","WCGL"))
+TEPS.WC.SC=subset(TEPS.current,fishery%in%c('JASDGDL','OASC,OT','WCDGDL','SGL','WCGL','*'))  
 
 
 #review comments in case reported in comments and not in logbook columns
@@ -1068,211 +1076,216 @@ full_join(d%>%mutate(Yr=as.numeric(substr(FINYEAR,1,4)))%>%dplyr::select(-Data),
 dev.off()
 
 # For AMM -----------------------------------------------------------------
-do.AMM=FALSE
+do.AMM=TRUE
 if(do.AMM)
 {
-  library(stringr)
-  Management=read.csv(handl_OneDrive('Management/Sharks/Timeline management measures/Management_timeline.csv'))
-  Management=Management%>%
-  mutate(date=as.POSIXct(StartDate,format="%d/%m/%Y"),
-         finyear=decimal_date(date))
-  Management.north=Management%>%
-    filter(Relevant.to%in%c('NSF',"TDGDLF & NSF") & 
-             round(finyear)<=as.numeric(substr(Current.yr,1,4)))
-  
-  Management=Management%>%
-  filter(Relevant.to%in%c('TDGDLF',"TDGDLF & NSF") & 
-           round(finyear)<=as.numeric(substr(Current.yr,1,4)))
-
-
-  #1. Catch and management measures timeline
-  AMM.ktch.eff.managmtnt=function(GROUP,LAT1,LAT2,MGMT,SEP,Lab.font,Lab.back,
-                                  nn,frms,n.frms,do.animation,speed)
+  do.mngmnt.timeline=FALSE
+  if(do.mngmnt.timeline)
   {
-    dat=subset(Data.monthly,SPECIES%in%GROUP & LAT<=LAT1 & LAT >=LAT2 & METHOD%in%c("GN","LL") &
-                 Estuary=="NO")
+    library(stringr)
+    Management=read.csv(handl_OneDrive('Management/Sharks/Timeline management measures/Management_timeline.csv'))
+    Management=Management%>%
+      mutate(date=as.POSIXct(StartDate,format="%d/%m/%Y"),
+             finyear=decimal_date(date))
+    Management.north=Management%>%
+      filter(Relevant.to%in%c('NSF',"TDGDLF & NSF") & 
+               round(finyear)<=as.numeric(substr(Current.yr,1,4)))
     
-    #aggregate by total
-    annual.catch.total=aggregate(LIVEWT.c~FINYEAR,data=dat,sum,na.rm=T)%>%
-      mutate(finyear=1+as.numeric(substr(FINYEAR,1,4)),
-             LIVEWT.c=LIVEWT.c/1000)%>%
-      dplyr::select(-FINYEAR)
-    
-    dummy=annual.catch.total[1:nrow(MGMT),]%>%
-      mutate(LIVEWT.c=NA,
-             finyear=MGMT$finyear)%>%
-      filter(!finyear%in%annual.catch.total$finyear)
-    annual.catch.total=rbind(annual.catch.total,dummy)
-    
-    Man=MGMT%>%dplyr::select(Event,finyear,Category)%>%mutate(id=1:nrow(MGMT))
-    
-    d=annual.catch.total%>%
-      left_join(Man,by='finyear')%>%
-      arrange(finyear)%>%
-      filter(finyear>=1975)%>%
-      mutate(LIVEWT.c=ifelse(is.na(LIVEWT.c),na.approx(LIVEWT.c),LIVEWT.c),
-             Category=ifelse(is.na(Category),"",Category),
-             Event=ifelse(is.na(Event),"",Event))
-    
-    set.seed(666)
-    colors=c(Data='red',Closure='steelblue',Other='forestgreen','NA'='transparent')
-    p=ggplot(d,
-             aes(finyear, LIVEWT.c,label=Event,color = factor(Category))) +
-      geom_line(colour="orange",size=1.25) + geom_point() +
-      geom_label_repel(box.padding=SEP,hjust = 0,size = Lab.font,fill=Lab.back) + 
-      geom_line(colour="orange",size=1.25, alpha = 0.3) + geom_point(alpha = 0.4)+
-      ylab("Cach (tonnes live wt)") + xlab("Financial year")+
-      theme(legend.position = "none",
-            axis.text=element_text(size=12),
-            axis.title=element_text(size=14)
-            # panel.background = element_rect(fill = "black", color  =  NA),
-            # panel.border = element_rect(fill = NA, color = "white"),  
-            # panel.grid.major = element_line(color = "grey20"),  
-            # panel.grid.minor = element_line(color = "grey20"),  
-            # panel.spacing = unit(0.5, "lines")
-      )+
-      scale_color_manual(values = colors)
-    p
-    ggsave("AMM_catch.management.tiff", width = 8,height = 5, dpi = 300, compression = "lzw")
+    Management=Management%>%
+      filter(Relevant.to%in%c('TDGDLF',"TDGDLF & NSF") & 
+               round(finyear)<=as.numeric(substr(Current.yr,1,4)))
     
     
-    
-    #animation
-    if(do.animation)
+    #1. Catch and management measures timeline
+    AMM.ktch.eff.managmtnt=function(GROUP,LAT1,LAT2,MGMT,SEP,Lab.font,Lab.back,
+                                    nn,frms,n.frms,do.animation,speed)
     {
-      Min.yr=min(dat$YEAR.c)
+      dat=subset(Data.monthly,SPECIES%in%GROUP & LAT<=LAT1 & LAT >=LAT2 & METHOD%in%c("GN","LL") &
+                   Estuary=="NO")
       
-      a=dat%>%
-        mutate(finyear=1+as.numeric(substr(FINYEAR,1,4)))%>%
-        group_by(finyear)%>%
-        summarise(LIVEWT.c=sum(LIVEWT.c)/1000)
+      #aggregate by total
+      annual.catch.total=aggregate(LIVEWT.c~FINYEAR,data=dat,sum,na.rm=T)%>%
+        mutate(finyear=1+as.numeric(substr(FINYEAR,1,4)),
+               LIVEWT.c=LIVEWT.c/1000)%>%
+        dplyr::select(-FINYEAR)
       
-      b=a[rep(1:nrow(a),nn),]%>%
-        arrange(finyear)
-      SEQ=seq(1,nrow(b),by=nn)
-      b$finyear[-SEQ]=NA
-      b$LIVEWT.c[-SEQ]=NA
-      b$finyear=with(b,ifelse(is.na(finyear),na.approx(finyear),finyear))
-      b$LIVEWT.c=with(b,ifelse(is.na(LIVEWT.c),na.approx(LIVEWT.c),LIVEWT.c))
+      dummy=annual.catch.total[1:nrow(MGMT),]%>%
+        mutate(LIVEWT.c=NA,
+               finyear=MGMT$finyear)%>%
+        filter(!finyear%in%annual.catch.total$finyear)
+      annual.catch.total=rbind(annual.catch.total,dummy)
       
-      Man1=b%>%
-        full_join(Man%>%filter(finyear>=Min.yr),by='finyear')%>%
-        filter(finyear>=Min.yr)%>%
-        mutate(Event=ifelse(is.na(Event),'',Event),
-               Category=ifelse(is.na(Category),'',Category))%>%
-        group_by(Event)%>%
-        mutate(n=n())%>%
-        mutate(temp = case_when((n >= n.frms) ~ (1),
-                                (n<n.frms) ~ (n.frms))) %>%
-        uncount(temp)%>%
-        dplyr::select(-c(id,n))%>%
+      Man=MGMT%>%dplyr::select(Event,finyear,Category)%>%mutate(id=1:nrow(MGMT))
+      
+      d=annual.catch.total%>%
+        left_join(Man,by='finyear')%>%
         arrange(finyear)%>%
-        data.frame
-      #dummy=Man1[rep(1,5),]
-      #dummy$Event=dummy$Category=''
-      #dummy$finyear=seq(dummy$finyear[1]-.5,dummy$finyear[1]-.99,length.out=nrow(dummy))
-      #Man1=rbind(dummy,Man1)
-      Man1$ID=1:nrow(Man1)
-      Man1$LIVEWT.c=with(Man1,ifelse(is.na(LIVEWT.c),na.approx(LIVEWT.c, rule=2),LIVEWT.c))
-      Man1$Event.yr=with(Man1,ifelse(Event!='',paste(round(finyear),Event,sep=': '),''))
-      anim <- ggplot(Man1, aes(finyear, LIVEWT.c,label=Event.yr)) +
-        geom_line(colour="orange",size=3) +
-        geom_label_repel(box.padding=SEP,hjust = 0,size = 9,fill=Lab.back)+
-        theme(legend.position = "none",
-              axis.text=element_text(size=20),
-              axis.title=element_text(size=24))+
-        scale_color_manual(values = colors)+
+        filter(finyear>=1975)%>%
+        mutate(LIVEWT.c=ifelse(is.na(LIVEWT.c),na.approx(LIVEWT.c),LIVEWT.c),
+               Category=ifelse(is.na(Category),"",Category),
+               Event=ifelse(is.na(Event),"",Event))
+      
+      set.seed(666)
+      colors=c(Data='red',Closure='steelblue',Other='forestgreen','NA'='transparent')
+      p=ggplot(d,
+               aes(finyear, LIVEWT.c,label=Event,color = factor(Category))) +
+        geom_line(colour="orange",size=1.25) + geom_point() +
+        geom_label_repel(box.padding=SEP,hjust = 0,size = Lab.font,fill=Lab.back) + 
+        geom_line(colour="orange",size=1.25, alpha = 0.3) + geom_point(alpha = 0.4)+
         ylab("Cach (tonnes live wt)") + xlab("Financial year")+
-        transition_reveal(as.numeric(ID))
-      p.animate=animate(anim,nframes=frms,duration = speed, height = 700, width = 1000)
-      anim_save("AMM_catch.management.gif", p.animate)
+        theme(legend.position = "none",
+              axis.text=element_text(size=12),
+              axis.title=element_text(size=14)
+              # panel.background = element_rect(fill = "black", color  =  NA),
+              # panel.border = element_rect(fill = NA, color = "white"),  
+              # panel.grid.major = element_line(color = "grey20"),  
+              # panel.grid.minor = element_line(color = "grey20"),  
+              # panel.spacing = unit(0.5, "lines")
+        )+
+        scale_color_manual(values = colors)
+      p
+      ggsave("AMM_catch.management.tiff", width = 8,height = 5, dpi = 300, compression = "lzw")
+      
+      
+      
+      #animation
+      if(do.animation)
+      {
+        Min.yr=min(dat$YEAR.c)
+        
+        a=dat%>%
+          mutate(finyear=1+as.numeric(substr(FINYEAR,1,4)))%>%
+          group_by(finyear)%>%
+          summarise(LIVEWT.c=sum(LIVEWT.c)/1000)
+        
+        b=a[rep(1:nrow(a),nn),]%>%
+          arrange(finyear)
+        SEQ=seq(1,nrow(b),by=nn)
+        b$finyear[-SEQ]=NA
+        b$LIVEWT.c[-SEQ]=NA
+        b$finyear=with(b,ifelse(is.na(finyear),na.approx(finyear),finyear))
+        b$LIVEWT.c=with(b,ifelse(is.na(LIVEWT.c),na.approx(LIVEWT.c),LIVEWT.c))
+        
+        Man1=b%>%
+          full_join(Man%>%filter(finyear>=Min.yr),by='finyear')%>%
+          filter(finyear>=Min.yr)%>%
+          mutate(Event=ifelse(is.na(Event),'',Event),
+                 Category=ifelse(is.na(Category),'',Category))%>%
+          group_by(Event)%>%
+          mutate(n=n())%>%
+          mutate(temp = case_when((n >= n.frms) ~ (1),
+                                  (n<n.frms) ~ (n.frms))) %>%
+          uncount(temp)%>%
+          dplyr::select(-c(id,n))%>%
+          arrange(finyear)%>%
+          data.frame
+        #dummy=Man1[rep(1,5),]
+        #dummy$Event=dummy$Category=''
+        #dummy$finyear=seq(dummy$finyear[1]-.5,dummy$finyear[1]-.99,length.out=nrow(dummy))
+        #Man1=rbind(dummy,Man1)
+        Man1$ID=1:nrow(Man1)
+        Man1$LIVEWT.c=with(Man1,ifelse(is.na(LIVEWT.c),na.approx(LIVEWT.c, rule=2),LIVEWT.c))
+        Man1$Event.yr=with(Man1,ifelse(Event!='',paste(round(finyear),Event,sep=': '),''))
+        anim <- ggplot(Man1, aes(finyear, LIVEWT.c,label=Event.yr)) +
+          geom_line(colour="orange",size=3) +
+          geom_label_repel(box.padding=SEP,hjust = 0,size = 9,fill=Lab.back)+
+          theme(legend.position = "none",
+                axis.text=element_text(size=20),
+                axis.title=element_text(size=24))+
+          scale_color_manual(values = colors)+
+          ylab("Cach (tonnes live wt)") + xlab("Financial year")+
+          transition_reveal(as.numeric(ID))
+        p.animate=animate(anim,nframes=frms,duration = speed, height = 700, width = 1000)
+        anim_save("AMM_catch.management.gif", p.animate)
+      }
+      
     }
+    AMM.ktch.eff.managmtnt(GROUP=Elasmo.species,
+                           LAT1=TDGDLF.lat.range[1],
+                           LAT2=TDGDLF.lat.range[2],
+                           MGMT=Management,
+                           SEP=.1,
+                           Lab.font=3.5,
+                           Lab.back="white",
+                           nn=50,
+                           frms=300,
+                           n.frms=600,
+                           do.animation=TRUE,
+                           speed=100)  #lower speed value is faster
     
-  }
-  AMM.ktch.eff.managmtnt(GROUP=Elasmo.species,
-                         LAT1=TDGDLF.lat.range[1],
-                         LAT2=TDGDLF.lat.range[2],
-                         MGMT=Management,
-                         SEP=.1,
-                         Lab.font=3.5,
-                         Lab.back="white",
-                         nn=50,
-                         frms=300,
-                         n.frms=600,
-                         do.animation=TRUE,
-                         speed=100)  #lower speed value is faster
-  
-  
-  #2. Effort and management measures timeline
-  AMM.eff.managmtnt=function(dat,MGMT,SEP,Lab.font,Lab.back,Effort.lab)
-  {
-    Man=MGMT%>%dplyr::select(Event,finyear,Category)%>%mutate(id=1:nrow(MGMT))
-    d=dat%>%
-      mutate(finyear=as.numeric(substr(FINYEAR,1,4)))%>%
-      full_join(Man,by='finyear')%>%
-      arrange(finyear)%>%
-      filter(finyear>=1975)%>%
-      mutate(Total=ifelse(is.na(Total),na.approx(Total),Total),
-             Category=ifelse(is.na(Category),"",Category),
-             Event=ifelse(is.na(Event),"",Event))
     
-    this=which(!is.na(d$FINYEAR))
-    this=this[length(this)]
-    
-    if(is.na(d$FINYEAR[nrow(d)])) 
+    #2. Effort and management measures timeline
+    AMM.eff.managmtnt=function(dat,MGMT,SEP,Lab.font,Lab.back,Effort.lab)
     {
-      d$Total[(this+1):nrow(d)]=d$Total[this]
+      Man=MGMT%>%dplyr::select(Event,finyear,Category)%>%mutate(id=1:nrow(MGMT))
+      d=dat%>%
+        mutate(finyear=as.numeric(substr(FINYEAR,1,4)))%>%
+        full_join(Man,by='finyear')%>%
+        arrange(finyear)%>%
+        filter(finyear>=1975)%>%
+        mutate(Total=ifelse(is.na(Total),na.approx(Total),Total),
+               Category=ifelse(is.na(Category),"",Category),
+               Event=ifelse(is.na(Event),"",Event))
+      
+      this=which(!is.na(d$FINYEAR))
+      this=this[length(this)]
+      
+      if(is.na(d$FINYEAR[nrow(d)])) 
+      {
+        d$Total[(this+1):nrow(d)]=d$Total[this]
+      }
+      
+      colors=c(Data='red',Closure='steelblue',Other='forestgreen','NA'='transparent')
+      p=ggplot(d,
+               aes(finyear, Total,label=Event,color = factor(Category))) +
+        geom_line(colour="orange",size=1.25) + geom_point() +
+        geom_label_repel(box.padding=SEP,hjust = 0,size = Lab.font,fill=Lab.back) + 
+        geom_line(colour="orange",size=1.25, alpha = 0.3) + geom_point(alpha = 0.4)+
+        ylab(Effort.lab) + xlab("Financial year")+
+        theme(legend.position = "none",
+              axis.text=element_text(size=12),
+              axis.title=element_text(size=14)
+        )+
+        scale_color_manual(values = colors)
+      return(print(p))
     }
     
-    colors=c(Data='red',Closure='steelblue',Other='forestgreen','NA'='transparent')
-    p=ggplot(d,
-             aes(finyear, Total,label=Event,color = factor(Category))) +
-      geom_line(colour="orange",size=1.25) + geom_point() +
-      geom_label_repel(box.padding=SEP,hjust = 0,size = Lab.font,fill=Lab.back) + 
-      geom_line(colour="orange",size=1.25, alpha = 0.3) + geom_point(alpha = 0.4)+
-      ylab(Effort.lab) + xlab("Financial year")+
-      theme(legend.position = "none",
-            axis.text=element_text(size=12),
-            axis.title=element_text(size=14)
-      )+
-      scale_color_manual(values = colors)
-    return(print(p))
-  }
-  
-  #TDGDFL
-  set.seed(11)
-  p=AMM.eff.managmtnt(dat=Total.effort.days.monthly,
-                      MGMT=Management,
-                      SEP=.15,
-                      Lab.font=3,
-                      Lab.back="white",
-                      Effort.lab="Effort (1000 km gn d)")
-  
-  ggsave(handl_OneDrive('Management/Sharks/Timeline management measures/Effort.management_TDGDLF.tiff'), 
-         width = 8,height = 5, dpi = 300, compression = "lzw")
-  
-  
-  #NSF
-  Total.effort.NSF=read.csv(paste(HNDL,"Annual.total.eff_NSF.csv",sep=""),stringsAsFactors=F)
-  Total.effort.NSF=Total.effort.NSF%>%
-    mutate(Total=Hook.days)
-  set.seed(666)
-  p.N=AMM.eff.managmtnt(dat=Total.effort.NSF,
-                        MGMT=Management.north,
+    #TDGDFL
+    set.seed(11)
+    p=AMM.eff.managmtnt(dat=Total.effort.days.monthly,
+                        MGMT=Management,
                         SEP=.15,
                         Lab.font=3,
                         Lab.back="white",
-                        Effort.lab="Effort (1000 hook d)")
-  ggsave(handl_OneDrive('Management/Sharks/Timeline management measures/Effort.management_NSF.tiff'),
-         width = 8,height = 5, dpi = 300, compression = "lzw")
-  
-  
-  #Two fisheries combined
-  library(ggpubr)
-  ggarrange(p, p.N, ncol = 1, nrow = 2)
-  ggsave(handl_OneDrive('Management/Sharks/Timeline management measures/Effort.management_TDGDLF & NSF.tiff'),
-         width = 8,height = 8, dpi = 300, compression = "lzw")
-  
+                        Effort.lab="Effort (1000 km gn d)")
+    
+    ggsave(handl_OneDrive('Management/Sharks/Timeline management measures/Effort.management_TDGDLF.tiff'), 
+           width = 8,height = 5, dpi = 300, compression = "lzw")
+    
+    
+    #NSF
+    Total.effort.NSF=read.csv(paste(HNDL,"Annual.total.eff_NSF.csv",sep=""),stringsAsFactors=F)
+    Total.effort.NSF=Total.effort.NSF%>%
+      mutate(Total=Hook.days)
+    set.seed(666)
+    p.N=AMM.eff.managmtnt(dat=Total.effort.NSF,
+                          MGMT=Management.north,
+                          SEP=.15,
+                          Lab.font=3,
+                          Lab.back="white",
+                          Effort.lab="Effort (1000 hook d)")
+    ggsave(handl_OneDrive('Management/Sharks/Timeline management measures/Effort.management_NSF.tiff'),
+           width = 8,height = 5, dpi = 300, compression = "lzw")
+    
+    
+    #Two fisheries combined
+    library(ggpubr)
+    ggarrange(p, p.N, ncol = 1, nrow = 2)
+    ggsave(handl_OneDrive('Management/Sharks/Timeline management measures/Effort.management_TDGDLF & NSF.tiff'),
+           width = 8,height = 8, dpi = 300, compression = "lzw")
+    
+  }
+   
   
   #3. Summary landed weight
   Summary.landwt=DAT%>%
@@ -1366,7 +1379,7 @@ if(do.AMM)
                        SPECIES=="Sandbar shark"~AAM.table.Elasmos[match('Sandbar',AAM.table.Elasmos$Name),'Total'],
                        SPECIES=="Whiskery shark"~AAM.table.Elasmos[match('Whiskery',AAM.table.Elasmos$Name),'Total'],
                        TRUE ~ Catch.tons))
-  write.table(dummy,"AMM_Summary.LANDWT.csv",sep = ",",row.names = F)
+  write.table(dummy,"AMM_1.1.MainFeatures.LANDWT.csv",sep = ",",row.names = F)
   write.table(AAM.table.Elasmos,"AMM_Table1.SoFar.Elasmos.csv",sep = ",",row.names = F)
   write.table(AAM.table.Scalies,"AMM_Table1.SoFar.Scalies.csv",sep = ",",row.names = F)
 }
