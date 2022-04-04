@@ -36,7 +36,7 @@ source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R"))
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)
 
-Current.yr="2019-20"
+Current.yr="2020-21"
 
 Percent.fin.of.livewt=0.03
 Shark.Fin.Price.List=read.csv(handl_OneDrive("Data/Catch and Effort/Shark Fin Price List.csv")) #provided by Rory to Eva Lai
@@ -47,7 +47,6 @@ TDGDLF.lat.range=c(-26,-40)
 setwd(handl_OneDrive("Analyses/Data_outs"))
 
 Data.monthly=read.csv("Data.monthly.csv")
-daily.other=read.csv("Data.daily.other.fisheries.csv")
 Rec.fish.catch=read.csv('recons_recreational.csv')
 Data.current.Sofar=read.csv("Data.current.Sofar.csv")
 PRICES=read.csv("PRICES.csv")
@@ -57,7 +56,6 @@ Total.effort.zone.hours.monthly=read.csv("Annual.zone.eff.hours.csv")
 Total.effort.zone.days.monthly=read.csv("Annual.zone.eff.days.csv")
 TEPS.current=read.csv("TEPS.current.csv")
 Suite=read.csv("suite.csv")$Suite
-#TEPS.pre.current=read.csv("TEPS.pre.current.csv")
 Results.pre.2013=read.csv("Results.pre.2013.csv")
 Effort.monthly=read.csv("Effort.monthly.csv")   
 Effort.daily=read.csv("Effort.daily.csv")
@@ -123,33 +121,38 @@ Display.current.yr=paste(substr(Current.yr,1,4),"/",substr(Current.yr,6,7),sep="
 Ind.spe.list=list(Gummy=17001,Whiskery=17003,Bronzy.Dusky=c(18001,18003),sandbar=18007)
 
 #Create data for TDGDLF Ecological Risk Assessment 
-era.yrs=as.numeric(substr(Current.yr,1,4))
-era.yrs1=seq(era.yrs-3,era.yrs+1)
-era.yrs=seq(era.yrs-4,era.yrs)
-era.yrs=paste(era.yrs,substr(era.yrs1,3,4),sep='-')
-ERA=subset(Data.monthly,METHOD%in%c("GN","LL") & Estuary=="NO" &
-             LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])%>%
-        filter(FINYEAR%in%era.yrs)%>%
-        dplyr::select(FINYEAR,SPECIES,LIVEWT.c)%>%
-        group_by(FINYEAR,SPECIES)%>%
-        summarise(Tons=sum(LIVEWT.c)/1000)%>%
-        group_by(SPECIES)%>%
-        mutate(Average.catch=mean(Tons))%>%
-        spread(FINYEAR,Tons,fill = 0)%>%
-        arrange(-Average.catch)%>%
-        ungroup()%>%
-        mutate(Percent.of.total.retained=round(100*Average.catch/sum(Average.catch),1))%>%
-        left_join(All.species.names%>%
-                    distinct(CAES_Code,.keep_all=T)%>%
-                    dplyr::select(CAES_Code,COMMON_NAME,SCIENTIFIC_NAME), 
-                   by=c('SPECIES'='CAES_Code'))%>%
-        mutate(Percent.of.total.retained=ifelse(Percent.of.total.retained<0.1,
-                                                '<0.1',Percent.of.total.retained))%>%
-      filter(!is.na(COMMON_NAME))%>%
-      dplyr::select(COMMON_NAME,SCIENTIFIC_NAME,all_of(era.yrs),Average.catch,Percent.of.total.retained)%>%
-      mutate(across(where(is.numeric), round, 2),
-             COMMON_NAME=ifelse(COMMON_NAME=="Skates and rays, other","Other skates and rays",COMMON_NAME))%>%
-      filter(Average.catch>0)
+do.ERA=FALSE
+if(do.ERA)
+{
+  era.yrs=as.numeric(substr(Current.yr,1,4))
+  era.yrs1=seq(era.yrs-3,era.yrs+1)
+  era.yrs=seq(era.yrs-4,era.yrs)
+  era.yrs=paste(era.yrs,substr(era.yrs1,3,4),sep='-')
+  ERA=subset(Data.monthly,METHOD%in%c("GN","LL") & Estuary=="NO" &
+               LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])%>%
+    filter(FINYEAR%in%era.yrs)%>%
+    dplyr::select(FINYEAR,SPECIES,LIVEWT.c)%>%
+    group_by(FINYEAR,SPECIES)%>%
+    summarise(Tons=sum(LIVEWT.c)/1000)%>%
+    group_by(SPECIES)%>%
+    mutate(Average.catch=mean(Tons))%>%
+    spread(FINYEAR,Tons,fill = 0)%>%
+    arrange(-Average.catch)%>%
+    ungroup()%>%
+    mutate(Percent.of.total.retained=round(100*Average.catch/sum(Average.catch),1))%>%
+    left_join(All.species.names%>%
+                distinct(CAES_Code,.keep_all=T)%>%
+                dplyr::select(CAES_Code,COMMON_NAME,SCIENTIFIC_NAME), 
+              by=c('SPECIES'='CAES_Code'))%>%
+    mutate(Percent.of.total.retained=ifelse(Percent.of.total.retained<0.1,
+                                            '<0.1',Percent.of.total.retained))%>%
+    filter(!is.na(COMMON_NAME))%>%
+    dplyr::select(COMMON_NAME,SCIENTIFIC_NAME,all_of(era.yrs),Average.catch,Percent.of.total.retained)%>%
+    mutate(across(where(is.numeric), round, 2),
+           COMMON_NAME=ifelse(COMMON_NAME=="Skates and rays, other","Other skates and rays",COMMON_NAME))%>%
+    filter(Average.catch>0)
+  
+}
   
 
 
@@ -163,8 +166,7 @@ DAT$Bioregion=with(DAT,ifelse(Bioregion=="Gascoyne","WC",Bioregion))
 
 #Create current year data set for other fisheries in temperate region (i.e non TDGDLF or NSF)  
 #select south and west coast fisheries
-CAESS.shark.fishery.codes=c("SGL1","SGL2","SGL","WCGL","C127","CL02")
-Other.fishery.catch=subset(Data.monthly,SPECIES<=31000 & !FisheryCode%in%CAESS.shark.fishery.codes)  
+Other.fishery.catch=subset(Data.monthly,SPECIES<=31000 & Shark.fishery=='non.shark.fishery')  
 Other.fishery.catch=subset(Other.fishery.catch, !(METHOD=="LL"&Estuary=="NO"))
 Other.fishery.catch$LAT=-as.numeric(substr(Other.fishery.catch$BLOCKX,1,2))
 Other.fishery.catch=subset(Other.fishery.catch, !(METHOD=="GN"&Estuary=="NO" & LAT<(-26)))
@@ -764,7 +766,7 @@ fn.figs2.3.SoFaR.scalies=function(GROUP,LAT1,LAT2,INT,INT2)
 }
 jpeg(file="Figure 3.TotalScalefishCatch.jpeg",width = 2400, height = 2400,units = "px", res = 300)
 PaR()
-fn.figs2.3.SoFaR.scalies(Scalefish.species,TDGDLF.lat.range[1],TDGDLF.lat.range[2],20,100)
+fn.figs2.3.SoFaR.scalies(GROUP=Scalefish.species,LAT1=TDGDLF.lat.range[1],LAT2=TDGDLF.lat.range[2],INT=20,INT2=100)
 LEG()
 dev.off()
 
@@ -951,129 +953,132 @@ rbind(a,b)%>%
 dev.off()
 
 # For ERA -----------------------------------------------------------------
-
-#1. Catch
-#Table of retained species
-write.csv(ERA,"ERA_table.retained.species.csv",row.names=F)
-
-#Annual catches main species
-ERA.main.SP=data.frame(SPECIES=c(17001,18003,17003,18001,
-                                 19000,18007,18023,13000,
-                                 384002,377004,353001,320000),
-                       Names=c('Gummy shark', 'Dusky shark', 'Whiskery shark', 'Bronze whaler',
-                               'Hammerheads','Sandbar shark','Spinner shark','Wobbegongs',
-                               'Blue groper','Queen snapper','Pink snapper','West Australian dhufish'))
-ERA.main.SP$Names=factor(ERA.main.SP$Names,levels=ERA.main.SP$Names)
-
-#myColors=c(brewer.pal(8,"YlOrRd"),brewer.pal(4,"Blues"))
-myColors=c("brown","brown1","chocolate","deeppink2","pink","coral2","goldenrod","darkorange",
-           "blue","cyan3","deepskyblue","cornflowerblue")
-names(myColors)=ERA.main.SP$Names
-jpeg(file="ERA_Catch_main.species.jpeg",width=2400,height=2200,units="px",res=300)
-Data.monthly%>%
-      filter(METHOD%in%c("GN","LL") & Estuary=="NO" & SPECIES%in%ERA.main.SP$SPECIES  &
-              LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])%>%
-  left_join(ERA.main.SP,by='SPECIES')%>%
-  group_by(FINYEAR,Names)%>%
-  summarise(Catch.tons=sum(LIVEWT.c)/1000)%>%
-  mutate(Yr=as.numeric(substr(FINYEAR,1,4)))%>%
-  ggplot(aes(Yr,Catch.tons))+
-  geom_line(aes(colour=Names),size=1.5)+
-  ylab("Catch (tonnes live wt.)")+
-  xlab("Financial year")+
-  theme(axis.text= element_text( size = 14),
-        axis.title=element_text( size = 20),
-        legend.text = element_text(size = 13),
-        legend.title=element_blank(),
-        legend.position="top",
-        plot.margin=unit(c(.5,.5,.5,.5),"cm"))+
-  scale_colour_manual(name = 'Names',values = myColors)
-dev.off()
-
-#2. Effort
-# Gillnet and longline equivalent effort
-LL.equiv.Eff.days.total=LL.equiv.Eff.days.zone%>%
-                mutate(Total=LIVEWT.West + LIVEWT.Zone1 + LIVEWT.Zone2,
-                       Data="Longline equivalent")%>%
-                  dplyr::select(FINYEAR,Total,Data)
-d=Total.effort.days.monthly%>%
-  mutate(Total=Total-LL.equiv.Eff.days.total$Total,
-         Data="Gillnet")
-jpeg(file="ERA_Effort_Gillnet and longline equivalent.jpeg",width=2400,height=2400,units="px",res=300)
-rbind(d,LL.equiv.Eff.days.total)%>%
-  mutate(Year=as.numeric(substr(FINYEAR,1,4)))%>%
-  ggplot(aes(Year,Total))+
-  geom_line(aes(colour=Data),size=3)+
-  ylab("Effort (1000 km gn d)")+
-  xlab("Finacial year")+
-  theme(axis.text= element_text( size = 14),
-        axis.title=element_text( size = 20),
-        legend.text = element_text(size = 16),
-        legend.title=element_blank(),
-        legend.position="top",
-        plot.margin=unit(c(.75,1.5,1,.75),"cm"))
-dev.off()
-
-write.csv(100*LL.equiv.Eff.days.total$Total/Total.effort.days.monthly$Total,
-          "ERA_Effort_Longline.equiv.eff_percent.total.csv",row.names = Total.effort.days.monthly$FINYEAR)
-
-
-# Gillnet and longline effort
-LL.effort.monthly=Effort.monthly%>%
-  filter(METHOD=='LL' & LAT<=(-26) & LAT>(-36.1) & LONG<=(129) & LONG>(111))%>%
-  mutate(hook.days=BDAYS.c*HOOKS)%>%
-  group_by(VESSEL,BLOCKX,FINYEAR,MONTH,YEAR.c)%>%
-  summarise(hook.days=max(hook.days,na.rm=T))%>%
-  group_by(FINYEAR)%>%
-  summarise(hook.days=sum(hook.days,na.rm=T))
-
-LL.effort.daily=Effort.daily%>%
-  mutate(LAT=-abs(LAT))%>%
-  filter(method=='LL' & LAT<=(-26) & LAT>(-36.1) & LONG<=(129) & LONG>(111))%>%
-  mutate(hook.days=hooks)
-Use.Date="YES"
-if(Use.Date=="NO")
+if(do.ERA)
 {
+  #1. Catch
+  #Table of retained species
+  write.csv(ERA,"ERA_table.retained.species.csv",row.names=F)
+  
+  #Annual catches main species
+  ERA.main.SP=data.frame(SPECIES=c(17001,18003,17003,18001,
+                                   19000,18007,18023,13000,
+                                   384002,377004,353001,320000),
+                         Names=c('Gummy shark', 'Dusky shark', 'Whiskery shark', 'Bronze whaler',
+                                 'Hammerheads','Sandbar shark','Spinner shark','Wobbegongs',
+                                 'Blue groper','Queen snapper','Pink snapper','West Australian dhufish'))
+  ERA.main.SP$Names=factor(ERA.main.SP$Names,levels=ERA.main.SP$Names)
+  
+  #myColors=c(brewer.pal(8,"YlOrRd"),brewer.pal(4,"Blues"))
+  myColors=c("brown","brown1","chocolate","deeppink2","pink","coral2","goldenrod","darkorange",
+             "blue","cyan3","deepskyblue","cornflowerblue")
+  names(myColors)=ERA.main.SP$Names
+  jpeg(file="ERA_Catch_main.species.jpeg",width=2400,height=2200,units="px",res=300)
+  Data.monthly%>%
+    filter(METHOD%in%c("GN","LL") & Estuary=="NO" & SPECIES%in%ERA.main.SP$SPECIES  &
+             LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])%>%
+    left_join(ERA.main.SP,by='SPECIES')%>%
+    group_by(FINYEAR,Names)%>%
+    summarise(Catch.tons=sum(LIVEWT.c)/1000)%>%
+    mutate(Yr=as.numeric(substr(FINYEAR,1,4)))%>%
+    ggplot(aes(Yr,Catch.tons))+
+    geom_line(aes(colour=Names),size=1.5)+
+    ylab("Catch (tonnes live wt.)")+
+    xlab("Financial year")+
+    theme(axis.text= element_text( size = 14),
+          axis.title=element_text( size = 20),
+          legend.text = element_text(size = 13),
+          legend.title=element_blank(),
+          legend.position="top",
+          plot.margin=unit(c(.5,.5,.5,.5),"cm"))+
+    scale_colour_manual(name = 'Names',values = myColors)
+  dev.off()
+  
+  #2. Effort
+  # Gillnet and longline equivalent effort
+  LL.equiv.Eff.days.total=LL.equiv.Eff.days.zone%>%
+    mutate(Total=LIVEWT.West + LIVEWT.Zone1 + LIVEWT.Zone2,
+           Data="Longline equivalent")%>%
+    dplyr::select(FINYEAR,Total,Data)
+  d=Total.effort.days.monthly%>%
+    mutate(Total=Total-LL.equiv.Eff.days.total$Total,
+           Data="Gillnet")
+  jpeg(file="ERA_Effort_Gillnet and longline equivalent.jpeg",width=2400,height=2400,units="px",res=300)
+  rbind(d,LL.equiv.Eff.days.total)%>%
+    mutate(Year=as.numeric(substr(FINYEAR,1,4)))%>%
+    ggplot(aes(Year,Total))+
+    geom_line(aes(colour=Data),size=3)+
+    ylab("Effort (1000 km gn d)")+
+    xlab("Finacial year")+
+    theme(axis.text= element_text( size = 14),
+          axis.title=element_text( size = 20),
+          legend.text = element_text(size = 16),
+          legend.title=element_blank(),
+          legend.position="top",
+          plot.margin=unit(c(.75,1.5,1,.75),"cm"))
+  dev.off()
+  
+  write.csv(100*LL.equiv.Eff.days.total$Total/Total.effort.days.monthly$Total,
+            "ERA_Effort_Longline.equiv.eff_percent.total.csv",row.names = Total.effort.days.monthly$FINYEAR)
+  
+  
+  # Gillnet and longline effort
+  LL.effort.monthly=Effort.monthly%>%
+    filter(METHOD=='LL' & LAT<=(-26) & LAT>(-36.1) & LONG<=(129) & LONG>(111))%>%
+    mutate(hook.days=BDAYS.c*HOOKS)%>%
+    group_by(VESSEL,BLOCKX,FINYEAR,MONTH,YEAR.c)%>%
+    summarise(hook.days=max(hook.days,na.rm=T))%>%
+    group_by(FINYEAR)%>%
+    summarise(hook.days=sum(hook.days,na.rm=T))
+  
+  LL.effort.daily=Effort.daily%>%
+    mutate(LAT=-abs(LAT))%>%
+    filter(method=='LL' & LAT<=(-26) & LAT>(-36.1) & LONG<=(129) & LONG>(111))%>%
+    mutate(hook.days=hooks)
+  Use.Date="YES"
+  if(Use.Date=="NO")
+  {
+    LL.effort.daily=LL.effort.daily%>%
+      group_by(ID,vessel,finyear,month,blockx)%>%
+      summarise(hook.days=max(hook.days,na.rm=T))
+  }
+  if(Use.Date=="YES")
+  {
+    LL.effort.daily=LL.effort.daily%>%
+      group_by(date,vessel,finyear,month,blockx)%>%
+      summarise(hook.days=max(hook.days,na.rm=T))
+  }
   LL.effort.daily=LL.effort.daily%>%
-    group_by(ID,vessel,finyear,month,blockx)%>%
-    summarise(hook.days=max(hook.days,na.rm=T))
+    group_by(finyear,month,vessel,blockx)%>%
+    summarise(hook.days=sum(hook.days,na.rm=T))%>%
+    group_by(finyear)%>%
+    summarise(hook.days=sum(hook.days,na.rm=T))
+  colnames(LL.effort.daily)=colnames(LL.effort.monthly)
+  
+  LL.effort=rbind(LL.effort.monthly,LL.effort.daily)%>%
+    group_by(FINYEAR)%>%
+    summarise(thousand.hook.days=sum(hook.days)/1000)%>%
+    mutate(Yr=as.numeric(substr(FINYEAR,1,4)))
+  
+  coeff=30
+  jpeg(file="ERA_Effort_Gillnet and longline.jpeg",width=2400,height=2400,units="px",res=300)
+  full_join(d%>%mutate(Yr=as.numeric(substr(FINYEAR,1,4)))%>%dplyr::select(-Data),
+            LL.effort,by=c('FINYEAR','Yr'))%>%
+    mutate(thousand.hook.days=ifelse(is.na(thousand.hook.days),0,thousand.hook.days))%>%
+    ggplot(aes(x=Yr))+
+    geom_line(aes(y=Total), size=3, color="#F8766D")+
+    geom_line(aes(y=thousand.hook.days/coeff),size=3,col="#00BFC4")+
+    scale_y_continuous(name = "Gillnet effort (1000 km gn d)",
+                       sec.axis = sec_axis(~.*coeff, name="Longline effort (1000 hook d)"))+
+    xlab("Finacial year")+
+    theme(axis.text= element_text( size = 14),
+          axis.title=element_text( size = 20),
+          legend.text = element_text(size = 16),
+          axis.title.y = element_text(color = "#F8766D", size=18),
+          axis.title.y.right = element_text(color = "#00BFC4", size=18)
+    )
+  dev.off()
+  
 }
-if(Use.Date=="YES")
-{
-  LL.effort.daily=LL.effort.daily%>%
-    group_by(date,vessel,finyear,month,blockx)%>%
-    summarise(hook.days=max(hook.days,na.rm=T))
-}
-LL.effort.daily=LL.effort.daily%>%
-  group_by(finyear,month,vessel,blockx)%>%
-  summarise(hook.days=sum(hook.days,na.rm=T))%>%
-  group_by(finyear)%>%
-  summarise(hook.days=sum(hook.days,na.rm=T))
-colnames(LL.effort.daily)=colnames(LL.effort.monthly)
-
-LL.effort=rbind(LL.effort.monthly,LL.effort.daily)%>%
-  group_by(FINYEAR)%>%
-  summarise(thousand.hook.days=sum(hook.days)/1000)%>%
-  mutate(Yr=as.numeric(substr(FINYEAR,1,4)))
-
-coeff=30
-jpeg(file="ERA_Effort_Gillnet and longline.jpeg",width=2400,height=2400,units="px",res=300)
-full_join(d%>%mutate(Yr=as.numeric(substr(FINYEAR,1,4)))%>%dplyr::select(-Data),
-              LL.effort,by=c('FINYEAR','Yr'))%>%
-      mutate(thousand.hook.days=ifelse(is.na(thousand.hook.days),0,thousand.hook.days))%>%
-  ggplot(aes(x=Yr))+
-        geom_line(aes(y=Total), size=3, color="#F8766D")+
-        geom_line(aes(y=thousand.hook.days/coeff),size=3,col="#00BFC4")+
-  scale_y_continuous(name = "Gillnet effort (1000 km gn d)",
-    sec.axis = sec_axis(~.*coeff, name="Longline effort (1000 hook d)"))+
-  xlab("Finacial year")+
-  theme(axis.text= element_text( size = 14),
-        axis.title=element_text( size = 20),
-        legend.text = element_text(size = 16),
-    axis.title.y = element_text(color = "#F8766D", size=18),
-    axis.title.y.right = element_text(color = "#00BFC4", size=18)
-  )
-dev.off()
 
 # For AMM -----------------------------------------------------------------
 do.AMM=TRUE

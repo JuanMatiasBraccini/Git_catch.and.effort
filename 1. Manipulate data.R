@@ -1976,7 +1976,7 @@ if(Inspect.New.dat=="YES")
     write.csv(NA.livewt,file=paste(handle,"/Check.NALivewt_missing  conversion factor for condition.species.csv",sep=""),row.names=F)
     send.email(TO=Email.data.checks,
                CC=Email.FishCube,
-               Subject="TDGDLF data validation: NA nfish or weight but species record",
+               Subject=paste("Shark validation",Sys.time(),'NA_nfish.weight.csv',sep=' _ '),
                Body= "Hi,
               I have started the data validation process for the new year data stream.
               I will be sending a series of emails with queries
@@ -2038,7 +2038,7 @@ if(Inspect.New.dat=="YES")
                 file=paste(handle,"/Check.no_live.weight.csv",sep=""),row.names=F)
       send.email(TO=Email.data.checks,
                  CC=Email.FishCube,
-                 Subject="TDGDLF data validation check blank livewt",
+                 Subject=paste("Shark validation",Sys.time(),'no_live.weight.csv',sep=' _ '),
                  Body= "Hi,
               I’ve started the data validation process for the new year data stream.
               I’ll be sending a series of emails with queries
@@ -2125,7 +2125,7 @@ if(Inspect.New.dat=="YES")
     write.csv(check.weights,file=paste(handle,"/Check.nfish.weight.typo.csv",sep=""),row.names=F)
     send.email(TO=Email.data.checks,
                CC=Email.FishCube,
-               Subject="TDGDLF data validation check nfish and livewt",
+               Subject=paste("Shark validation",Sys.time(),'nfish.weight.typo.csv',sep=' _ '),
                Body= "For the attached file, could you please check that there are no typos in the nfish, landed weight and condition
                       columns as the average weight resulting from these 3 columns are outside the range for the species. 
                     Cheers
@@ -2211,7 +2211,7 @@ if(Inspect.New.dat=="YES")
     write.csv(Outer,file=paste(handle,"/Check.lat.and.long.csv",sep=""),row.names=F)
     send.email(TO=Email.data.checks,
                CC=Email.FishCube,
-               Subject="TDGDLF data validation latitude and longitude",
+               Subject=paste("Shark validation",Sys.time(),'lat.and.long.typo.csv',sep=' _ '),
                Body= "For the attached file, could you please check the latitude and longitude of the shot?
                       Currently they fall outside the species distribution. 
                     Cheers
@@ -5972,7 +5972,7 @@ if(Inspect.New.dat=="YES")
                 row.names=F)
       send.email(TO=Email.data.checks,
                  CC=Email.FishCube,
-                 Subject=paste("TDGDLF data validation:",Inspect.vars[v] ,"beyond range"),
+                 Subject=paste("Shark validation",Sys.time(),Inspect.vars[v] ,"beyond range",sep=' _ '),
                  Body= "Hi,
                       This effort variable is beyond the maximum (see column Max). Is this a typo or system error?
                       Cheers
@@ -6034,7 +6034,7 @@ if(Inspect.New.dat=="YES")
                 row.names=F)
       send.email(TO=Email.data.checks,
                  CC=Email.FishCube,
-                 Subject=paste("TDGDLF data validation:",paste(Inspect.vars.combo[[v]],collapse='_') ,"beyond range"),
+                 Subject=paste("Shark validation",Sys.time(),paste(Inspect.vars.combo[[v]],collapse='_') ,"beyond range",sep=' _ '),
                  Body= "Hi,
                       These effort variables are beyond the maximum (see column Max). Is this a typo or system error?
                       Cheers

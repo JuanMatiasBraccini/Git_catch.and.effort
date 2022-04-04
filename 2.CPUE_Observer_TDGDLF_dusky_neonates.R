@@ -11,6 +11,24 @@ source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_Population.dynamics/Nominal_c
 
 # Manipulation  ---------------------------------------------------------
 Res.ves=c("HAM","HOU","NAT","FLIN","RV BREAKSEA","RV Gannet","RV GANNET","RV SNIPE 2")
+
+Dusky.nursery=DATA%>%
+              filter(SPECIES=='BW' &Mid.Lat<(-27))%>%
+              left_join(DATA.bio%>%
+                          filter(SPECIES=='BW' & UMBIL_SCAR%in%c('P','Y'))%>%
+                          dplyr::select(UNIQUE_ID,SPECIES,UMBIL_SCAR),
+                        by=c('UNIQUE_ID','SPECIES'))%>%
+              dplyr::select(SHEET_NO,Mid.Lat,Mid.Long,BLOCK,Month,year,BOAT,SKIPPER,
+                            SPECIES,Numbers,TL,FL,Method,SOAK.TIME,NET_LENGTH,BOTDEPTH,MESH_SIZE,
+                            Set.time,Haul.time,COMMON_NAME,CAES_Code,CAAB_code,UMBIL_SCAR)%>%
+  mutate(FL=ifelse(is.na(FL) & SPECIES=='BW',(TL-1.9133)/1.2062,FL),
+         Neonate=ifelse(UMBIL_SCAR%in%c('P','Y'),'Y',
+                 ifelse(is.na(UMBIL_SCAR) & FL<85,'Y',
+                 'N')))%>%
+  filter(!is.na(FL))%>%
+  mutate(Neonate=ifelse(FL>100,'N',Neonate))
+
+
 Dusky=DATA%>%
       filter(Method=='GN' & !is.na(NET_LENGTH) & !is.na(SOAK.TIME) & Mid.Lat<(-27) & !BOAT%in%Res.ves)%>%
       left_join(DATA.bio%>%
@@ -146,3 +164,38 @@ Dusky.h%>%
   ggplot(aes(Mid.Long, Mid.Lat,colour=BOAT))+
   geom_point()+
   facet_wrap(~year)
+
+
+# Nurseries  ---------------------------------------------------------
+#Notes:
+#Do All species. The Point of analysis is location of 0+.
+# Class 0+ as 'YES umb scar' or within birth range. Class non 0+. Add to Dani's thesis
+
+
+# Do zero inflated gam with 0 catches. Response var is number of neonates and predictors are method, month, lat-long interaction. Combine years. Produce heat maps. Could try with other species?
+#   Nursery criteria:
+#   
+#   1) sharks are more commonly encountered in the area than other areas; 
+#   (2) sharks have a tendency to remain or return for extended periods; 
+#   (3) the area or habitat is repeatedly used across years.
+# 
+# For Criteria 3, i need the 1, 2 year olds, as done for snapper
+
+
+Dusky.nursery%>%
+  filter(Neonate=='Y')%>%
+  mutate(FL.bin=10*round(FL/10),
+         Mid.Long.jit=jitter(Mid.Long),
+         Mid.Lat.jit=jitter(Mid.Lat))%>%
+  ggplot(aes(Mid.Long.jit,Mid.Lat.jit))+
+  geom_point(aes(fill=FL.bin),size=1.5,shape=21,alpha=.2)+
+  stat_density_2d(geom = "polygon", contour = TRUE,
+                  aes(x=Mid.Long.jit, y=Mid.Lat.jit, fill = after_stat(level)), colour = "black",
+                  bins = 20,alpha = 0.7)+
+  scale_fill_distiller(palette = "Blues", direction = 1)+
+  #facet_wrap(~Month)+
+  theme(legend.position = 'none',
+        plot.title = element_text(size=22),
+        axis.text = element_text(size = 15),
+        axis.title = element_text(size = 18),
+        plot.margin=unit(c(0,0.1,0,0),"cm"))

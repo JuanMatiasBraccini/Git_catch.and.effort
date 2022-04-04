@@ -480,7 +480,7 @@ rm(Eff.daily.c.daily)
 
 #Add mesh size    
   #Monthly
-Mesh.monthly$mesh=Mesh.monthly$MSHIGH
+Mesh.monthly$mesh=Mesh.monthly$MeshSizeHigh
 Mesh.monthly$mesh=with(Mesh.monthly,ifelse(mesh==0,NA,mesh))
 a=subset(Mesh.monthly,select=c(VESSEL,FINYEAR,MONTH,BLOCKX,METHOD,mesh))
 a$dummy=with(a,paste(VESSEL,FINYEAR,MONTH,BLOCKX))
@@ -537,7 +537,8 @@ Data.monthly.GN=Data.monthly.GN%>%
 
 
 
-# SELECT SPECIES (at least 'N.keep' years of catches of at least 'Min.kg') and put into species list -----------------------------------------------------------------------
+# SELECT SPECIES-------------------------------------------------------------------------
+# note: at least 'N.keep' years of catches of at least 'Min.kg') and put into species list
 
   #1. First Criteria: minimum catch for a minimum number of years
 A=Data.monthly.GN%>%filter(SPECIES%in%Shark.species) %>%
@@ -802,9 +803,10 @@ if(Model.run=="First")
     summarise (n = sum(LIVEWT.c)) %>%
     mutate(freq_per2 = n / sum(n)) %>%
     data.frame
+  
   prop=full_join(prop_period1,prop_period2,by=c("BLOCKX","SPECIES"))%>%
             filter(SPECIES==17003)%>%
-            select(BLOCKX,SPECIES,freq_per1,freq_per2)
+            dplyr::select(BLOCKX,SPECIES,freq_per1,freq_per2)
   barplot(as.matrix(prop[,3:4]),beside =T,main="Prop of whiskery per block") 
   
 
@@ -1054,8 +1056,8 @@ fn.cpue.data.daily=function(Dat,EffrrT,sp)
 #note: select species within CORE area and add effort by Same return
 #      #remove Bronze Whaler due to few records and uncertain species ID prior to Daily logbooks
 cl <- makeCluster(detectCores()-1)
-registerDoParallel(cl)
-clusterEvalQ(cl, .libPaths("C:/~/R/win-library/4.0"))  #added bit to point where doparallel is 
+registerDoParallel(cl)   # takes 1 sec per species
+clusterEvalQ(cl, .libPaths("C:/~/R/win-library/4.0"))  #added bit to point location of doparallel library 
 system.time({Species.list=foreach(s=nnn,.packages=c('dplyr','doParallel')) %dopar%
   {
     if(!SP.list[[s]]==18001) return(fn.cpue.data(Dat=Data.monthly.GN %>% filter(LAT>=Core[[s]]$Lat[1] & LAT<=Core[[s]]$Lat[2] &
@@ -1079,7 +1081,7 @@ system.time({Species.list.daily=foreach(s=nnn,.packages=c('dplyr','doParallel'))
                                                            LONG>=Core[[s]]$Long[1]& LONG<=Core[[s]]$Long[2]),
                               sp=SP.list[[s]]))
   }
-})
+})    #takes 3.3 secs per species
 names(Species.list.daily)=names(SP.list) 
 
 
@@ -1927,7 +1929,7 @@ for(s in nnn)
 
   
 
-# REMOVE YEARS WITHOUT SANDBAR SHARK CODE ----------------------------------------------
+# REMOVE YEARS WITHOUT SANDBAR SHARK CODE FOR SANDBAR DATA SET----------------------------------------------
 #note: Dropping these years because vessels don't meet selection criteria and no positive catch
 fn.sel.yrs.used=function(DD,ThrShld.n.vess)
 {
