@@ -119,7 +119,7 @@ if(do.sql.extraction)
   FisheryCodeTable <- remove_empty(FisheryCodeTable,which="cols")
   
   #variable mapping
-  channel <- odbcConnectExcel2007(handl_OneDrive("Data/SQL Shark Data Mapping.xlsx"))
+  channel <- odbcConnectExcel2007(handl_OneDrive("Data/Catch and Effort/SQL Shark Data Mapping.xlsx"))
   SQL.data.mapping_daily=sqlFetch(channel,"DailyMappings")
   SQL.data.mapping_monthly=sqlFetch(channel,"MonthlyMappings")
   close(channel)
@@ -249,9 +249,10 @@ if(do.sql.extraction)
                              "Lat","Long","hooks","netlen","hours","mslow","mshigh","shots",
                              "nlines","depthMin","depthMax","NilCatch","HookSize",
                              "HookType","nfish","LatMin","LongMin","conditn",
-                             "flagtype","landwt","factor","livewt","b10days",
+                             "flagtype","factor","livewt","b10days",
                              "bdays","fdays","type","RSCommonName","RSSpeciesCode",
-                             "RSSpeciesId","RSBioregionName")
+                             "RSSpeciesId","RSBioregionName",
+                             "TripLandedWeight")
   Data.daily=Data.daily[,Keep.these.columns_daily]
 
     #re-map vessel codes to previous codes
@@ -1365,6 +1366,10 @@ if(do.financial.ass=="YES")
   write.csv(A,paste(handl_OneDrive("Analyses/Catch and effort/Annual.revenue."),Current.yr,".csv",sep=""),row.names=F)
   
 }
+
+#Extract individual landwt 
+Data.daily=Data.daily%>%
+            mutate(landwt=livewt/(factor))
 
 #Create backup file   
 Data.daily.original=Data.daily

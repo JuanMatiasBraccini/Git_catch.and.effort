@@ -288,8 +288,8 @@ PRICES=PRICES%>%mutate(dolar.per.kg=Beach.Price..Adjusted.,
                        dolar.per.kg=as.numeric(gsub("\\$", "", dolar.per.kg)),
                        SPECIES=ASA.Species.Code)
             #%>%select(-uv1718)
+names(Shark.Fin.Price.List)[grep('Percent',names(Shark.Fin.Price.List))]='Percent'
 Shark.Fin.Price.List=Shark.Fin.Price.List%>%
-  rename(Percent="ï..Percent")%>%
   mutate(Prop=Percent/100)%>%
   dplyr::select(Percent,Prop,species)
 Fin.Weight=subset(DAT,SPECIES%in%Elasmo.species,select=c(SPECIES,SNAME,RSCommonName,zone,LIVEWT.c))%>%
@@ -310,8 +310,13 @@ FINS.value.species.zone=aggregate(cbind(Total.price,fin.weight)~SNAME+zone,Fin.W
 get.yr.price="dolar.per.kg"
 PRICES1=PRICES[,match(c("SPECIES",get.yr.price),names(PRICES))]
 names(PRICES1)=c("SPECIES","ABARE.dolar.per.kg")
-PRICES1=merge(DAT[,match(c("SPECIES","SNAME","zone","LANDWT","LIVEWT.c","CONDITN"),names(DAT))],
-              PRICES1,by="SPECIES",all.x=T)
+
+PRICES1=DAT[,match(c("SPECIES","SNAME","zone","LANDWT","LIVEWT.c","CONDITN"),names(DAT))]%>%
+          left_join(PRICES1%>%filter(SPECIES%in%unique(DAT$SPECIES)),by="SPECIES")
+              
+
+# PRICES1=merge(DAT[,match(c("SPECIES","SNAME","zone","LANDWT","LIVEWT.c","CONDITN"),names(DAT))],
+#               PRICES1,by="SPECIES",all.x=T)
 
 # PRICES1=PRICES[,match(c("SPECIES","Weighted.Average.Price.kg","Abare.unit.."),names(PRICES))]
 # names(PRICES1)=c("SPECIES","DOF.dolar.per.kg","ABARE.dolar.per.kg")

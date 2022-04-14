@@ -1,3 +1,5 @@
+#notes: Hussey et al 2009 Nursery grounds dusky shark in South Africa
+
 library(tidyverse)
 library(mgcv)
 library(emmeans)  #for model predictions
@@ -9,24 +11,67 @@ User="Matias"
 if(User=="Matias") source(handl_OneDrive('Analyses/SOURCE_SCRIPTS/Git_other/Source_Shark_bio.R'))
 source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_Population.dynamics/Nominal_cpue_functions.R"))
 
+LH=read.csv(handl_OneDrive('Data/Life history parameters/Life_History.csv'))
+
 # Manipulation  ---------------------------------------------------------
 Res.ves=c("HAM","HOU","NAT","FLIN","RV BREAKSEA","RV Gannet","RV GANNET","RV SNIPE 2")
 
-Dusky.nursery=DATA%>%
-              filter(SPECIES=='BW' &Mid.Lat<(-27))%>%
+Neonates=DATA%>%
+              filter(TYPE=='Elasmo')%>%
+              #filter(SPECIES=='BW' &Mid.Lat<(-27))%>%
               left_join(DATA.bio%>%
-                          filter(SPECIES=='BW' & UMBIL_SCAR%in%c('P','Y'))%>%
+                          filter(UMBIL_SCAR%in%c('P','Y'))%>%
                           dplyr::select(UNIQUE_ID,SPECIES,UMBIL_SCAR),
                         by=c('UNIQUE_ID','SPECIES'))%>%
               dplyr::select(SHEET_NO,Mid.Lat,Mid.Long,BLOCK,Month,year,BOAT,SKIPPER,
-                            SPECIES,Numbers,TL,FL,Method,SOAK.TIME,NET_LENGTH,BOTDEPTH,MESH_SIZE,
-                            Set.time,Haul.time,COMMON_NAME,CAES_Code,CAAB_code,UMBIL_SCAR)%>%
-  mutate(FL=ifelse(is.na(FL) & SPECIES=='BW',(TL-1.9133)/1.2062,FL),
-         Neonate=ifelse(UMBIL_SCAR%in%c('P','Y'),'Y',
-                 ifelse(is.na(UMBIL_SCAR) & FL<85,'Y',
-                 'N')))%>%
-  filter(!is.na(FL))%>%
-  mutate(Neonate=ifelse(FL>100,'N',Neonate))
+                            SPECIES,Numbers,TL,FL,Disc.width,Method,SOAK.TIME,NET_LENGTH,BOTDEPTH,MESH_SIZE,
+                            Set.time,Haul.time,COMMON_NAME,CAES_Code,CAAB_code,UMBIL_SCAR)
+Min.samp.size=Neonates%>%
+                group_by(COMMON_NAME)%>%
+                tally()
+dis.sp=Min.samp.size%>%filter(n>50)%>%pull(COMMON_NAME)
+Neonates=Neonates%>%
+  filter(COMMON_NAME%in%dis.sp)%>%
+  left_join(LH%>%dplyr::select(SPECIES,LF_o),by=c('CAAB_code'='SPECIES'))
+
+add.LF_o=data.frame(COMMON_NAME=c('Cobbler wobbegong','Banded wobbegong','Western wobbegong',
+                                  'Australian sharpnose shark','Bignose shark','Graceful shark',
+                                  'Grey reef shark','nervous shark','Silvertip shark',
+                                  'Sliteye shark','Spot-tail shark','Weasel shark',
+                                  'Whitecheek shark','Tawny nurse shark',
+                                  'Thresher sharks','White shark',
+                                  'Whitespot guitarfish','Winghead hammerhead'),
+                    LF_o1=c(22,30,26,
+                           26,75,60,
+                           60,40,80,
+                           45,50,30,
+                           40,60,
+                           150,130,
+                           50,47))
+
+Neonates=Neonates%>%
+  left_join(add.LF_o,by='COMMON_NAME')%>%
+  mutate(LF_o=ifelse(is.na(LF_o),LF_o1,LF_o))
+
+Size.birth.tolerance=1.25
+
+Neonates=Neonates%>%
+  mutate(FL=ifelse(FL == 635 & SPECIES=='SE',65,FL),
+         Size=FL,
+         Size=case_when(is.na(Size) & SPECIES=='BW' & !is.na(TL)~(TL-1.9133)/1.2062, #missing, do for other species
+                        is.na(Size) & grepl(paste(c('Angel','Zebra','Wobbegong','sawfish'),collapse="|"),COMMON_NAME) ~ TL,
+                        is.na(Size) & SPECIES%in%c(27011,26999) ~ TL,
+                        is.na(Size) & grepl(paste(c('Stingray','ray'),collapse="|"),COMMON_NAME) ~ Disc.width,
+                        TRUE~Size),
+         Neonate=case_when(UMBIL_SCAR%in%c('Y')~'Y',
+                           is.na(UMBIL_SCAR) & Size<LF_o ~'Y',
+                           Size< (LF_o*Size.birth.tolerance) ~ 'Y',
+                           TRUE~'N'),
+         Neonate=ifelse(Size>LF_o*2,'N',Neonate))%>%
+  filter(!is.na(Size))
+
+
+
 
 
 Dusky=DATA%>%
@@ -182,7 +227,32 @@ Dusky.h%>%
 # For Criteria 3, i need the 1, 2 year olds, as done for snapper
 
 
-Dusky.nursery%>%
+Neonates%>%
+  ggplot(aes(x=Size,fill=Neonate))+
+  geom_histogram()+
+  facet_wrap(~COMMON_NAME,scales='free')  #ACA. Several species with no LF_o
+
+Neonates%>%
+  filter(Neonate=='Y')%>%
+  group_by(COMMON_NAME)%>%
+  mutate(N=sum(Numbers))%>%
+  filter(N>=10)%>%
+  ggplot(aes(x=Size,fill=Neonate))+
+  geom_histogram()+
+  facet_wrap(~COMMON_NAME,scales='free')
+
+
+Neonates%>%
+  filter(Neonate=='Y')%>%
+  group_by(COMMON_NAME)%>%
+  mutate(N=sum(Numbers))%>%
+  filter(N>=10 & Mid.Long>=111)%>%
+  ggplot(aes(x=Mid.Long,y=Mid.Lat))+
+  geom_point()+
+  facet_wrap(~COMMON_NAME)
+
+
+Neonates%>%
   filter(Neonate=='Y')%>%
   mutate(FL.bin=10*round(FL/10),
          Mid.Long.jit=jitter(Mid.Long),
