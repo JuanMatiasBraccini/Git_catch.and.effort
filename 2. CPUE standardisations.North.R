@@ -15,7 +15,7 @@
 rm(list=ls(all=TRUE))
 
 library(tidyverse)
-library(cede)
+#library(cede)
 library(mgcv)
 library(mvtnorm)
 library(doParallel)
@@ -28,8 +28,10 @@ if(!exists('handl_OneDrive')) source('C:/Users/myb/OneDrive - Department of Prim
 ##############--- 1. DATA SECTION ---###################
 
 fn.in=function(NM)read.csv(paste(handl_OneDrive('Analyses/Data_outs/'),NM,sep=""))
-Effort=fn.in(NM='Effort.monthly.NSF.csv')
-Data=fn.in(NM='Data.monthly.NSF.csv')
+Effort=fn.in(NM='Effort.monthly.north.csv')
+Data=fn.in(NM='Data.monthly.north.csv')
+#Effort=fn.in(NM='Effort.monthly.NSF.csv')
+#Data=fn.in(NM='Data.monthly.NSF.csv')
 Species.names=read.csv(handl_OneDrive('Data/Species_names_shark.only.csv'))
 
 ##############--- 2. PARAMETERS SECTION ---###################
@@ -47,7 +49,7 @@ Effort=Effort%>%
   distinct(Same.return,.keep_all = T)
 
 # Combine catch and effort for NSF
-NSF.code=c('C051','C127','CL02','')  #fishery codes for NSF. Note, the '' code is form Rory's Table81.d data, which has no code
+NSF.code=c('C051','C127','CL02','','JANS','NCS','WANCS')  #fishery codes for NSF. Note, the '' code is form Rory's Table81.d data, which has no code
 Data=Data%>%
     filter(METHOD%in%c('LL') & Reporter=="good" & FisheryCode%in%NSF.code
            & SPECIES<50000 & !SPECIES%in%c(22999,31000))%>%
@@ -122,6 +124,22 @@ for(s in 1:length(Keep.sp))
 
 
 # Standardised log normal
+makecategorical=function (labelModel, indat) 
+{
+  Interact <- grep(":", labelModel)
+  nInteract <- length(Interact)
+  numvars <- length(labelModel) - nInteract
+  for (fac in 1:numvars) {
+    if (length(indat[, labelModel[fac]]) > 0) {
+      indat[, labelModel[fac]] <- factor(indat[, labelModel[fac]])
+    }
+    else {
+      warning(paste0("Factor name ", labelModel[fac], 
+                     "does not appear in data.frame"))
+    }
+  }
+  return(indat)
+}
 fn.delta=function(d,Formula.bi.gam,Formula.gam)   
 {
   Bi <- d %>%mutate(catch.pos=as.numeric(cpue>0))
@@ -294,14 +312,17 @@ system.time({
 for (s in 1:length(Keep.sp))
 {
   NM=Species.names$Name[match(Keep.sp[s],Species.names$SPECIES)]
-  cpue.stand=Pred[[s]]%>%
+  NM=ifelse(NM=='Blacktips','Blacktip sharks',
+            ifelse(NM=='Spot tail shark','Spot-tail shark',
+                   NM))
+  cpue.stand=Pred[[s]]%>%rename(SE=SD)
+  write.csv(cpue.stand,paste(handl_OneDrive("Analyses/Data_outs/"),NM,'/',NM,".annual.abundance.NSF.csv",sep=""),row.names=F) 
+  
+  cpue.stand=cpue.stand%>%
     mutate(Mn=mean(Mean),
            LOW.CI=LOW.CI/Mn,
            UP.CI=UP.CI/Mn,
            Mean=Mean/Mn)
-  NM=ifelse(NM=='Blacktips','Blacktip sharks',
-     ifelse(NM=='Spot tail shark','Spot-tail shark',
-            NM))
   write.csv(cpue.stand,paste(handl_OneDrive("Analyses/Data_outs/"),NM,'/',NM,".annual.abundance.NSF_relative.csv",sep=""),row.names=F) 
 }
 

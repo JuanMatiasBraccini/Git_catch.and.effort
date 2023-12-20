@@ -1,9 +1,9 @@
 #--------- CPUE STANDARDISATIONS OF DIFFERENT DATASETS ---------#
 
 #NOTE:  This script standardises the catch and effort data for the 4 commercial shark species,
-
-#       To update SOI and Mean Freo Sealevel each year, run "Get.SOI.Freo.R"  in C:\Matias\Data\Oceanography
-#       To update Temperature, run "SST.r"   in C:\Matias\Data\Oceanography
+      
+#       Irrelevant.Term not selected. If want to update SOI and Mean Freo Sealevel each year, run "Get.SOI.Freo.R"  in C:\Matias\Data\Oceanography
+#       Irrelevant.Term not selected. If want to update Temperature, run "SST.r"   in C:\Matias\Data\Oceanography
 
 # HEADER -----------------------------------------------------------------------
 rm(list=ls(all=TRUE))
@@ -44,7 +44,7 @@ library(cluster)
 library(factoextra) #for plotting
 #library(cede)     #Malcolm Haddon's
 library(gridExtra)
-library(glmulti)  #model selection
+#library(glmulti)  #model selection
 library(fitdistrplus)  #select distribution
 library(coefplot)  #visualise coefficients
 library(emmeans)  #for model predictions
@@ -58,6 +58,7 @@ library(PBSmapping)
 library(ggpubr)
 library(broom)  #nice display of model fit
 library(mgcViz)
+library(grid)
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240,dplyr.summarise.inform = FALSE)   
 
@@ -73,7 +74,7 @@ source("Nominal_cpue_functions.R")
 source(handl_OneDrive("R\\Sort ls by size.R"))
 source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/Plot.Map.R"))
 
-
+source(handl_OneDrive('Analyses/SOURCE_SCRIPTS/Git_other/ggplot.themes.R'))  #my themes
 
 
 # DATA SECTION -----------------------------------------------------------------------
@@ -511,17 +512,14 @@ Eff.daily=merge(Eff.daily,a,by="Same.return.SNo",all.x=T)
 rm(Data.daily.original)
 
 
-# Define 'smooth hammerhead' records as south-east of Geographe Bay to make sure they are not scalloped HH
+# Define 'hammerhead' records as 'smooth hammerhead' if east of 120 E (Bartes & Braccini 2021) 
 Data.daily.GN=Data.daily.GN%>%
-              mutate(SPECIES=ifelse(LAT<=(-33.65) & SPECIES==19000,19004,SPECIES),
-                     SPECIES=ifelse(LONG>116 & SPECIES==19000,19004,SPECIES),
+              mutate(SPECIES=ifelse(LONG>=120 & SPECIES==19000,19004,SPECIES),
                      SNAME=ifelse(SPECIES==19004,"SHARK, SMOOTH HAMMERHEAD",SNAME),
                      RSCommonName=ifelse(SPECIES==19004,"Smooth Hammerhead Shark",RSCommonName))
   
-  
 Data.monthly.GN=Data.monthly.GN%>%
-              mutate(SPECIES=ifelse(LAT<=(-33.65) & SPECIES==19000,19004,SPECIES),
-                     SPECIES=ifelse(LONG>116 & SPECIES==19000,19004,SPECIES),
+              mutate(SPECIES=ifelse(LONG>120 & SPECIES==19000,19004,SPECIES),
                      SNAME=ifelse(SPECIES==19004,"SHARK, SMOOTH HAMMERHEAD",SNAME),
                      RSCommonName=ifelse(SPECIES==19004,"Smooth Hammerhead Shark",RSCommonName))
 
@@ -557,11 +555,11 @@ SpiSis=unique(Data.monthly.GN%>%mutate(RSCommonName=ifelse(SPECIES==8001,'Greynu
                          filter(SPECIES%in%as.numeric(names(A[A>=N.keep])))%>%
                          dplyr::select(SPECIES,RSCommonName) %>%
                          filter(!RSCommonName==""))
-SpiSis=SpiSis[!duplicated(SpiSis$SPECIES),]
+SpiSis=SpiSis[!duplicated(SpiSis$SPECIES),] 
 nms=SpiSis$RSCommonName
 SpiSis=SpiSis$SPECIES
 names(SpiSis)=nms
-SpiSis=SpiSis[-match(c(22999),SpiSis)]
+SpiSis=SpiSis[-match(c(22999,19000),SpiSis)]
 
 if(do.Exploratory=="YES")
 {
@@ -700,8 +698,8 @@ First.year.catch=apply(Prop.ktch,1, function(x) head(x[x!=0],1))
 if(Min.annual.prop.zero<0.2) names(First.year.catch$'18007')='1986-87'  #cannot estimate coef for 1985
 First.year.catch.daily=apply(Prop.ktch.daily,1, function(x) head(x[x!=0],1))
 
-Annual.year.sp=names(which(rowSums(Prop.ktch)>10))
-Annual.year.sp.daily=names(which(rowSums(Prop.ktch.daily)>10))
+Annual.year.sp=names(which(rowSums(Prop.ktch)>=10))  
+Annual.year.sp.daily=names(which(rowSums(Prop.ktch.daily)>=10))
 
 SpiSis=subset(SpiSis,SpiSis%in%unique(c(Annual.year.sp,Annual.year.sp.daily)))
 
@@ -710,8 +708,8 @@ SP.list=as.list(SpiSis)
 #remove these species; not enough positive record data to estimate glm coefficients    
 SP.list=SP.list[-match(c("School Shark"),names(SP.list))]
 
-#remove these as too many different species mixed up
-SP.list=SP.list[-match(c("Wobbegong","Hammerhead Sharks"),names(SP.list))]
+#remove these as many different species mixed up
+SP.list=SP.list[-match(c("Wobbegong","Common Sawshark"),names(SP.list))]  
 
 
 First.year.catch=First.year.catch[match(unlist(SP.list),names(First.year.catch))]
@@ -784,8 +782,124 @@ if(Model.run=="First")
   ggexport(multi.page, filename = handl_OneDrive("Analyses/Catch and effort/Outputs/species core areas/raster.pdf"))
 }
 
+# Fishery spatial expansion -----------------------------------------------------------------------
+if(Model.run=="First")
+{
+  pdf(handl_OneDrive('Analyses/Catch and effort/Outputs/Spatial expansion_Monthly.pdf'))
+  for(s in 1:length(SP.list))
+  {
+    print(paste('Spatial expansion Monthly----',names(SP.list)[s]))
+    d.ktch=Data.monthly.GN%>%filter(SPECIES%in%SP.list[[s]])%>%
+      mutate(LAT=round(LAT),LONG=round(LONG))%>%
+      group_by(LAT,LONG,Same.return,YEAR.c)%>%
+      summarise(LIVEWT.c=sum(LIVEWT.c,na.rm=T))
+    
+    d.eff=Effort.monthly%>%filter(Same.return%in%d.ktch$Same.return)%>%
+      group_by(LAT,LONG,Same.return,YEAR.c)%>%
+      summarise(Km.Gillnet.Hours.c=max(Km.Gillnet.Hours.c,na.rm=T),
+                Km.Gillnet.Days.c=max(Km.Gillnet.Days.c,na.rm=T))
+    
+    d=inner_join(d.ktch,d.eff,by=c("LAT","LONG","Same.return","YEAR.c"))%>%
+      mutate(cpue_days=LIVEWT.c/Km.Gillnet.Days.c,
+             cpue_hours=LIVEWT.c/Km.Gillnet.Hours.c)
+    
+    p=d%>%
+      filter(YEAR.c<=2005)%>%
+      ggplot(aes(LONG,LAT,size=cpue_hours))+
+      geom_point(color=2)+
+      facet_wrap(~YEAR.c)+
+      ggtitle(names(SP.list)[s])+
+      theme(legend.position = 'top')
+    
+    print(p)
+    
+  }
+  dev.off()
+}
 
-#Check whiskery shark change in catchability  
+# Spatial re distribution due to climate change -----------------------------------------------------------------------
+if(Model.run=="First")   
+{
+  #summer SST anomaly for the West Coast Bioregion
+  #source: #eyeballed from Arani's 2023 WA’s Ocean Climate Report
+  SST.anomaly.WCB=data.frame(year=2006:2023,
+                             Anomaly=c(-.65,-.1,.7,.15,-.05,1.8,1.4,1,.1,
+                                       .4,-.35,-.9,-.5,-.7,.2,.55,.8,.25))   
+  dis.sp=table(Data.daily.GN$RSCommonName)
+  dis.sp=subset(dis.sp,dis.sp>1e3)
+  dis.sp=names(dis.sp)
+  dis.sp=subset(dis.sp,!dis.sp%in%c("Sharks")) 
+  Taxa=list(elasmos='elasmobranchs',
+            scalies=c('demersal','est, coastal','pelagic'))
+  Min.x=min(Data.daily.GN$LongFC)
+  Max.x=max(Data.daily.GN$LongFC)
+  Min.y=min(Data.daily.GN$LatFC)
+  Max.y=max(Data.daily.GN$LatFC)
+  for(q in 1:length(Taxa))
+  {
+    out.folder=names(Taxa)[q]
+    estas=unique(Data.daily.GN%>%filter(type%in%Taxa[[q]])%>%pull(RSCommonName))
+    dis.sp1=dis.sp[which(dis.sp%in%estas)]
+    
+    for(s in 1:length(dis.sp1))
+    {
+      print(paste('Spatial distribution -Climate Change - Daily----',dis.sp1[s]))
+      
+        d.ktch=Data.daily.GN%>%
+          mutate(RSCommonName=ifelse(RSCommonName=="Smooth Hammerhead Shark" & YEAR.c<=2023,
+                                     "Hammerhead Sharks",  #HH not id to species level prior 2023
+                                     RSCommonName))%>%
+          filter(RSCommonName%in%dis.sp1[s])%>%
+        group_by(LatFC,LongFC,Same.return.SNo,YEAR.c,MONTH)%>%
+        summarise(LIVEWT.c=sum(LIVEWT.c,na.rm=T))
+      
+        if(nrow(d.ktch)>0)
+        {
+          NM=capitalize(tolower(dis.sp1[s]))
+          NM=ifelse(NM=="Bronze whaler","Copper shark",
+                    ifelse(NM=="Dusky Whaler","Dusky shark",
+                           ifelse(NM=="Wobbegong","Wobbegongs",NM)))
+          
+          d.eff=Effort.daily%>%filter(Same.return.SNo%in%d.ktch$Same.return.SNo)%>%
+            group_by(Same.return.SNo)%>%
+            summarise(Km.Gillnet.Hours.c=max(Km.Gillnet.Hours.c,na.rm=T),
+                      Km.Gillnet.Days.c=max(Km.Gillnet.Days.c,na.rm=T))
+          
+          d=inner_join(d.ktch,d.eff,by=c("Same.return.SNo"))%>%
+            mutate(cpue_days=LIVEWT.c/Km.Gillnet.Days.c,
+                   cpue_hours=LIVEWT.c/Km.Gillnet.Hours.c,
+                   #Yr_Mn=paste(MONTH,YEAR.c,sep='_'),
+                   Yr_Mn=YEAR.c)%>%
+            group_by(Yr_Mn,LatFC,LongFC)%>%
+            summarise(cpue=mean(cpue_hours))
+          
+          p=d%>%
+            left_join(SST.anomaly.WCB,by=c('Yr_Mn'='year'))%>%
+            rename(SST.anomaly=Anomaly)%>%
+            ggplot(aes(LongFC,LatFC,size=cpue,color=SST.anomaly))+
+            geom_point(alpha=0.5)+
+            facet_wrap(~Yr_Mn)+
+            scale_colour_gradient2(low = "navyblue",mid = "forestgreen", high = "red")+
+            theme_PA()+ylab('Latitude (°S)')+xlab('Longitude (°E)')+
+            theme(legend.position = 'top')+
+            xlim(Min.x,Max.x)+
+            scale_y_continuous(limits = c(Min.y,Max.y),
+                               breaks = pretty(Data.daily.GN$LatFC),
+                               labels = abs(pretty(Data.daily.GN$LatFC)))
+          print(p)
+          ggsave(handl_OneDrive(paste('Analyses/Catch and effort/Outputs/Spatial_Climate change/',
+                                      out.folder,'/',NM,'.tiff',sep='')),width=10,height= 10,compression="lzw")  
+          
+        }
+          
+       
+    } 
+  }
+
+
+}
+
+# Check whiskery shark change in catchability -----------------------------------------------------------------------
 if(Model.run=="First")
 {
   whis.q.period1=c("1975-76","1976-77","1977-78","1978-79","1979-80","1980-81","1981-82")
@@ -829,7 +943,7 @@ if(Model.run=="First")
   dev.off()
 }
 
-#adjust core areas following Rory McAuley 
+# adjust core areas following Rory McAuley -----------------------------------------------------------------------
 change.core.manually=FALSE
 if(change.core.manually)
 {
@@ -1145,7 +1259,15 @@ for(s in nnn)
 if(exists("TDGDLF.survey"))  TDGDLF.survey=subset(TDGDLF.survey, BOATREGO%in%
                                     unique(c(Data.monthly.GN$VESSEL,Data.daily.GN$VESSEL)))   
 
-# Extract number of vessels reporting catch of species per species range
+Table.species.by.vessel=Data.daily.GN%>%
+  filter(SPECIES%in%unlist(SP.list))%>%
+  distinct(VESSEL,FINYEAR,RSCommonName)%>%
+  mutate(N=1)%>%
+  group_by(FINYEAR,RSCommonName)%>%
+  summarise(N=sum(N))%>%
+  spread(RSCommonName,N)
+
+# Extract overall number of vessels reporting catch of species per species range
 N.VES=matrix(rep(NA,length(nnn)),ncol=length(nnn))
 colnames(N.VES)=names(SP.list)
 for(i in nnn)
@@ -1172,6 +1294,13 @@ for(i in nnn)
 Blks.by.species=do.call(c,Tol.blks)
 write.csv(Blks.by.species,paste(hndl,"All.Blks.by.species.csv",sep=""),row.names=T)
 
+Table.species.by.BLOCKX=Data.daily.GN%>%
+  filter(SPECIES%in%unlist(SP.list))%>%
+  distinct(BLOCKX,FINYEAR,RSCommonName)%>%
+  mutate(N=1)%>%
+  group_by(FINYEAR,RSCommonName)%>%
+  summarise(N=sum(N))%>%
+  spread(RSCommonName,N)
 
 # Block weights   
 if(use.blok.area=="YES")
@@ -1729,7 +1858,7 @@ Effort.data.fun=function(DATA,target,ktch)
                 Temp.res=mean(Temp.res),
                 Freo=mean(Freo,na.rm=T),
                 SOI=mean(SOI,na.rm=T))
-    TABLE=TABLE%>%left_join(Enviro,by=c("FINYEAR","MONTH","BLOCKX"))    %>%
+    TABLE=TABLE%>%left_join(Enviro,by=c("FINYEAR","MONTH","BLOCKX"))%>%
       arrange(FINYEAR,MONTH,BLOCKX) %>%
       data.frame()
     
@@ -1944,6 +2073,14 @@ DD=subset(DD,VESSEL%in%VES.used$"Sandbar Shark")
 San.Yrs=fn.sel.yrs.used(DD,ThrShld.n.vess=5)
 rm(DD)
 DATA.list.LIVEWT.c$"Sandbar Shark"=subset(DATA.list.LIVEWT.c$"Sandbar Shark",FINYEAR%in%San.Yrs)
+
+#no reported catch before these years for spinner and tiger
+Spinner.yrs=paste(1991:2005,substr(1992:2006,3,4),sep='-')
+DATA.list.LIVEWT.c$"Spinner Shark"=subset(DATA.list.LIVEWT.c$"Spinner Shark",FINYEAR%in%Spinner.yrs)
+
+Tiger.yrs=paste(1995:2005,substr(1996:2006,3,4),sep='-')
+DATA.list.LIVEWT.c$"Tiger Shark"=subset(DATA.list.LIVEWT.c$"Tiger Shark",FINYEAR%in%Tiger.yrs)
+
 
 # FIX SOME SPECIES NAMES ----------------------------------------------
 Nms.sp=capitalize(tolower(names(SP.list)))  
@@ -3951,7 +4088,7 @@ Eff.creep=data.frame(finyear=FINYEAR.ALL,effort.creep=Fish.pow.inc)
 
 
 #-- Select model structure  
-
+add.CITES.term=TRUE  #CITES listing term for smooth HH
     #remove predictors identified as highly correlated
 cNSTNT=Categorical[!Categorical=="block10"] 
 cNSTNT.daily=Categorical[!Categorical=="blockx"]
@@ -4400,7 +4537,7 @@ if(Def.mod.Str=="NO")
     for(s in nnn) Best.Model.daily[[s]]=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
                                                   s(long10.corner,lat10.corner)+s(mean.depth))
     if("Greynurse Shark"%in%names(Best.Model.daily)) Best.Model.daily['Greynurse Shark']=list(NULL)  #protected
-    
+    if(add.CITES.term) Best.Model.daily$"Smooth Hammerhead Shark"=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+s(long10.corner,lat10.corner)+s(mean.depth)+cites)
     #add targeting to target species
     Best.Model.daily$`Sandbar Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
                                                s(long10.corner,lat10.corner)+s(mean.depth)+cluster_clara)
@@ -5120,12 +5257,12 @@ if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
   {
     if(biascor=="YES")  #apply bias correction for log transf
     {
-      lsm=summary(emmeans(mod, PRED, type="link"))%>%
+      lsm=summary(emmeans(mod, PRED, type="link", rg.limit = 2e5))%>%
         mutate(response=exp(emmean)*exp(SE^2/2),
                lower.CL=exp(lower.CL)*exp(SE^2/2),
                upper.CL=exp(upper.CL)*exp(SE^2/2))
     }
-    if(biascor=="NO") lsm=summary(emmeans(mod, PRED, type="response"))
+    if(biascor=="NO") lsm=summary(emmeans(mod, PRED, type="response", rg.limit = 2e5))
     
     lsm$SD=lsm$SE
     
@@ -5205,8 +5342,7 @@ if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
         Continuous=tolower(Continuous)
         Factors=Terms[!Terms%in%Continuous]
         Terms=all.vars(Best.Model[[s]])[-1]
-        d <- d%>%
-              dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+        d <- d[,c('catch.target','km.gillnet.hours.c',Terms)]%>%
               mutate(cpue=catch.target/km.gillnet.hours.c)
         d <- makecategorical(Factors[Factors%in%Terms],d)
         mod<-bam(Best.Model[[s]],data=d,family='tw',method="fREML",discrete=TRUE)
@@ -5219,6 +5355,11 @@ if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
   })   
   
   #daily
+  if(add.CITES.term)
+  {
+    DATA.list.LIVEWT.c.daily$"Smooth Hammerhead Shark"=DATA.list.LIVEWT.c.daily$"Smooth Hammerhead Shark"%>%
+                                    mutate(cites=ifelse(date<as.Date("2015-01-01"),"No","Yes"))
+  }
   system.time({Stand.out.daily=foreach(s=nnn,.packages=c('dplyr','mgcv')) %dopar%
     {
       if(!is.null(BLKS.used.daily[[s]]))
@@ -5235,14 +5376,14 @@ if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
         d=DATA.list.LIVEWT.c.daily[[s]]%>%
             filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]] & FINYEAR%in%theseyears)
         Terms=Predictors_daily
+        if(add.CITES.term & names(DATA.list.LIVEWT.c.daily)[s]=="Smooth Hammerhead Shark") Terms=c(Terms,'cites')
         Continuous=Covariates.daily   
         colnames(d)=tolower(colnames(d))
         Terms=tolower(Terms)
         Continuous=tolower(Continuous)
         Factors=Terms[!Terms%in%Continuous]
         Terms=all.vars(Best.Model.daily[[s]])[-1]
-        d <- d%>%
-          dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+        d <- d[,c('catch.target','km.gillnet.hours.c',Terms)]%>%
           mutate(cpue=catch.target/km.gillnet.hours.c)
         d <- makecategorical(Factors[Factors%in%Terms],d)
         mod<-bam(Best.Model.daily[[s]],data=d,family='tw',method="fREML",discrete=TRUE)
@@ -5255,9 +5396,6 @@ if(Use.Tweedie)    #takes 5 mins with gam(),  0.63 mins with bam()
   
   names(Stand.out)=names(Stand.out.daily)=names(SP.list)
 }
-
-
-
 
 # rm(Species.list.daily,Species.list,Data.daily.GN,
 #    Data.monthly.GN,Effort.monthly,Effort.daily,DATA.list.LIVEWT.c.daily_all_reporters,
@@ -6696,7 +6834,7 @@ if(Use.Delta)
   Pred.daily=Pred.daily[names(SP.list)]
 }
 
-if(Use.Tweedie)     #takes <1 min
+if(Use.Tweedie)     #takes <1 min  
 {
   #Monthly
   system.time({
@@ -8588,8 +8726,11 @@ if(do.influence=="YES")
 }
 
 # CONSTRUCT SPATIAL STANDARDISED INDEX ---------------------------------------------------------
-if(Use.Delta)  
-{ system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))  
+do.spatial.cpiui=FALSE
+if(do.spatial.cpiui)
+{
+ if(Use.Delta)  
+  { system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))  
     {
   if(Use.Qualif.level)
   {
@@ -8817,8 +8958,8 @@ if(Use.Delta)
 
 }})
   }
-if(Use.Tweedie)  
-{
+  if(Use.Tweedie)  
+  {
     #monthly
   system.time({Zone_preds.monthly=foreach(s=Tar.sp,.packages=c('dplyr','mgcv','emmeans')) %do%
     {
@@ -8954,12 +9095,53 @@ if(Use.Tweedie)
   
   stopCluster(cl)
 
+} 
 }
+
 
 # EXPLORE SMOOTH HAMMERHEAD ---------------------------------------------------------
 Explore.smooth.HH=FALSE
 if(Explore.smooth.HH)
 {
+  hndl.ZmuHH=handl_OneDrive('Analyses/Catch and effort/Outputs/Paper/smooth HH_explore/')
+  # Explore under reporting smooth HH following CITES listing by some vessel 
+    a=DATA.list.LIVEWT.c.daily$`Smooth Hammerhead Shark`
+    X=a%>%
+      group_by(FINYEAR,VESSEL)%>%
+      summarise(Catch.Target=sum(Catch.Target))%>%
+      data.frame%>%
+      spread(FINYEAR,Catch.Target,fill=0)%>%
+      mutate(Total = rowSums(select_if(., is.numeric), na.rm = TRUE) )%>%
+      filter(Total>500)%>%
+      dplyr::select(-Total)
+    X1=X%>%
+      gather(FINYEAR,Catch,-VESSEL)%>%
+      mutate(yr=as.numeric(substr(FINYEAR,1,4)))
+    
+    Vs.lvl= X1%>%
+      group_by(VESSEL)%>%
+      summarise(Sum=sum(Catch))%>%
+      arrange(-Sum)
+    
+    X1=X1%>%mutate(VESSEL=factor(VESSEL,levels=Vs.lvl$VESSEL))
+    X1%>%
+      ggplot(aes(x=yr, y=VESSEL)) +
+      geom_tile(aes(fill =  Catch), colour = "grey50") +
+      scale_fill_viridis(direction = -1,guide = guide_colorbar()) + 
+      theme_classic(base_size = 28, base_line_size = 0.5) +
+      theme(axis.ticks.length=unit(-0.25, "cm"),
+            axis.text.y = element_text(margin=unit(c(0.5,0.5,0.5,0.5), "cm")),
+            panel.grid.minor = element_blank(),panel.spacing.x=unit(-1, "cm"),panel.spacing.y=unit(-1, "cm"),
+            strip.background = element_blank(), 
+            legend.spacing.x = unit(1, "pt"), 
+            legend.key.width  = unit(5, "cm"), 
+            legend.position = "bottom" ,
+            legend.title = element_blank(), 
+            legend.key.height = unit(1, 'cm'),
+            plot.margin=unit(c(0,0,0,0), "cm"))
+    ggsave(paste(hndl.ZmuHH,"Smooth HH daily catch by vessel.tiff"),width = 12,height = 12, dpi = 300, compression = "lzw")
+    
+    
   s=match("Smooth Hammerhead Shark",names(DATA.list.LIVEWT.c.daily)) 
   fn.bubl=function(Tab1)
   {
@@ -8974,7 +9156,7 @@ if(Explore.smooth.HH)
   colnames(d)=tolower(colnames(d))
   
   
-  hndl.ZmuHH=handl_OneDrive('Analyses/Catch and effort/Outputs/Paper/smooth HH_explore/')
+  
   
   fn.fig(paste(hndl.ZmuHH,"annual records distribution_vessel"),2000, 2400)   
   fn.bubl(Tab1=table(d$vessel,d$finyear))
@@ -9370,8 +9552,8 @@ if(Explore.why.dusky.sandbar.uncertain)
 
 # EXPORT INDICES -----------------------------------------------------------------------
 setwd(handl_OneDrive("Analyses/Data_outs"))
-Sel.vars=c("finyear","response","CV","lower.CL","upper.CL")
-nams.Sel.vars=c("Finyear","Mean","CV","LOW.CI","UP.CI")
+Sel.vars=c("finyear","response","CV","lower.CL","upper.CL","SE")
+nams.Sel.vars=c("Finyear","Mean","CV","LOW.CI","UP.CI","SE")
 
 Nms.sp=ifelse(Nms.sp=="Bronze whaler","Copper shark",Nms.sp)
  
@@ -9403,45 +9585,49 @@ for (s in Tar.sp)
   rm(a)
 }
 
-    #4.22.12.3 by zones with NO efficiency creep
-for (s in 1:length(Tar.sp))
+if(do.spatial.cpiui)
 {
-  Zn=names(Zone_preds.monthly[[s]])
-  for(z in 1:length(Zn))
+  #4.22.12.3 by zones with NO efficiency creep
+  for (s in 1:length(Tar.sp))
   {
+    Zn=names(Zone_preds.monthly[[s]])
+    for(z in 1:length(Zn))
+    {
       #Standardised
-    a=subset(Zone_preds.monthly[[s]][[z]]$Preds,select=Sel.vars)   
-    names(a)=nams.Sel.vars
-    ii=Tar.sp[s]
-    write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
+      a=subset(Zone_preds.monthly[[s]][[z]]$Preds,select=Sel.vars)   
+      names(a)=nams.Sel.vars
+      ii=Tar.sp[s]
+      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
+      
+      a=subset(Zone_preds.daily[[s]][[z]]$Preds,select=Sel.vars)    
+      names(a)=nams.Sel.vars
+      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
+      
+      rm(a)
+    }
+  }
   
-    a=subset(Zone_preds.daily[[s]][[z]]$Preds,select=Sel.vars)    
-    names(a)=nams.Sel.vars
-    write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
-  
-    rm(a)
+  #4.22.12.4 by zones with efficiency creep
+  for (s in 1:length(Tar.sp))
+  {
+    Zn=names(Zone_preds.monthly[[s]])
+    for(z in 1:length(Zn))
+    {
+      #Standardised
+      a=subset(Zone_preds.monthly[[s]][[z]]$Preds.creep,select=Sel.vars)   
+      names(a)=nams.Sel.vars
+      ii=Tar.sp[s]
+      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly",Zn[z],".csv",sep=""),row.names=F) 
+      
+      a=subset(Zone_preds.daily[[s]][[z]]$Preds.creep,select=Sel.vars)   
+      names(a)=nams.Sel.vars
+      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily",Zn[z],".csv",sep=""),row.names=F) 
+      
+      rm(a)
+    }
   }
 }
 
-    #4.22.12.4 by zones with efficiency creep
-for (s in 1:length(Tar.sp))
-{
-  Zn=names(Zone_preds.monthly[[s]])
-  for(z in 1:length(Zn))
-  {
-    #Standardised
-    a=subset(Zone_preds.monthly[[s]][[z]]$Preds.creep,select=Sel.vars)   
-    names(a)=nams.Sel.vars
-    ii=Tar.sp[s]
-    write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly",Zn[z],".csv",sep=""),row.names=F) 
-    
-    a=subset(Zone_preds.daily[[s]][[z]]$Preds.creep,select=Sel.vars)   
-    names(a)=nams.Sel.vars
-    write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily",Zn[z],".csv",sep=""),row.names=F) 
-    
-    rm(a)
-  }
-}
 
 
 #Relative scale   
@@ -9458,43 +9644,73 @@ for (s in Tar.sp)
   rm(a)
 }
 
-    #4.22.12.6 by zones with efficiency creep
-for (s in 1:length(Tar.sp))
+if(do.spatial.cpiui)
 {
-  Zn=names(Zone_preds.monthly[[s]])
-  for(z in 1:length(Zn))
+  #4.22.12.6 by zones with efficiency creep
+  for (s in 1:length(Tar.sp))
   {
-    a=subset(Zone_preds.monthly[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
-    names(a)=nams.Sel.vars
-    ii=Tar.sp[s]
-    write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_relative.csv",sep=""),row.names=F) 
-    
-    a=subset(Zone_preds.daily[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
-    names(a)=nams.Sel.vars
-    write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_relative.csv",sep=""),row.names=F) 
-    
-    rm(a)
+    Zn=names(Zone_preds.monthly[[s]])
+    for(z in 1:length(Zn))
+    {
+      a=subset(Zone_preds.monthly[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
+      names(a)=nams.Sel.vars
+      ii=Tar.sp[s]
+      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_relative.csv",sep=""),row.names=F) 
+      
+      a=subset(Zone_preds.daily[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
+      names(a)=nams.Sel.vars
+      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_relative.csv",sep=""),row.names=F) 
+      
+      rm(a)
+    }
   }
 }
 
+
     #4.22.12.7 other species zones combined with efficiency creep  
-Sel.vars.other=c("finyear","response","CV","lower.CL","upper.CL")
+Sel.vars.other=c("finyear","response","CV","lower.CL","upper.CL","SE")
+
+#absolute scale with creep
 for (s in nnn[-sort(Tar.sp)])
 {
+  nmx=Nms.sp[s]
+  if(nmx=="Wobbegong") nmx="Wobbegongs"
+  if(nmx=="Common sawshark") nmx="Sawsharks"
+  if(!is.null(Pred.creep[[s]]))
+  {
+    a=subset(Pred.creep[[s]],select=Sel.vars.other)   
+    names(a)=nams.Sel.vars
+    write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.monthly.csv",sep=""),row.names=F) 
+  }
+  
+  if(!is.null(Pred.daily.creep[[s]]))
+  {
+    a=subset(Pred.daily.creep[[s]],select=Sel.vars.other)   
+    names(a)=nams.Sel.vars
+    write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.daily.csv",sep=""),row.names=F) 
+  }
+  rm(a,nmx)
+}
+#relative
+for (s in nnn[-sort(Tar.sp)])
+{
+  nmx=Nms.sp[s]
+  if(nmx=="Wobbegong") nmx="Wobbegongs"
+  if(nmx=="Common sawshark") nmx="Sawsharks"
   if(!is.null(Pred.normlzd[[s]]))
   {
     a=subset(Pred.normlzd[[s]],select=Sel.vars.other)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
+    write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
   }
   
   if(!is.null(Pred.daily.normlzd[[s]]))
   {
     a=subset(Pred.daily.normlzd[[s]],select=Sel.vars.other)   
     names(a)=nams.Sel.vars
-    write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
+    write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
   }
-  rm(a)
+  rm(a,nmx)
 }
 
 

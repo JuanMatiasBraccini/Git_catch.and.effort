@@ -10,7 +10,7 @@ setwd(handl_OneDrive("Data/Fishing power"))
 
 TDGDLF.vessels=read.csv("TDGDLF.vessels.csv",stringsAsFactors=F)
 TDGDLF.skippers=read.csv("TDGDLF.SKIPERS.csv",stringsAsFactors=F)
-Vessel.survey=read.csv("VesselGearSurveyData.csv",stringsAsFactors=F)
+Vessel.survey=read.csv("VesselGearSurveyData/VesselGearSurveyData.csv",stringsAsFactors=F)
 
 
 

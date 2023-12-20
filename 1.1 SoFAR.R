@@ -36,10 +36,11 @@ source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R"))
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)
 
-Current.yr="2020-21"
+Current.yr="2021-22"   #financial year for latest catch
 
-Percent.fin.of.livewt=0.03
+Percent.fin.of.livewt=0.03  #used as default if species not in Shark.Fin.Price.List
 Shark.Fin.Price.List=read.csv(handl_OneDrive("Data/Catch and Effort/Shark Fin Price List.csv")) #provided by Rory to Eva Lai
+
 
 TDGDLF.lat.range=c(-26,-40)
 
@@ -121,7 +122,7 @@ Display.current.yr=paste(substr(Current.yr,1,4),"/",substr(Current.yr,6,7),sep="
 Ind.spe.list=list(Gummy=17001,Whiskery=17003,Bronzy.Dusky=c(18001,18003),sandbar=18007)
 
 #Create data for TDGDLF Ecological Risk Assessment 
-do.ERA=FALSE
+do.ERA=TRUE   #needed for Reconstructions of TDGDLF discards
 if(do.ERA)
 {
   era.yrs=as.numeric(substr(Current.yr,1,4))
@@ -291,7 +292,9 @@ PRICES=PRICES%>%mutate(dolar.per.kg=Beach.Price..Adjusted.,
 names(Shark.Fin.Price.List)[grep('Percent',names(Shark.Fin.Price.List))]='Percent'
 Shark.Fin.Price.List=Shark.Fin.Price.List%>%
   mutate(Prop=Percent/100)%>%
-  dplyr::select(Percent,Prop,species)
+  dplyr::select(Percent,Prop,species)%>%
+  rbind(data.frame(Percent=0, Prop=0, species=27000)) 
+
 Fin.Weight=subset(DAT,SPECIES%in%Elasmo.species,select=c(SPECIES,SNAME,RSCommonName,zone,LIVEWT.c))%>%
               filter(!SPECIES%in%c(22998))%>%
               left_join(Shark.Fin.Price.List,by=c('SPECIES'='species'))%>%
@@ -299,14 +302,20 @@ Fin.Weight=subset(DAT,SPECIES%in%Elasmo.species,select=c(SPECIES,SNAME,RSCommonN
                      Per.fin.livewt=ifelse(is.na(Per.fin.livewt),Percent.fin.of.livewt,Per.fin.livewt))%>%
               filter(!Per.fin.livewt==0)
 Fin.Weight$dolar.per.kg.fin=PRICES[match(22998,PRICES$SPECIES),match('dolar.per.kg',names(PRICES))]
-Fin.Weight$fin.weight=Percent.fin.of.livewt*Fin.Weight$LIVEWT.c 
+Fin.Weight$fin.weight=Fin.Weight$Per.fin.livewt*Fin.Weight$LIVEWT.c  #using species-specific fin-livewt proportions
+#Fin.Weight$fin.weight=Percent.fin.of.livewt*Fin.Weight$LIVEWT.c #previously using blanket 3% (upto 2022 SOFAR)
 Fin.Weight$Total.price=Fin.Weight$dolar.per.kg.fin*Fin.Weight$fin.weight
 FINS.value=aggregate(Total.price~zone,Fin.Weight,sum,na.rm=T)
 FINS.value.species.zone=aggregate(cbind(Total.price,fin.weight)~SNAME+zone,Fin.Weight,sum,na.rm=T)
 
+# Fin.species.composition=Fin.Weight%>%
+#   group_by(RSCommonName)%>%
+#   summarise(fin.weight=sum(fin.weight))%>%
+#   ungroup()%>%
+#   mutate(Prop=fin.weight/sum(fin.weight))%>%
+#   arrange(-Prop)
 
-
-#catch value 
+#catch value (GVP)
 get.yr.price="dolar.per.kg"
 PRICES1=PRICES[,match(c("SPECIES",get.yr.price),names(PRICES))]
 names(PRICES1)=c("SPECIES","ABARE.dolar.per.kg")
@@ -330,9 +339,9 @@ No.price=No.price[!duplicated(No.price$SPECIES),]
 Default.price=1
 PRICES1$ABARE.dolar.per.kg=with(PRICES1,ifelse(is.na(ABARE.dolar.per.kg),Default.price,ABARE.dolar.per.kg))  #add default if no price data
 
-  #calculate catch price (landed weight X price)
-PRICES1$Total.price=PRICES1$LANDWT*PRICES1$ABARE.dolar.per.kg
-#PRICES1$Total.price=PRICES1$LIVEWT.c*PRICES1$ABARE.dolar.per.kg
+  #calculate catch price (live weight X price) #As per Eva's calculations of GVP: "I multiple the live weight by 'Final.beach.price'"
+PRICES1$Total.price=PRICES1$LIVEWT.c*PRICES1$ABARE.dolar.per.kg
+#PRICES1$Total.price=PRICES1$LANDWT*PRICES1$ABARE.dolar.per.kg
 
 CATCH.value=aggregate(Total.price~zone,PRICES1,sum,na.rm=T)
 
@@ -516,7 +525,8 @@ fun.Tab2.SoFaR=function(Dat)
 {
   Dat=Dat%>%
     mutate(Status=ifelse(Status=="a","A",
-                  ifelse(Status=="d","D",Status)),
+                  ifelse(Status=="d","D",
+                  ifelse(Status=="NR","D",Status))),
            Ali.Ded.yr=paste(finyear,Status),
            CommonName=ifelse(CommonName=='Muttonbird','Shearwater',CommonName))%>%
     filter(finyear%in%these.yrs) 
@@ -534,10 +544,11 @@ fun.Tab2.SoFaR=function(Dat)
   newnames=gsub(x = newnames, pattern = "A", replacement = "Alive")
   newnames=gsub(x = newnames, pattern = "D", replacement = "Dead")
   TABLA=TABLA%>%
-    rename_at(vars(oldnames), ~ newnames)%>%
     rename(Species=CommonName)%>%
     mutate(Species=capitalize(tolower(Species)))
 
+  colnames(TABLA)[-(1:2)]=newnames
+  
   return(TABLA)
 }
 
@@ -1093,6 +1104,7 @@ if(do.AMM)
   if(do.mngmnt.timeline)
   {
     library(stringr)
+    library(ggpubr)
     Management=read.csv(handl_OneDrive('Management/Sharks/Timeline management measures/Management_timeline.csv'))
     Management=Management%>%
       mutate(date=as.POSIXct(StartDate,format="%d/%m/%Y"),
@@ -1227,9 +1239,13 @@ if(do.AMM)
     #2. Effort and management measures timeline
     AMM.eff.managmtnt=function(dat,MGMT,SEP,Lab.font,Lab.back,Effort.lab)
     {
-      Man=MGMT%>%dplyr::select(Event,finyear,Category)%>%mutate(id=1:nrow(MGMT))
       d=dat%>%
-        mutate(finyear=as.numeric(substr(FINYEAR,1,4)))%>%
+        mutate(finyear=as.numeric(substr(FINYEAR,1,4)))
+      Man=MGMT%>%
+              dplyr::select(Event,finyear,Category)%>%
+              mutate(id=1:nrow(MGMT))%>%
+              filter(finyear>=min(d$finyear))
+      d=d%>%
         full_join(Man,by='finyear')%>%
         arrange(finyear)%>%
         filter(finyear>=1975)%>%
@@ -1245,17 +1261,20 @@ if(do.AMM)
         d$Total[(this+1):nrow(d)]=d$Total[this]
       }
       
-      colors=c(Data='red',Closure='steelblue',Other='forestgreen','NA'='transparent')
-      p=ggplot(d,
-               aes(finyear, Total,label=Event,color = factor(Category))) +
-        geom_line(colour="orange",size=1.25) + geom_point() +
-        geom_label_repel(box.padding=SEP,hjust = 0,size = Lab.font,fill=Lab.back) + 
-        geom_line(colour="orange",size=1.25, alpha = 0.3) + geom_point(alpha = 0.4)+
+      colors=c(Data='red',Closure='steelblue',Other='forestgreen','None'='orange')
+      p=d%>%
+        mutate(Category=ifelse(Category=='','None',Category),
+               Category=factor(Category))%>%
+        ggplot(aes(finyear, Total,label=Event,color = Category)) +
+        geom_line(colour="orange",size=1.25) + 
+        #geom_point() +
+        geom_label_repel(box.padding=SEP,min.segment.length=0,hjust = 0,size = Lab.font,fill=Lab.back,max.overlaps=30) + 
+        geom_line(colour="orange",size=1.25, alpha = 0.3) + 
+        #geom_point(alpha = 0.4)+
         ylab(Effort.lab) + xlab("Financial year")+
         theme(legend.position = "none",
               axis.text=element_text(size=12),
-              axis.title=element_text(size=14)
-        )+
+              axis.title=element_text(size=14))+
         scale_color_manual(values = colors)
       return(print(p))
     }
@@ -1274,9 +1293,18 @@ if(do.AMM)
     
     
     #NSF
+    #note: NSF only have a fishery code since 1988-89
     Total.effort.NSF=read.csv(paste(HNDL,"Annual.total.eff_NSF.csv",sep=""),stringsAsFactors=F)
-    Total.effort.NSF=Total.effort.NSF%>%
-      mutate(Total=Hook.days)
+    NSF_add.0.effort=seq(2009,as.numeric(substr(Current.yr,1,4)))
+    NSF_add.0.effort=paste(NSF_add.0.effort,substr(NSF_add.0.effort+1,3,4),sep='-')
+    NSF_add.0.effort=data.frame(FINYEAR=NSF_add.0.effort,
+                                Hook.days=0,
+                                Hook.hours=0)%>%
+                      filter(!FINYEAR%in%unique(Total.effort.NSF$FINYEAR))
+    
+    Total.effort.NSF=rbind(Total.effort.NSF,NSF_add.0.effort)%>%
+            arrange(FINYEAR)%>%
+            mutate(Total=Hook.days)
     set.seed(666)
     p.N=AMM.eff.managmtnt(dat=Total.effort.NSF,
                           MGMT=Management.north,
@@ -1289,8 +1317,7 @@ if(do.AMM)
     
     
     #Two fisheries combined
-    library(ggpubr)
-    ggarrange(p, p.N, ncol = 1, nrow = 2)
+    ggarrange(p+scale_y_continuous(trans='log2'), p.N+scale_y_continuous(trans='log2'), ncol = 1, nrow = 2)
     ggsave(handl_OneDrive('Management/Sharks/Timeline management measures/Effort.management_TDGDLF & NSF.tiff'),
            width = 8,height = 8, dpi = 300, compression = "lzw")
     
