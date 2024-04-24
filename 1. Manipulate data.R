@@ -25,7 +25,7 @@
   #Data inspections:
                  # CATCH INSPECTIONS
                  #     Set current.yr; Identify 0 catch shots (are they real?), ID catch records
-                 #         where catch is too large of too small compared to species weight range,
+                 #         where catch is too large or too small compared to species weight range,
                  #         identify suspicious records and raise to data entry staff
 
                  # EFFORT INSPECTIONS
@@ -90,6 +90,7 @@
 #   http://f01-fims-webp01/FishCubeWA/Query.aspx?CubeId=TourOperatorPublic
 # DPIRD Cube:
 #   http://f01-fims-webp01/FishCubeWA/Query.aspx?CubeId=TourOperatorDPIRDOnly
+
 # ---------- DATA SECTION ------------------------------------------------------
 rm(list=ls(all=TRUE))
 library(RODBC)				#include ODBC library for importing Acccess data
@@ -128,7 +129,7 @@ setwd(handl_OneDrive("Data/Catch and Effort"))  # working directory
 First.run="NO"    
 #First.run="YES"
 
-Current.yr="2021-22"    #Set current financial year 
+Current.yr="2022-23"    #Set current financial year 
 Current.yr.dat=paste(substr(Current.yr,1,4),substr(Current.yr,6,7),sep="_")
 xx=paste(getwd(),Current.yr.dat,sep="/")
 if(!file.exists(xx)) dir.create(xx) 
@@ -298,8 +299,10 @@ if(do.sql.extraction)
     dplyr::select(-FLAMS)
   
   #2. Monthly returns from TDGDLF and NDS & shark catch in other fisheries with monthly returns 
-  #notes:  'monthlyrawlog' is the raw monthly data; 'monthlylog' is the one after species reapportioning, etc that goes to FishCube
-  #         the variable VESSEL was recoded in SQL (spaces and zeros dropped) so re-map it to allow my scripts to run
+  #notes: 1. 'monthlyrawlog' is the raw monthly data always used; 
+  #         'monthlylog' is the one after the reapportioning of indicator species, etc that goes to FishCube.
+  #         So I need to keep using 'monthlyrawlog' for the purpose of cpue standardisation, catch reconstructions, etc
+  #       2. The variable VESSEL was recoded in SQL (spaces and zeros dropped) so re-map it to allow my scripts to run
     #SQL data
   system.time({Data.monthly <- sqlQuery(channel=odbcDriverConnect(connection="Driver={SQL Server};
                                                     server=CP-SDBS0001P-19\\RESP01;database=ResearchDataWarehouseCE;
@@ -895,6 +898,8 @@ names(Indicator.species)=c("Gummy","Whiskery","Bronzy","Dusky","Sandbar")
 TARGETS=list(whiskery=17003,gummy=17001,dusky=c(18001,18003),sandbar=18007) 
 N.species=length(TARGETS)
 Fix.species=c(18003,17001,17003,22999)  #species that need catch reapportioning
+HammerheadSpecies=c(19001,19002,19004)
+reset.hammerhead.to.reported=TRUE    #reset hammehead to originally reported record
 
 #Catch and effort misreporting  as adviced by Colin Simpfendorfer (2001) and Rory McAuley 
 Inc.per=1.05  #5% percent increase in catch and effort prior 1990                    
@@ -924,6 +929,11 @@ max.w.whis=Wei.range[Wei.range$SPECIES==17003,]$TW.max
 max.w.gum=Wei.range[Wei.range$SPECIES==17001,]$TW.max
 max.w.dus=Wei.range[Wei.range$SPECIES==18003,]$TW.max
 max.w.san=Wei.range[Wei.range$SPECIES==18007,]$TW.max
+
+min.w.whis=Wei.range[Wei.range$SPECIES==17003,]$TW.min  
+min.w.gum=Wei.range[Wei.range$SPECIES==17001,]$TW.min
+min.w.dus=Wei.range[Wei.range$SPECIES==18003,]$TW.min
+min.w.san=Wei.range[Wei.range$SPECIES==18007,]$TW.min
 
 
  #how to export figures
@@ -999,6 +1009,16 @@ if(explore.Catch.compo=="YES")
 
 
 #SECTION A. ---- DATA MANIPULATION - MONTHLY RECORDS ----
+
+#Set hammerhead species to the original report to overwrite FishCube's reapportioning  
+if(reset.hammerhead.to.reported)
+{
+  Data.monthly=Data.monthly%>%
+    mutate(SNAME=ifelse(SPECIES%in%HammerheadSpecies,"Hammerhead Sharks",SNAME),
+           RSSpeciesCode=ifelse(SPECIES%in%HammerheadSpecies,37019000,RSSpeciesCode),
+           SPECIES=ifelse(SPECIES%in%HammerheadSpecies,19000,SPECIES))
+}
+
 
 # A.1. Add year if missing
 Data.monthly$Split.Year.1=as.numeric(sapply(strsplit(as.character(Data.monthly$FINYEAR),"-"), "[", 1))
@@ -1153,16 +1173,17 @@ fn.chk.ktch=function(d1,d2,VAR1,VAR2)
   if(d1sum==d2sum)Message="d1 and d2 have same catch"
   print(Message)
   
-  A=aggregate(d1[,match(VAR1,names(d1))]~FINYEAR+VESSEL,d1,sum)
-  names(A)[3]="weight.original"
-  B=aggregate(d2[,match(VAR2,names(d2))]~FINYEAR+VESSEL,d2,sum)
-  names(B)[3]="weight.changed"
-  D=A%>%full_join(B,by=c("FINYEAR","VESSEL"))
+  A=aggregate(d1[,match(VAR1,names(d1))]~FINYEAR+VESSEL+Same.return,d1,sum)
+  names(A)[4]="weight.original"
+  B=aggregate(d2[,match(VAR2,names(d2))]~FINYEAR+VESSEL+Same.return,d2,sum)
+  names(B)[4]="weight.changed"
+  D=A%>%full_join(B,by=c("FINYEAR","VESSEL","Same.return"))
   #D=merge(A,B,by=c("FINYEAR","VESSEL"))
   D$delta.w=round(D$weight.original-D$weight.changed,0)
   discrepancy=subset(D,!delta.w==0)
   print(paste("Catch by year-vessel has this many discrepancies=",
               nrow(discrepancy),"records"))
+  if(nrow(discrepancy)>0) return(discrepancy)
 }
 fn.chk.ktch(d1=Data.monthly.original,
       d2=subset(Data.monthly,FINYEAR%in%Data.monthly.original$FINYEAR),
@@ -1228,6 +1249,7 @@ Data.monthly$LAT=with(Data.monthly,ifelse(BLOCKX%in%c(96021),-25,
                 ifelse(BLOCKX%in%c(85030),-34.4586,
                 ifelse(BLOCKX%in%c(85050),-34.2853,
                 ifelse(BLOCKX%in%c(85080),-33.917,
+                ifelse(BLOCKX%in%c(85110),-34.28,
                 ifelse(BLOCKX%in%c(95010),-31.9554,
                 ifelse(BLOCKX%in%c(95020),-32.5167,
                 ifelse(BLOCKX%in%c(95030),-33.3503,
@@ -1237,7 +1259,7 @@ Data.monthly$LAT=with(Data.monthly,ifelse(BLOCKX%in%c(96021),-25,
                 ifelse(BLOCKX%in%c(85990),NA,
                 ifelse(BLOCKX==85010,-34.06976,
                 ifelse(BLOCKX%in%c(85130),-34.9278,LAT
-                )))))))))))))))))))))
+                ))))))))))))))))))))))
 
 Data.monthly$LAT=ceiling(Data.monthly$LAT)
 
@@ -1260,6 +1282,7 @@ Data.monthly$LONG=with(Data.monthly,ifelse(BLOCKX%in%c(96021),113,
                   ifelse(BLOCKX%in%c(85030),118.8897,
                   ifelse(BLOCKX%in%c(85050),119.4819,
                   ifelse(BLOCKX%in%c(85080),120.050,
+                  ifelse(BLOCKX%in%c(85110),115.18,
                   ifelse(BLOCKX%in%c(95010),115.8585,
                   ifelse(BLOCKX%in%c(95020),115.7167,
                   ifelse(BLOCKX%in%c(95030),115.6494,
@@ -1269,7 +1292,7 @@ Data.monthly$LONG=with(Data.monthly,ifelse(BLOCKX%in%c(96021),113,
                   ifelse(BLOCKX%in%c(85990),NA,
                   ifelse(BLOCKX==85010,115.1438 ,
                   ifelse(BLOCKX%in%c(85130),116.4489,LONG
-                  )))))))))))))))))))))
+                  ))))))))))))))))))))))
 
 Data.monthly$LONG=floor(Data.monthly$LONG)
 
@@ -1376,10 +1399,19 @@ if(get.Mats.data.2023)
     rename_with(toupper)
 }
 
+# Add Factor if not available but landwt and conditn available
+#a=Data.monthly%>%filter(is.na(LIVEWT))%>%dplyr::select(Factor,CONDITN,LANDWT,LIVEWT,SNAME)
+#a
+Data.monthly=Data.monthly%>%
+                mutate(Factor=ifelse(grepl('Skates',SNAME) & is.na(Factor) & CONDITN%in%c('HD','WD','WF'),1.59,Factor),
+                       LIVEWT=ifelse(grepl('Skates',SNAME) & is.na(LIVEWT) & CONDITN%in%c('HD','WD','WF'),LANDWT*Factor,
+                                     LIVEWT))
+Data.monthly$Reporter=NA
+
 #SECTION B. ---- DATA MANIPULATION - DAILY LOGBOOKS ----
 
 #Check catch composition deeper than 100 m
-#only using Daily logbooks, Monthly return have very little data (mostly 'shark other')
+  #note: only using Daily logbooks, Monthly return have very little data (mostly 'shark other')
 do.ktch.deep=FALSE
 if(do.ktch.deep)
 {
@@ -1435,6 +1467,18 @@ if(do.ktch.deep)
                                  "zone 1-GN" = "dodgerblue3",
                                  "zone 2-GN" = "green3","zone 2-LL" = "darkgreen"))
   dev.off()
+  
+}
+
+#Set hammerhead species to the original report to overwrite FishCube's reapportioning     
+if(reset.hammerhead.to.reported)
+{
+  Data.daily=Data.daily%>%
+    mutate(sname1=ifelse(species%in%HammerheadSpecies & year<2023,'Hammerhead Sharks',sname1),
+           RSCommonName=ifelse(species%in%HammerheadSpecies & year<2023,'Hammerhead Sharks',RSCommonName),
+           RSSpeciesCode=ifelse(species%in%HammerheadSpecies & year<2023,37019000,RSSpeciesCode),
+           RSSpeciesId=ifelse(species%in%HammerheadSpecies & year<2023,90,RSSpeciesId),
+           species=ifelse(species%in%HammerheadSpecies & year<2023,19000,species))
   
 }
 
@@ -1505,8 +1549,10 @@ Data.daily=Data.daily%>%
                   ifelse(BoatName=="steve-mayree d","steve mayree d",
                   ifelse(BoatName=="sveti-nikola","sveti nikola",
                   ifelse(BoatName=="tracey-lea","tracey lea",
+                  ifelse(BoatName=="carado","corado",
+                         ifelse(BoatName=="st gerard","st gerard m",
                   ifelse(BoatName=="catch fillet release","catch fillet & release",
-                         BoatName)))))))))))))))))))),
+                         BoatName)))))))))))))))))))))),
          MastersName=tolower(MastersName),
          MastersName=case_when(MastersName%in%c("a. joy","andrew joy")~"joy, andrew francis",
                                MastersName%in%c("j.e.robb","j.e. robb","j e robb","j. e. robb","j. robb",
@@ -1515,6 +1561,10 @@ Data.daily=Data.daily%>%
                                MastersName%in%c("steve buckeridge","stephen buckeridge",
                                                 "buckeridge, steve","stephen grant buckeridge")~ "buckeridge, stephen grant",
                                MastersName%in%c("ryan bradley","ryan james bradley",'ryan, bradley')~ "bradley, ryan",
+                               MastersName== "sell, graeme edward"~ "graeme edward sell",
+                               MastersName== "john patrick richardson"~ "john richardson",
+                               MastersName== "murch, paul douglas"~ "paul douglas murch",
+                               MastersName== "stephen charles mcwhirter"~ "mcwhirter, stephen charles",
                                MastersName== "storm mansted"~ "mansted, storm",
                                MastersName%in%c("anthony  mansted","anthony david mansted","anthony mansted")~ "mansted, anthony",
                                MastersName== "mason thomas"~ "thomas, mason",
@@ -1556,17 +1606,19 @@ Data.daily=Data.daily%>%
                                MastersName%in%c("parker, roger joseph","roger joseph parker")~ "roger parker",
                                TRUE~MastersName))
 #export list of boats and skippers
-write.csv(Data.daily%>%distinct(BoatName,MastersName)%>%arrange(MastersName),
+write.csv(Data.daily%>%distinct(vessel,BoatName,MastersName)%>%arrange(MastersName),
           'List_boats_skippers.csv',row.names = F)
 
-#Fishers operating in recent years
-# b=Data.daily%>%
-#   filter(finyear%in%c("2017-18","2018-19","2019-20"))%>%
-#   group_by(MastersName,BoatName,vessel)%>%
-#   tally()%>%
-#   data.frame%>%
-#   rename(number.of.records=n)%>%
-#   arrange(BoatName)
+#Fishers operating in recent years  
+recent.yrs=as.numeric(substr(Current.yr,1,4))
+recent.yrs=paste(seq((recent.yrs-2),recent.yrs),substr(seq((recent.yrs-1),recent.yrs+1),3,4),sep='-')
+Recent.fishers.n.shots=Data.daily%>%
+                          filter(finyear%in%recent.yrs)%>%
+                          distinct(date,DSNo,TSNo,SNo,.keep_all = T)%>%
+                          group_by(MastersName,BoatName,vessel,finyear)%>%
+                          tally()%>%
+                          spread(finyear,n,fill=0)%>%
+                          arrange(BoatName,MastersName)
 
 #note: a unique shot (session) is the combination of Sno (shot num), DSNo (daily sheet num) and     
 #       TSNo (trip sheet num),i.e. the variable "Session ID"
@@ -1664,7 +1716,7 @@ Data.daily$livewt=with(Data.daily,
                                  1.59*6.653846*nfish,
                         ifelse(species%in%c(18023,18001)& TSNo=="TDGLF8008487" & flagtype==0,
                                  1.59*4.306569*nfish,
-                        ifelse(species%in%c(17006,18003,19000)& TSNo=="TDGLF8009537" & flagtype==0,
+                        ifelse(species%in%c(17006,18003,19000,HammerheadSpecies)& TSNo=="TDGLF8009537" & flagtype==0,
                                  1.59*7.911765*nfish*807/933.5883,
                         ifelse(species%in%c(18003,18007)& TSNo=="TDGLF8009503" & flagtype==0,
                                  1.59*7.090909*nfish,
@@ -1695,7 +1747,7 @@ Data.daily$landwt=with(Data.daily,
                                6.653846*nfish,
                         ifelse(species%in%c(18023,18001)& TSNo=="TDGLF8008487" & flagtype==0,
                                4.306569*nfish,
-                        ifelse(species%in%c(17006,18003,19000)& TSNo=="TDGLF8009537" & flagtype==0,
+                        ifelse(species%in%c(17006,18003,19000,HammerheadSpecies)& TSNo=="TDGLF8009537" & flagtype==0,
                                7.911765*nfish*807/933.5883,
                         ifelse(species%in%c(18003,18007)& TSNo=="TDGLF8009503" & flagtype==0,
                                7.090909*nfish,
@@ -1797,8 +1849,8 @@ if(Inspect.New.dat=="YES")
   rm(A,a,b,guarda)
 }
 Data.daily=subset(Data.daily,!(species%in%c(22997,22998))) #remove fins & livers to avoid double counting when scaling carcass to whole 
-if(nrow(Data.daily.incomplete))Data.daily.incomplete=subset(Data.daily.incomplete,!(species%in%c(22997,22998)))
-if(nrow(Data.daily.FC.2005_06))Data.daily.FC.2005_06=subset(Data.daily.FC.2005_06,!(species%in%c(22997,22998)))
+if(nrow(Data.daily.incomplete)>0)Data.daily.incomplete=subset(Data.daily.incomplete,!(species%in%c(22997,22998)))
+if(nrow(Data.daily.FC.2005_06)>0)Data.daily.FC.2005_06=subset(Data.daily.FC.2005_06,!(species%in%c(22997,22998)))
 
 
   #fix typos
@@ -1842,7 +1894,7 @@ Data.daily$LongDeg=with(Data.daily,
                                LongDeg)))))))))))))))))))))
 Data.daily$LongDeg=floor(Data.daily$LongDeg) 
 
-Data.daily$LatDeg=with(Data.daily,
+Data.daily$LatDeg=with(Data.daily,  
                   ifelse(blockx%in%c(96021) & LatDeg>60,25,
                   ifelse(blockx%in%c(96022,96023) & LatDeg>60,26,
                   ifelse(blockx%in%c(97011) & LatDeg>60,27,
@@ -2002,7 +2054,7 @@ if(nrow(Data.daily.FC.NA.sp)>0)
                 ifelse(zone=='*',"West",
                 zone))))
 }
-if(nrow(Data.daily.incomplete))
+if(nrow(Data.daily.incomplete)>0)
 {
   Data.daily.incomplete$LatDeg=with(Data.daily.incomplete,ifelse(is.na(LatDeg),as.numeric(substr(block10,1,2)),LatDeg))  
   Data.daily.incomplete$LatMin=with(Data.daily.incomplete,ifelse(is.na(LatMin),10*as.numeric(substr(block10,3,3)),LatMin))  
@@ -2065,7 +2117,7 @@ Effort.daily$LAT=-abs(Effort.daily$LAT)
 Effort.daily$LONG=Effort.daily$LongDeg+(Effort.daily$LongMin/60)
 Effort.daily=Effort.daily[,-match(c("LatDeg","LongDeg","LatMin","LongMin"),names(Effort.daily))]
 
-#Export reported depth data
+#Export reported depth data for indicator species
 write.csv(subset(Data.daily,species%in%c(17003,17001,18003,18007)),
           handl_OneDrive("Analyses/Data_outs/Daily.log.depth.csv"),row.names=F)
 
@@ -2151,7 +2203,7 @@ if(Inspect.New.dat=="YES")
   Top.mon.eff=263.5 # 8500 m X 31 days
   # (i.e. monthly catch >Top.mon.ktch and monthly Km.gn.d > Top.mon.eff)  VIP!!!
   
-  #1. ID missing catch weight records in current year data  
+  #1. ID missing catch weight records in current year data when nfish reported  
   NA.livewt=Current.data%>%
               filter(is.na(livewt) & !TripLandedCondition%in%c('SC','NR'))%>%
               distinct(SessionStartDate,vessel,TripSheetNumber,DailySheetNumber,SessionIndex,
@@ -2193,7 +2245,7 @@ if(Inspect.New.dat=="YES")
   #note:this compares average weights from returns to the range of possible weights by species.
   #     for some species there's no Wei.range info.
   
-    #Check if there's numbers data but no livewt  (this gets amended further down)   
+    #Check if there's numbers data and landwt but no livewt  (this is amended in 'Fix weights with NA weight or zero weight but with nfish')  
   check.nfish.weight=Current.data%>%
                     filter(!is.na(Nfish) | !Nfish==0)%>%
                     filter(!RSSpeciesCommonName=="Nil Fish Caught")%>%
@@ -2211,7 +2263,6 @@ if(Inspect.New.dat=="YES")
     mtext("with nfish but no weight",3,-2,cex=3,col="white")
     par(bg="white")
     #stop("records with nfish but no weight")
-    
     if(nrow(NA.livewt)>0)
     {
       check.nfish.weight=check.nfish.weight%>%
@@ -2219,7 +2270,6 @@ if(Inspect.New.dat=="YES")
         filter(!dummy%in%paste(NA.livewt$DailySheetNumber,NA.livewt$TripSheetNumber,NA.livewt$RSSpeciesCommonName))%>%
         dplyr::select(-dummy)
     }
-    
     if(nrow(check.nfish.weight)>0)
     {
       write.csv(check.nfish.weight%>%mutate(livewt=ifelse(is.na(livewt),'',livewt)),
@@ -2228,8 +2278,6 @@ if(Inspect.New.dat=="YES")
                  CC=Email.FishCube,
                  Subject=paste("Shark validation",Sys.time(),'no_live.weight.csv',sep=' _ '),
                  Body= "Hi,
-              I’ve started the data validation process for the new year data stream.
-              I’ll be sending a series of emails with queries
               In the attached, I extracted records where ‘livewt’ is blank but there are 
               values for ‘nfish’ and ‘landwt’.
               Is this a typo or there’s a legit reason for not having a ‘livewt’ value?
@@ -2238,11 +2286,9 @@ if(Inspect.New.dat=="YES")
                  Attachment=paste(handle,"/Check.no_live.weight.csv",sep=""))
       
     }
-
-     
   }
 
-    #calculate average weight for each species
+  #4. Check average weight for each species
   Current.data$Avg.wt=with(Current.data,livewt/Nfish)
   Uniq.sp=Current.data[,match(c("species","sname1"),names(Current.data))]
   Uniq.sp=Uniq.sp[!(duplicated(Uniq.sp$species)),]
@@ -2267,9 +2313,10 @@ if(Inspect.New.dat=="YES")
       R.w=range(Data$livewt)
       
       par(mfcol=c(2,2),mai=c(1.1,.85,.2,.1),oma=c(.1,.1,1,.1))
-      hist(Data$Nfish,xlab="Numbers per shot",main=sp.name,cex.main=.8,col=2)
+      hist(Data$Nfish,xlab="Numbers per shot",main=sp.name,cex.main=1.2,col=2)
       hist(Data$livewt,xlab="Weight (kg) per shot",main="",col=2)
-      hist(Data$Avg.wt,xlab="Average weight (kg)",main="",col=2)
+      hist(Data$Avg.wt,xlab="Average weight (kg)",main=paste0("Biological w8t range: ",round(Weit.r$TW.min,1),
+                                                             "-",round(Weit.r$TW.max,1)," kg"),col=2)
       
       Q=quantile(Data$Avg.wt,probs = seq(0, 1, 0.025))
       Q.n=quantile(Data$Nfish,probs = seq(0, 1, 0.025))
@@ -2279,8 +2326,12 @@ if(Inspect.New.dat=="YES")
       {
         id=which(Data$Avg.wt<(Weit.r$TW.min*(1-tolerance)) | Data$Avg.wt>(Weit.r$TW.max*(1+tolerance)))
         Rev.weight=Data[id,]
-        plot(Rev.weight$Nfish,Rev.weight$livewt,xlab="nfish",ylab="livewt",main=paste("min wt=",round(Weit.r$TW.min,1),
-                                                                                      " max wt=",round(Weit.r$TW.max,1),sep=""),pch=19,col=2,cex.main=.8)
+        plot(Rev.weight$Nfish,Rev.weight$livewt,xlab="nfish",ylab="livewt",
+             main='Records outside biologcial w8t range',pch=19,col=2,cex.main=.8,xlim=c(0,max(Rev.weight$Nfish)),ylim=c(0,max(Rev.weight$livewt)))
+      }else
+      {
+        plot.new()
+        mtext("no records outside w8t range",3,cex=1,col="forestgreen")
       }
       
       return(list(W.range=R.w,Avg.w.range=R,num.range=R.n,Avg.w.quantiles=Q,num.quantiles=Q.n,Review.Record=Rev.weight))
@@ -2293,7 +2344,6 @@ if(Inspect.New.dat=="YES")
                                                                       sp.name=Uniq.sp.nam.with.weight[i])
   Current.data=Current.data%>%left_join(Wei.range%>%dplyr::select(TW.min,TW.max,SPECIES),
                                         by=c("species"="SPECIES"))
-
   Current.data$Chk.wt=with(Current.data,
             ifelse(Avg.wt<(TW.min*(1-tolerance)) | 
             Avg.wt>(TW.max*(1+tolerance)),"check","ok"))
@@ -2307,7 +2357,7 @@ if(Inspect.New.dat=="YES")
   {
     check.weights[,idd]=round(check.weights[,idd],2)
     check.weights=check.weights%>%
-      arrange(vessel,TripSheetNumber,DailySheetNumber,RSSpeciesCode)%>%
+      arrange(vessel,TripSheetNumber,DailySheetNumber,RSSpeciesCommonName)%>%
       rename(Derived_Avg.wt=Avg.wt,
              Min.wt=TW.min,
              Max.wt=TW.max)
@@ -2316,7 +2366,7 @@ if(Inspect.New.dat=="YES")
                CC=Email.FishCube,
                Subject=paste("Shark validation",Sys.time(),'nfish.weight.typo.csv',sep=' _ '),
                Body= "For the attached file, could you please check that there are no typos in the nfish, landed weight and condition
-                      columns as the average weight resulting from these 3 columns are outside the range for the species. 
+                      columns as the average weight resulting from these 3 columns are outside the range for the species (TW.min & TW.max). 
                     Cheers
                     Matias",
                Attachment=paste(handle,"/Check.nfish.weight.typo.csv",sep=""))
@@ -2373,10 +2423,11 @@ if(Inspect.New.dat=="YES")
                   '18023'=list(c(113,-16),c(126,-36)),  #"Spinner Shark"
                   '12000'=list(c(113,-10),c(129,-36)),  #"Thresher Shark"
                   '18022' =list(c(113,-14),c(129,-36))   #"Tiger Shark"  
-  )
+              )
   
   Outer=vector('list',length(Dist.range))
   smart.par(n.plots=length(Dist.range),MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(.1, 0.5, 0))
+  pdf(paste(handle,"/Check.lat.and.long.pdf",sep=""))
   for (i in 1:length(Dist.range))
   {
     s=subset(Current.data,species==as.numeric(names(Dist.range)[i]))
@@ -2397,7 +2448,8 @@ if(Inspect.New.dat=="YES")
       if(nrow(Outside)>0) Outer[[i]]=Outside%>%dplyr::select(c(Vero.vars[1:length(Vero.vars)],vessel,RSSpeciesCode,Lat,Long))
       
     }
-   }
+  }
+  dev.off()
   Outer=do.call(rbind,Outer)
   if(nrow(Outer)>0)
   {
@@ -2418,7 +2470,7 @@ if(Inspect.New.dat=="YES")
     distinct(dummy,.keep_all = T)%>%
     ggplot(aes(Long,Lat,color=fishery.zone))+
     geom_point()
-  
+  ggsave(paste(handle,"/Lat.and.long.of.records.tiff",sep=""),width = 6,height = 6,compression = "lzw")
   
   rm(Current.data)
 }
@@ -2478,54 +2530,66 @@ Data.daily$Bioregion.old=Data.daily$Bioregion
 
 
 #Export weight and nfish data from TDGDLF for mean weight analysis
-#note: for this analysis, remove records with average weight > maximum weight
-#       of species as in some cases nfish is under-reported
-Mn.wght.dat=subset(Data.daily,method=="GN" & !(blockx%in%Estuaries) & netlen >100)
-Mn.wght.dat$Avrg.w=Mn.wght.dat$livewt/Mn.wght.dat$nfish
-Mn.wght.dat$Keep=with(Mn.wght.dat,
-                      ifelse( Avrg.w>max.w.whis & species==17003,"NO",
-                      ifelse( Avrg.w>max.w.gum & species==17001,"NO",
-                      ifelse( Avrg.w>max.w.dus & species==18003,"NO",
-                      ifelse( Avrg.w>max.w.san & species==18007,"NO",
-                      ifelse(is.na(livewt) | livewt<=0,"NO","YES"))))))                     
-Mn.wght.dat=subset(Mn.wght.dat,Keep=="YES")               
-Mn.wght.dat=Mn.wght.dat[,-match(c("Avrg.w","Keep"),names(Mn.wght.dat))]
-write.csv(Mn.wght.dat%>%
-            left_join(Mesh.size%>%
-            mutate(mshigh=round(mshigh))%>%
-            dplyr::distinct(DSNo,TSNo,SNo,mshigh),
-            by = c("SNo", "DSNo", "TSNo")),
-          file =handl_OneDrive("Analyses/Catch and effort/Logbook.data.mean.weight.csv"))
+#note: for this analysis, remove records outside weight range
+if(First.run=='YES')
+{
+  Mn.wght.dat=subset(Data.daily,method=="GN" & !(blockx%in%Estuaries) & netlen >100)
+  Mn.wght.dat$Avrg.w=Mn.wght.dat$livewt/Mn.wght.dat$nfish
+  Mn.wght.dat$Keep=with(Mn.wght.dat,
+                        ifelse( Avrg.w>max.w.whis & Avrg.w<min.w.whis & species==17003,"NO",
+                                ifelse( Avrg.w>max.w.gum & Avrg.w<min.w.gum & species==17001,"NO",
+                                        ifelse( Avrg.w>max.w.dus & Avrg.w<min.w.dus & species==18003,"NO",
+                                                ifelse( Avrg.w>max.w.san & Avrg.w<min.w.san & species==18007,"NO",
+                                                        ifelse(is.na(livewt) | livewt<=0,"NO","YES"))))))                     
+  Mn.wght.dat=subset(Mn.wght.dat,Keep=="YES")               
+  Mn.wght.dat=Mn.wght.dat[,-match(c("Avrg.w","Keep"),names(Mn.wght.dat))]
+  write.csv(Mn.wght.dat%>%
+              filter(!is.na(livewt))%>%
+              left_join(Mesh.size%>%
+                          mutate(mshigh=round(mshigh))%>%
+                          dplyr::distinct(DSNo,TSNo,SNo,mshigh),
+                        by = c("SNo", "DSNo", "TSNo")),
+            file =handl_OneDrive("Analyses/Catch and effort/Logbook.data.mean.weight.csv"))
+  rm(Mn.wght.dat)
+}
 
 
 #Fix weights with NA weight or zero weight but with nfish
-#note: This is needed to account for population extractions. 
-#         Use species average for the block; if not available, use the overall average for the species
+#note: This is needed to account for population extractions but not used for cpue stand. 
+#      Criteria:  Use species average for the block; if not available, use the overall average for the species
 Avrg.w8ts_daily_spcies.blk10=Data.daily%>%
+              left_join(Wei.range%>%dplyr::select(SPECIES,TW.min,TW.max),by=c('species'='SPECIES'))%>%
               group_by(species,block10) %>% 
               mutate(n=n()) %>%
-              mutate(avrg_livewt=ifelse(n>10 & !is.na(livewt) & !is.na(nfish),livewt/nfish,NA))%>%
+              mutate(avrg_livewt=ifelse(n>10 & !is.na(livewt) & !is.na(nfish),livewt/nfish,NA),
+                     within.range=ifelse(!is.na(TW.min) & !is.na(avrg_livewt) &
+                                           (avrg_livewt>TW.max | avrg_livewt<TW.min),'NO','YES'))%>%
               filter(avrg_livewt>0.1 & avrg_livewt<100)%>%
+              filter(within.range=='YES')%>%
               group_by(species,block10) %>% 
               summarise(avrg_livewt_sp_blk10=mean(avrg_livewt, na.rm=TRUE))%>%
               ungroup()%>%
               data.frame()
 
 Avrg.w8ts_daily_spcies=Data.daily%>%
+              left_join(Wei.range%>%dplyr::select(SPECIES,TW.min,TW.max),by=c('species'='SPECIES'))%>%
               group_by(species) %>% 
               mutate(n=n()) %>%
-              mutate(avrg_livewt=ifelse(n>10 & !is.na(livewt) & !is.na(nfish),livewt/nfish,NA))%>%
+              mutate(avrg_livewt=ifelse(n>10 & !is.na(livewt) & !is.na(nfish),livewt/nfish,NA),
+                     within.range=ifelse(!is.na(TW.min) & !is.na(avrg_livewt) &
+                                           (avrg_livewt>TW.max | avrg_livewt<TW.min),'NO','YES'))%>%
               filter(avrg_livewt>0.1 & avrg_livewt<100)%>%
+              filter(within.range=='YES')%>%
               group_by(species) %>% 
               summarise(avrg_livewt_sp=mean(avrg_livewt, na.rm=TRUE))%>%
               ungroup()%>%
               data.frame()
 
-
 Data.daily=Data.daily %>% 
             left_join(Avrg.w8ts_daily_spcies.blk10,by=c('species','block10'))%>% 
             left_join(Avrg.w8ts_daily_spcies,by=c('species'))%>%
-            mutate(livewt= ifelse((is.na(livewt)|livewt==0) & nfish>0, 
+            mutate(Reporter= ifelse((is.na(livewt)|livewt==0) & nfish>0 & !conditn=='FI',"bad","good"),    
+                   livewt= ifelse((is.na(livewt)|livewt==0) & nfish>0, 
                                   nfish*avrg_livewt_sp_blk10, livewt)) %>%
             mutate(livewt= ifelse((is.na(livewt)|livewt==0) & nfish>0, 
                                   nfish*avrg_livewt_sp, livewt)) %>%
@@ -2534,7 +2598,7 @@ Data.daily=Data.daily %>%
             dplyr::select(-c(avrg_livewt_sp_blk10,avrg_livewt_sp))
 
 
-#Aggregate daily nfish
+#Aggregate daily nfish 
 Daily.nfish.agg=aggregate(nfish~finyear+year+month+vessel+method+blockx+blockxFC+species+
                     year.c+Same.return+zone+Estuary,data=Data.daily,sum,na.rm=T)
 names(Daily.nfish.agg)=c("FINYEAR","YEAR","MONTH","VESSEL","METHOD",
@@ -2559,7 +2623,7 @@ this= c("finyear","year","month","vessel","fdays","method","blockx","bdays","hou
         "netlen","species","sname1","livewt","conditn","landwt","factor","year.c","LAT","LONG",
         "Estuary","Same.return","Same.return.SNo","TYPE.DATA","Bioregion","zone","LatMin","LongMin",
         "day","block10","FisheryZone","fishery","FisheryCode","Landing.Port",FishCube.vars,"nfish",
-        "type","RSSpeciesCode")
+        "type","RSSpeciesCode","Reporter")
 Data.daily=Data.daily[,match(this,names(Data.daily))]
 Data.daily=Data.daily[,sort(names(Data.daily))]
 names(Data.daily)=sort(c(names(Data.monthly),"day","block10"))   
@@ -2677,7 +2741,7 @@ Data.daily.agg$LONG=as.numeric(Data.daily.agg$LONG)
 Data.daily.agg$LAT=as.numeric(Data.daily.agg$LAT)
 Data.daily.agg$BDAYS=NA
 
-  #merge monthly and aggregated daily
+  #merge monthly and aggregated daily 
 Data.monthly=rbind(Data.monthly[match(names(Data.daily.agg),names(Data.monthly))],
                    Data.daily.agg)
 
@@ -2891,7 +2955,7 @@ Reported.Shark.species=Shark.species[-which(Sharks.other==Shark.species)]
 
 #Define species categories
 Shark.species=Shark.species[which(Shark.species %in% unique(Data.monthly$SPECIES))]
-Gummy=17001;Dusky_whaler=c(18003,18001);Whiskery=17003;Sandbar=18007;Hammerheads=19000;
+Gummy=17001;Dusky_whaler=c(18003,18001);Whiskery=17003;Sandbar=18007;Hammerheads=c(19000,HammerheadSpecies);
 Spinner=18023;Wobbegongs=13000;Common_saw_shark=23002;School=17008
 Ray.species=Ray.species[which(Ray.species %in% unique(Data.monthly$SPECIES))]
 Elasmo.species=c(Shark.species,Ray.species)
@@ -3061,8 +3125,6 @@ Data.daily=Data.daily%>%left_join(Vessel.Report.daily,by=c("Same.return"))
 
   # Separate vessels into 'good' and 'bad' reporters
 Data.monthly$Reporter=NA
-Data.daily$Reporter=NA
-if(Reapportion.daily=="NO")  Data.daily$Reporter="good"
 
 
 #C.7.2 Northern split                               #Rory's rules 3c      
@@ -5657,6 +5719,12 @@ if(Reapportion.daily=="YES")
 
 Dummy.yr=sort(unique(Effort.daily$finyear))
 par(mfcol=c(1,1),mai=c(1.3,1.3,.2,.2))
+Max.list=list(NETLEN=Net.max, BDAYS=30, HOURS=10,
+              SHOTS=3, nlines=5, HOOKS=2500,fdays=30)  #max realistic effort var values for daily effort
+Inspect.vars.combo=list(GN=c("NETLEN","SHOTS","HOURS"),
+                        LL=c("HOOKS","SHOTS","HOURS"))
+Max.list.combo=list(GN=Max.list$NETLEN*Max.list$SHOTS*Max.list$HOURS, #ACA
+                    LL=Max.list$HOOKS*Max.list$SHOTS*Max.list$HOURS)
 
 if(Inspect.New.dat=="YES")
 {
@@ -6141,7 +6209,7 @@ if(Inspect.New.dat=="YES")
     Ves.splitting_possibly_reporting_each.panel=c("A 012","A 035B","F 417","A 212","A 107","E 075","E 055",
                                                   "A 057B")
     
-    pdf(paste(hndl.net_line,"not_splitters.pdf",sep=""))
+    pdf(paste(hndl.net_line,"non_splitters.pdf",sep=""))
     fun.plot.nlines.netlen(Data=subset(Data.daily.original,VESSEL%in%Ves.not.splitting),
             YRS=FINYEAR.daily,lim1=0,lim2=10,lim11=0,lim22=15000,threshold=5,threshold1=Net.max)
     dev.off()
@@ -6173,7 +6241,7 @@ if(Inspect.New.dat=="YES")
       ylim[2]=max(ylim[2],max(d[,var]))
       p=d%>%
         ggplot(aes_string(x='Session',y=var))+
-        geom_point(type=19)+
+        geom_point()+
         geom_hline(yintercept = valid.max,color=2)+
         facet_wrap(~VESSEL,scales='free')+
         ylim(ylim)
@@ -6189,8 +6257,7 @@ if(Inspect.New.dat=="YES")
     }
     
   }
-  Max.list=list(NETLEN=Net.max, BDAYS=30, HOURS=36,
-                SHOTS=3, nlines=5, HOOKS=2500,fdays=30)
+
   for(v in 1:length(Inspect.vars))
   {
     Out=fn.inspect.singl.var(d=Data.daily.original%>%
@@ -6232,14 +6299,14 @@ if(Inspect.New.dat=="YES")
       ylim[2]=max(ylim[2],max(d$Effort,na.rm=T))
       p=d%>%
         ggplot(aes_string(x='Session',y='Effort'))+
-        geom_point(type=19)+
+        geom_point()+
         geom_hline(yintercept = valid.max,color=2)+
         facet_wrap(~VESSEL,scales='free')+
         ylim(ylim)
       print(p)
       
       out.dodgy=d%>%filter(Effort>valid.max)%>%
-        dplyr::select(c("VESSEL","BoatName","TSNo","SNo","DSNo",all_of(var)))%>%
+        dplyr::select(c("VESSEL","BoatName","date","TSNo","SNo","DSNo",all_of(var)))%>%
         rename(TripSheetNumber=TSNo,
                DailySheetNumber=DSNo,
                SessionIndex=SNo)%>%
@@ -6248,10 +6315,6 @@ if(Inspect.New.dat=="YES")
     }
     
   }
-  Inspect.vars.combo=list(GN=c("NETLEN","SHOTS","HOURS"),
-                          LL=c("HOOKS","SHOTS","HOURS"))
-  Max.list.combo=list(GN=Max.list$NETLEN*Max.list$SHOTS*Max.list$HOURS,
-                      LL=Max.list$HOOKS*Max.list$SHOTS*Max.list$HOURS)
   for(v in 1:length(Inspect.vars.combo))
   {
     Out=fn.inspect.combo.var(d=Data.daily.original%>%
@@ -6350,9 +6413,40 @@ if(Inspect.New.dat=="YES")
     
 
 }
-#graphics.off()
 
-
+#inspect overall daily effort
+if(First.run=='YES')
+{
+  dodgy.effort=Inspect.vars.combo
+  fn.inspect.dodgy.daily=function(d,var,valid.max)
+  {
+    names(d)=tolower(names(d))
+    var=tolower(var)
+    d=d%>%
+      group_by(vessel,same.return.sno)%>%
+      mutate(Session=row_number())%>%
+      filter(!is.na(!!rlang::sym(var[1])))%>%
+      data.frame
+    if(nrow(d)>0)
+    {
+      d$Effort=d[,var[1]]*d[,var[2]]*d[,var[3]]
+      out.dodgy=d%>%filter(Effort>valid.max)%>%
+        dplyr::select(c("vessel","year","month","same.return.sno",all_of(var)))%>%
+        mutate(Max=valid.max)%>%
+        arrange(vessel,year,month)
+      if(nrow(out.dodgy)>0) return(out.dodgy)
+    }
+  }
+  for(v in 1:length(Inspect.vars.combo))
+  {
+    dodgy.effort[[v]]=fn.inspect.dodgy.daily(d=Data.daily%>%
+                                               distinct(Same.return.SNo,.keep_all=T),
+                                             var=Inspect.vars.combo[[v]],
+                                             valid.max=Max.list.combo[[v]])
+  }
+}
+#note: most issues due to fishers confusing number of 'shots' with number of 'net split'
+#      Hence, not using 'shots' in effort calculations. See '#2. Calculate gillnet effort'
 
 
 #SECTION E. ---- DATA MANIPULATION - EFFORT CORRECTIONS ----      
@@ -6627,8 +6721,7 @@ Effort.daily$shots.c=with(Effort.daily,ifelse((method=="GN"& shots.c %in% 3:6 & 
 #monthly
 Effort.monthly$SHOTS.c=with(Effort.monthly,ifelse(VESSEL=="B 067" & FINYEAR %in% c("2000-01","2001-02",
                           "2002-03","2003-04","2004-05","2005-06"),1,SHOTS.c))
-
-
+#update Reporter
 Effort.monthly$Eff.Reporter=with(Effort.monthly,ifelse(!(SHOTS==SHOTS.c),"bad",Eff.Reporter))
 Effort.daily$Eff.Reporter=with(Effort.daily,ifelse(!(shots==shots.c),"bad",Eff.Reporter))
 
@@ -7211,9 +7304,7 @@ if(!do.sql.extraction)
 Effort.daily=Effort.daily%>%
   mutate(FisheryCode=ifelse(zone=='West' & FisheryCode=='JASDGDL','WCDGDL',FisheryCode))
 
-
-##################--- F. PROCEDURE SECTION ---##############
-#SECTION F 1. ---- EXTRACT QUANTITIES ---- 
+#SECTION F.1. ---- EXTRACT QUANTITIES ---- 
 
 #Check for spatial expansion
 
@@ -7337,7 +7428,7 @@ Effort.daily=Effort.daily%>%
                                  zone=='Closed' & FisheryCode%in%c('OT')~'WANCS',
                                  zone=='West' & FisheryCode%in%c('WCGL','C070','WCDGDL')~'WCDGDL',
                                  is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
-                                 zone=='Zone1' & FisheryCode=='WCGL'~'JASDGDL',
+                                 zone=='Zone1' & FisheryCode%in%c('WCDGDL','WCGL')~'JASDGDL',
                                  FisheryCode%in%c("SGL1","SGL2","SGL",'JASDGDL')~'JASDGDL',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=='*'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=="WL"~'OASC',
@@ -7351,7 +7442,7 @@ Data.monthly=Data.monthly%>%
                                  zone=='Closed' & FisheryCode%in%c('OT')~'WANCS',
                                  zone=='West' & FisheryCode%in%c('WCGL','C070','WCDGDL')~'WCDGDL',
                                  is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
-                                 zone=='Zone1' & FisheryCode=='WCGL'~'JASDGDL',
+                                 zone=='Zone1' & FisheryCode%in%c('WCDGDL','WCGL')~'JASDGDL',
                                  FisheryCode%in%c("SGL1","SGL2","SGL",'JASDGDL')~'JASDGDL',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=='*'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=="WL"~'OASC',
@@ -7365,7 +7456,7 @@ Data.monthly.north=Data.monthly.north%>%
                                  zone=='Closed' & FisheryCode%in%c('OT')~'WANCS',
                                  zone=='West' & FisheryCode%in%c('WCGL','C070','WCDGDL')~'WCDGDL',
                                  is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
-                                 zone=='Zone1' & FisheryCode=='WCGL'~'JASDGDL',
+                                 zone=='Zone1' & FisheryCode%in%c('WCDGDL','WCGL')~'JASDGDL',
                                  FisheryCode%in%c("SGL1","SGL2","SGL",'JASDGDL')~'JASDGDL',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=='*'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=="WL"~'OASC',
@@ -7379,7 +7470,7 @@ Data.daily=Data.daily%>%
                                  zone=='Closed' & FisheryCode%in%c('OT')~'WANCS',
                                  zone=='West' & FisheryCode%in%c('WCGL','C070','WCDGDL')~'WCDGDL',
                                  is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
-                                 zone=='Zone1' & FisheryCode=='WCGL'~'JASDGDL',
+                                 zone=='Zone1' & FisheryCode%in%c('WCDGDL','WCGL')~'JASDGDL',
                                  FisheryCode%in%c("SGL1","SGL2","SGL",'JASDGDL')~'JASDGDL',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=='*'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=="WL"~'OASC',
@@ -7393,7 +7484,7 @@ Data.daily.north=Data.daily.north%>%
                                  zone=='Closed' & FisheryCode%in%c('OT')~'WANCS',
                                  zone=='West' & FisheryCode%in%c('WCGL','C070','WCDGDL')~'WCDGDL',
                                  is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
-                                 zone=='Zone1' & FisheryCode=='WCGL'~'JASDGDL',
+                                 zone=='Zone1' & FisheryCode%in%c('WCDGDL','WCGL')~'JASDGDL',
                                  FisheryCode%in%c("SGL1","SGL2","SGL",'JASDGDL')~'JASDGDL',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=='*'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=="WL"~'OASC',
@@ -7413,10 +7504,10 @@ write.csv(Exprt.shark.fisheries.code%>%left_join(FisheryCodeTable%>%dplyr::selec
 
 #2. Calculate gillnet effort 
 
-#note:  RORY DOESN'T USE SHOTS FOR KM.GN.DAYS as this effort measure is only concerned on km of nets used in a day                             
-#       Also, shots are not used DAILY for km gn hours because fishers report the total hours fished per session,
-#       whether doing 1 or 2 shots per session
-#       For monthly km gn hours, shots should not be used because some fishers report combined hours
+#note:  . RORY DOESN'T USE SHOTS FOR KM.GN.DAYS as this effort measure is only concerned on km of nets used in a day                             
+#       . For daily km gn hours, shots are not used because fishers report the total hours fished per session,
+#           whether doing 1, 2 or more shots per session
+#       . For monthly km gn hours, shots should not be used because some fishers report combined hours
 
 use.shots="NO"
 #use.shots="YES"
@@ -8445,7 +8536,7 @@ fn.check.method.contrib(D=Data.monthly,SPEC=18007)
 #Data for Hammerhead Listing
 if(do.Hammerheads=="YES")
 {
-  HHEads=c(19000)
+  HHEads=c(19000,HammerheadSpecies)
   Sel.HH=c("SPECIES","FINYEAR","MONTH","METHOD","VESSEL","BLOCKX","LAT","LONG","zone","LIVEWT.c")
   Hammerheads=subset(Data.monthly,SPECIES%in% HHEads,select=Sel.HH)
 }
@@ -8480,7 +8571,7 @@ Data.monthly.GN$Boundary.blk=with(Data.monthly.GN,
 
 
 
-#SECTION F 2. ---- EXPORT DATA FOR ASSESSMENT AND CPUE STANDARDISATION ----
+#SECTION F.2. ---- EXPORT DATA FOR ASSESSMENT AND CPUE STANDARDISATION ----
 
 setwd(handl_OneDrive("Analyses/Data_outs"))
 
@@ -8561,7 +8652,7 @@ if(Export.SAFS=="YES")
 }
 
 
-#SECTION G 1. ---- SPATIO TEMPORAL CATCH AND EFFORT DISTRIBUTION ------
+#SECTION G.1. ---- SPATIO TEMPORAL CATCH AND EFFORT DISTRIBUTION ------
 if(do.spatio.temporal.ktch.effort=="YES")
 {
   source(handl_OneDrive("Analyses/Catch and effort/Git_catch.and.effort/do.spatio.temporal.ktch.effort.R"))
@@ -8629,23 +8720,21 @@ if(do.tdgdlf.effort.density=="YES")
          width = 10,height = 14,compression = "lzw")
 }
 
-#SECTION G 2. ---- DATA REQUESTS ------
+#SECTION G.2. ---- DATA REQUESTS ------
 if(do.data.requests=="YES")
 {
   source(handl_OneDrive("Analyses/Catch and effort/Git_catch.and.effort/do.data.requests.R"))
 }
   
 
-########### SECTION H. ----  EXPORT TOTAL CATCH FOR REFERENCE POINT ANALYSIS --- ###########
+#SECTION H. ---- EXPORT TOTAL CATCH FOR REFERENCE POINT ANALYSIS ------
 if(do.Ref.Points=="YES")
 {
   for (i in 1:length(TARGETS))write.csv(STORE.Tot.Catch[[i]],
     paste(handl_OneDrive("Analyses/Reference Points/Tot.c."),sp[i],".csv",sep=""),row.names=F)  
 }
 
-
-
-###########  SECTION I. ----  EXPLORATORY ANALYSES ---   ###########
+#SECTION I. ---- EXPLORATORY ANALYSES ------
 if(do.exploratory=="YES")
 {
   setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/Exploratory"))

@@ -36,7 +36,7 @@ source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R"))
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)
 
-Current.yr="2021-22"   #financial year for latest catch
+Current.yr="2022-23"   #financial year for latest catch
 
 Percent.fin.of.livewt=0.03  #used as default if species not in Shark.Fin.Price.List
 Shark.Fin.Price.List=read.csv(handl_OneDrive("Data/Catch and Effort/Shark Fin Price List.csv")) #provided by Rory to Eva Lai
