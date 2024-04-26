@@ -1013,10 +1013,25 @@ if(explore.Catch.compo=="YES")
 #Set hammerhead species to the original report to overwrite FishCube's reapportioning  
 if(reset.hammerhead.to.reported)
 {
-  Data.monthly=Data.monthly%>%
+  all.hammers=Data.monthly%>%
+    filter(SPECIES%in%c(19000,HammerheadSpecies))%>%
     mutate(SNAME=ifelse(SPECIES%in%HammerheadSpecies,"Hammerhead Sharks",SNAME),
            RSSpeciesCode=ifelse(SPECIES%in%HammerheadSpecies,37019000,RSSpeciesCode),
            SPECIES=ifelse(SPECIES%in%HammerheadSpecies,19000,SPECIES))
+  
+  Nms.hmrs=names(all.hammers)
+  Nms.hmrs=Nms.hmrs[-match(c('LIVEWT','LANDWT'),Nms.hmrs)]
+  all.hammers=all.hammers%>%
+    group_by_at(Nms.hmrs)%>%
+    summarise(LANDWT=sum(LANDWT,na.rm=T),
+              LIVEWT=sum(LIVEWT,na.rm = T))
+  
+  Data.monthly=Data.monthly%>%
+    filter(!SPECIES%in%c(19000,HammerheadSpecies))
+  
+  Data.monthly=rbind(Data.monthly,all.hammers%>%relocate(names(Data.monthly)))
+  
+  
 }
 
 
@@ -1473,13 +1488,24 @@ if(do.ktch.deep)
 #Set hammerhead species to the original report to overwrite FishCube's reapportioning     
 if(reset.hammerhead.to.reported)
 {
+  all.hammers=Data.daily%>%
+              filter(species%in%c(19000,HammerheadSpecies))%>%
+              mutate(sname1=ifelse(species%in%HammerheadSpecies & year<2023,'Hammerhead Sharks',sname1),
+                     RSCommonName=ifelse(species%in%HammerheadSpecies & year<2023,'Hammerhead Sharks',RSCommonName),
+                     RSSpeciesCode=ifelse(species%in%HammerheadSpecies & year<2023,37019000,RSSpeciesCode),
+                     RSSpeciesId=ifelse(species%in%HammerheadSpecies & year<2023,90,RSSpeciesId),
+                     species=ifelse(species%in%HammerheadSpecies & year<2023,19000,species))
+  Nms.hmrs=names(all.hammers)
+  Nms.hmrs=Nms.hmrs[-match(c('nfish','livewt','TripLandedWeight'),Nms.hmrs)]
+  all.hammers=all.hammers%>%
+            group_by_at(Nms.hmrs)%>%
+            summarise(nfish=sum(nfish,na.rm=T),
+                      livewt=sum(livewt,na.rm = T),
+                      TripLandedWeight=sum(TripLandedWeight,na.rm = T))
   Data.daily=Data.daily%>%
-    mutate(sname1=ifelse(species%in%HammerheadSpecies & year<2023,'Hammerhead Sharks',sname1),
-           RSCommonName=ifelse(species%in%HammerheadSpecies & year<2023,'Hammerhead Sharks',RSCommonName),
-           RSSpeciesCode=ifelse(species%in%HammerheadSpecies & year<2023,37019000,RSSpeciesCode),
-           RSSpeciesId=ifelse(species%in%HammerheadSpecies & year<2023,90,RSSpeciesId),
-           species=ifelse(species%in%HammerheadSpecies & year<2023,19000,species))
+          filter(!species%in%c(19000,HammerheadSpecies))
   
+  Data.daily=rbind(Data.daily,all.hammers%>%relocate(names(Data.daily)))
 }
 
 #simple financial assessment

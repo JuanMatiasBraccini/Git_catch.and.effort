@@ -48,6 +48,7 @@ TDGDLF.lat.range=c(-26,-40)
 setwd(handl_OneDrive("Analyses/Data_outs"))
 
 Data.monthly=read.csv("Data.monthly.csv")
+Data.daily=read.csv("Data.daily.csv")
 Rec.fish.catch=read.csv('recons_recreational.csv')
 Data.current.Sofar=read.csv("Data.current.Sofar.csv")
 PRICES=read.csv("PRICES.csv")
@@ -120,41 +121,6 @@ if(!file.exists(handle.Sofar))dir.create(handle.Sofar)
 
 Display.current.yr=paste(substr(Current.yr,1,4),"/",substr(Current.yr,6,7),sep="")
 Ind.spe.list=list(Gummy=17001,Whiskery=17003,Bronzy.Dusky=c(18001,18003),sandbar=18007)
-
-#Create data for TDGDLF Ecological Risk Assessment 
-do.ERA=TRUE   #needed for Reconstructions of TDGDLF discards
-if(do.ERA)
-{
-  era.yrs=as.numeric(substr(Current.yr,1,4))
-  era.yrs1=seq(era.yrs-3,era.yrs+1)
-  era.yrs=seq(era.yrs-4,era.yrs)
-  era.yrs=paste(era.yrs,substr(era.yrs1,3,4),sep='-')
-  ERA=subset(Data.monthly,METHOD%in%c("GN","LL") & Estuary=="NO" &
-               LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])%>%
-    filter(FINYEAR%in%era.yrs)%>%
-    dplyr::select(FINYEAR,SPECIES,LIVEWT.c)%>%
-    group_by(FINYEAR,SPECIES)%>%
-    summarise(Tons=sum(LIVEWT.c)/1000)%>%
-    group_by(SPECIES)%>%
-    mutate(Average.catch=mean(Tons))%>%
-    spread(FINYEAR,Tons,fill = 0)%>%
-    arrange(-Average.catch)%>%
-    ungroup()%>%
-    mutate(Percent.of.total.retained=round(100*Average.catch/sum(Average.catch),1))%>%
-    left_join(All.species.names%>%
-                distinct(CAES_Code,.keep_all=T)%>%
-                dplyr::select(CAES_Code,COMMON_NAME,SCIENTIFIC_NAME), 
-              by=c('SPECIES'='CAES_Code'))%>%
-    mutate(Percent.of.total.retained=ifelse(Percent.of.total.retained<0.1,
-                                            '<0.1',Percent.of.total.retained))%>%
-    filter(!is.na(COMMON_NAME))%>%
-    dplyr::select(COMMON_NAME,SCIENTIFIC_NAME,all_of(era.yrs),Average.catch,Percent.of.total.retained)%>%
-    mutate(across(where(is.numeric), round, 2),
-           COMMON_NAME=ifelse(COMMON_NAME=="Skates and rays, other","Other skates and rays",COMMON_NAME))%>%
-    filter(Average.catch>0)
-  
-}
-  
 
 
 #Create current year data set for TDGDLF
@@ -968,7 +934,116 @@ rbind(a,b)%>%
         plot.margin=unit(c(.5,.5,.5,.5),"cm"))
 dev.off()
 
+
+# Is reduction in catch due to reduction in number of shots per vessel
+fn.check.drop.in.ktch=function(years,methodS)
+{
+  DaT=Data.daily%>%
+    filter(FINYEAR%in%years & METHOD%in%methodS & Estuary=="NO" &
+             FisheryCode%in%c('JASDGDL','WCDGDL') &
+             LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])
+  top10=sort(table(DaT$SNAME))
+  DaT=DaT%>%
+    mutate(SP=ifelse(!SNAME%in%names(tail(top10,10)),'Other',SNAME))
+  
+  Annual.N.shot.by.vessel=DaT%>%
+    distinct(Same.return.SNo,.keep_all = T)%>%
+    group_by(Same.return.SNo,VESSEL,LongFC,LatFC,METHOD,FINYEAR,FisheryZone)%>%
+    tally()%>%
+    ungroup()%>%
+    group_by(METHOD,FINYEAR,FisheryZone,VESSEL)%>%
+    summarise(n=sum(n))
+  
+  Annual.Ktch.by.vessel=DaT%>%
+    group_by(METHOD,FINYEAR,FisheryZone,VESSEL)%>%
+    summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)%>%
+    ungroup()
+  
+  p1=Annual.N.shot.by.vessel%>%
+    left_join(Annual.Ktch.by.vessel,by=c('METHOD','FINYEAR','FisheryZone','VESSEL'))%>%
+    mutate(Zone.method=paste(FisheryZone,METHOD,sep='-'),
+           year=as.numeric(substr(FINYEAR,1,4)))%>%
+    ggplot(aes(year,n,color=Zone.method))+
+    geom_point(aes(size=Tonnes),alpha=0.5)+
+    geom_line(alpha=0.5)+
+    facet_wrap(~VESSEL)+
+    ylab('Total number of shots')+xlab('Financial year')+
+    theme(legend.position = 'top',
+          axis.text.x = element_text(angle = 45, vjust = 0.85, hjust=0.75))+
+    scale_color_manual(values = c("West-GN"="red","West-LL"="brown",
+                                  "Zone1-GN"="forestgreen","Zone1-LL"="green",
+                                  "Zone2-GN"="blue","Zone2-LL"="steelblue"))+
+    labs(title="Number of shots by fisher per financial year",
+         subtitle = "Bubble size is proportional to total catch")
+  
+  Annual.Ktch.per.sp=DaT%>%
+    group_by(SP,METHOD,FINYEAR,FisheryZone,VESSEL)%>%
+    summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)%>%
+    ungroup()
+  p2=Annual.Ktch.per.sp%>%
+    mutate(Zone.method=paste(FisheryZone,METHOD,sep='-'),
+           year=as.numeric(substr(FINYEAR,1,4)))%>%
+    ggplot(aes(year,Tonnes,color=SP))+
+    geom_point(size=2)+
+    geom_line()+
+    facet_wrap(~VESSEL)+
+    ylab('Total catch (tonnes)')+xlab('Financial year')+
+    theme(legend.position = 'top',
+          legend.title=element_blank(),
+          axis.text.x = element_text(angle = 45, vjust = 0.85, hjust=0.75))+
+    scale_color_manual(values = c("Blue Morwong"="cadetblue4","Boarfishes"="cadetblue2","Pink Snapper"="aquamarine3", 
+                                  "West Australian Dhufish"="chartreuse3", "Western Blue Groper"="chartreuse4",
+                                  "Bronze Whaler"="chocolate4", "Dusky Whaler"="chocolate","Gummy Shark"="red",
+                                  "Hammerhead Sharks"="darkorange", "Whiskery Shark"="brown4",
+                                  "Other"="darkorchid2"))+
+    labs(title="Total catch by fisher per financial year and species")
+  print(p1)
+  print(p2)
+  
+}
+nn1=as.numeric(substr(Current.yr,1,4))
+
+pdf(file="Shots and catch per vessel for last 5 years.pdf")
+fn.check.drop.in.ktch(years=paste((nn1-4):nn1,substr((nn1-3):(nn1+1),3,4),sep='-'),
+                      methodS=c("GN","LL"))
+dev.off()
+
+
 # For ERA -----------------------------------------------------------------
+#Create data for TDGDLF Ecological Risk Assessment 
+do.ERA=TRUE   #needed for Reconstructions of TDGDLF discards
+if(do.ERA)
+{
+  era.yrs=as.numeric(substr(Current.yr,1,4))
+  era.yrs1=seq(era.yrs-3,era.yrs+1)
+  era.yrs=seq(era.yrs-4,era.yrs)
+  era.yrs=paste(era.yrs,substr(era.yrs1,3,4),sep='-')
+  ERA=subset(Data.monthly,METHOD%in%c("GN","LL") & Estuary=="NO" &
+               LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])%>%
+    filter(FINYEAR%in%era.yrs)%>%
+    dplyr::select(FINYEAR,SPECIES,LIVEWT.c)%>%
+    group_by(FINYEAR,SPECIES)%>%
+    summarise(Tons=sum(LIVEWT.c)/1000)%>%
+    group_by(SPECIES)%>%
+    mutate(Average.catch=mean(Tons))%>%
+    spread(FINYEAR,Tons,fill = 0)%>%
+    arrange(-Average.catch)%>%
+    ungroup()%>%
+    mutate(Percent.of.total.retained=round(100*Average.catch/sum(Average.catch),1))%>%
+    left_join(All.species.names%>%
+                distinct(CAES_Code,.keep_all=T)%>%
+                dplyr::select(CAES_Code,COMMON_NAME,SCIENTIFIC_NAME), 
+              by=c('SPECIES'='CAES_Code'))%>%
+    mutate(Percent.of.total.retained=ifelse(Percent.of.total.retained<0.1,
+                                            '<0.1',Percent.of.total.retained))%>%
+    filter(!is.na(COMMON_NAME))%>%
+    dplyr::select(COMMON_NAME,SCIENTIFIC_NAME,all_of(era.yrs),Average.catch,Percent.of.total.retained)%>%
+    mutate(across(where(is.numeric), round, 2),
+           COMMON_NAME=ifelse(COMMON_NAME=="Skates and rays, other","Other skates and rays",COMMON_NAME))%>%
+    filter(Average.catch>0)
+  
+}
+
 if(do.ERA)
 {
   #1. Catch
