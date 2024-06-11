@@ -2819,3 +2819,43 @@ if(do.Ngari.2023)
 
   
 }
+
+#G 4.39 Roger Kirkwood SARDI. effort for ASL ERA-------------------------------------------------------------------------
+if(do.SARDI.2024)
+{
+  dis.yrs=c(paste(2012:2021,substr(2013:2022,3,4),sep='-'))
+  a=Effort.daily%>%
+    distinct(Same.return.SNo,method,.keep_all = T)%>%
+    mutate(hook.hours=ifelse(method=='LL',hooks*hours.c,NA))%>%
+    dplyr::select(vessel,block10,finyear,method,hook.hours,Km.Gillnet.Hours.c)%>%
+    filter(method%in%c('GN',"LL") & finyear%in%dis.yrs)
+  
+  N.vessls.per.blk=a%>%
+    distinct(vessel,block10,finyear,method)%>%  
+    group_by(block10,finyear,method)%>%
+    tally()%>%
+    rename(n.ves.per.blk=n)
+  
+  a1=a%>%
+    group_by(block10,finyear,method)%>%
+    summarise(hook.hours=sum(hook.hours,na.rm=T), 
+              Km.Gillnet.Hours.c=sum(Km.Gillnet.Hours.c,na.rm=T))
+  
+  a1=a1%>%
+    left_join(N.vessls.per.blk,by=c('block10','finyear','method'))%>%
+    mutate(hook.hours=ifelse(n.ves.per.blk<3 & method=='LL',NA,hook.hours),
+           Km.Gillnet.Hours.c=ifelse(n.ves.per.blk<3 & method=='GN',NA,Km.Gillnet.Hours.c))
+  
+  a1=a1%>%
+    mutate(fishery.Name='Southern Demersal Gillnet and Demersal Longline Managed Fishery',
+           n.ves.per.blk=ifelse(n.ves.per.blk<3,"<3",">=3"))%>%
+    relocate(fishery.Name,block10,finyear,n.ves.per.blk)%>%
+    rename('Fishery Name'=fishery.Name,
+           '10x10NM Block'=block10,
+           'Financial Year'=finyear,
+           'Vessel Count'=n.ves.per.blk,
+           Km.Gillnet.Hours=Km.Gillnet.Hours.c)
+  
+  write.csv(a1,paste(hndl,'/SARDI_2024_ASL_ERA.csv',sep=''),row.names = F)
+  
+}

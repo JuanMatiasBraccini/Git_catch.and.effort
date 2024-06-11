@@ -4,7 +4,7 @@
   #NEW YEAR OF DATA:
 #                     Set First.run to 'YES' and update Current.yr
 #                     Bring in Monthly and Daily data thru SQL queries
-#                     Update 'PRICES' from Eva
+#                     Also bring in TEPS and PRICE data thru SQL queries
 
   #Before SQL:   CAESS data from 1988/89 to 2007/08 (some fishers kept reporting in CAESS 
 #                      after introduction of daily logbooks).
@@ -138,6 +138,7 @@ rm(xx)
 #Email addresses
 Email.data.checks="anja.giltay@dpird.wa.gov.au"
 Email.FishCube="veronique.vanderklift@dpird.wa.gov.au"
+Email.data.checks2="sarah.vanRyssen@dpird.wa.gov.au"
 
 #1. Extract catch and effort data
 do.sql.extraction=TRUE
@@ -302,6 +303,7 @@ if(do.sql.extraction)
   #notes: 1. 'monthlyrawlog' is the raw monthly data always used; 
   #         'monthlylog' is the one after the reapportioning of indicator species, etc that goes to FishCube.
   #         So I need to keep using 'monthlyrawlog' for the purpose of cpue standardisation, catch reconstructions, etc
+  #         The variable SCRref identify records that were modify, e.g. hammerheads: !is.na(SCRref) & grepl('Hammerhead',RSSpeciesCommonName)
   #       2. The variable VESSEL was recoded in SQL (spaces and zeros dropped) so re-map it to allow my scripts to run
     #SQL data
   system.time({Data.monthly <- sqlQuery(channel=odbcDriverConnect(connection="Driver={SQL Server};
@@ -711,11 +713,28 @@ if(!do.sql.extraction)
 
 
 #3. Catch price 
-PRICES=sqlFetch(channel=odbcConnectExcel2007(paste(Current.yr.dat,"/PriceComparison.xlsx",sep="")),
-                'Sheet1')
+if(do.sql.extraction)
+{
+  Server <-"CP-SDBS0001P-19\\RESP01"
+  Database <- "ResearchDataWarehouseQuery"
+  cn <- odbcDriverConnect(connection=paste("Driver={SQL Server};server=",Server,";database=",Database,";trusted_connection=yes;",sep=""))
+  PRICES <- sqlQuery(cn, "select * from dbo.rsSpeciesPrice") 
+  odbcClose(cn)
+  PRICES=PRICES%>%
+          filter(FinancialYear==Current.yr)%>%
+          rename(RSSpeciesId=SpeciesId,
+                 CommonName=SpeciesCommonName,
+                 'Beach Price (Adjusted)'=UnitValue)%>%
+          dplyr::select(RSSpeciesId,CommonName,'Beach Price (Adjusted)')
+}
+if(!do.sql.extraction)
+{
+  PRICES=sqlFetch(channel=odbcConnectExcel2007(paste(Current.yr.dat,"/PriceComparison.xlsx",sep="")),
+                  'Sheet1')
+}
 PRICES=PRICES%>%
-  left_join(Species.mapping%>%dplyr::select(RSSpeciesId,species),by='RSSpeciesId')%>%
-rename(ASA.Species.Code=species)
+          left_join(Species.mapping%>%dplyr::select(RSSpeciesId,species),by='RSSpeciesId')%>%
+          rename(ASA.Species.Code=species)
 
 
 #4. SHAPE FILE PERTH ISLANDS
@@ -882,6 +901,7 @@ do.Peter.Rogers=FALSE
 do.DBCA_2022=FALSE
 get.Mats.data.2023=FALSE
 do.Ngari.2023=FALSE
+do.SARDI.2024=FALSE
 
 #Spatial range TDGDLF
 TDGDLF.lat.range=c(-26,-40)
@@ -1345,6 +1365,47 @@ Data.monthly$zone=as.character(with(Data.monthly,ifelse(LONG>=116.5 & LAT<=(-26)
                   ifelse(LAT>(-23) & LONG>=114 & LONG<123.75,"North",
                   ifelse(LAT>(-23) & LONG>=123.75,"Joint",NA))))))))
 
+#Check spatial blocks and catch asigned to right zone
+world <- ne_countries(scale = "medium", returnclass = "sf")
+fn.ck.spatial=function(d,BLK.data,Depth.data,BLK.size,add.yr=FALSE,pt.size=3,pt.alpha=1)
+{
+  Limx=range(d$ln,na.rm=T); Limy=range(d$la,na.rm=T)
+  p=ggplot(data = world) +
+    geom_sf(color = "black", fill = "darkorange4") +
+    coord_sf(xlim =Limx , ylim = Limy, expand = T) +
+    xlab("") + ylab("")+
+    geom_contour(data = Depth.data%>%filter(V1>=Limx[1] & V1<=Limx[2] & V2>=Limy[1] & V2<=Limy[2]), 
+                 aes(x=V1, y=V2, z=V3),
+                 breaks=c(-50,-100,-200,-500),linetype="solid",colour="grey70")+
+    geom_point(data=d,aes(ln,la,color=zn),size=pt.size,alpha=pt.alpha)+
+    geom_text(data=BLK.data%>%mutate(zn='')%>%filter(x>=Limx[1] & x<=Limx[2] & y>=Limy[1] & y<=Limy[2]),
+              aes(x,y,label=BlockCode),angle=45,size=BLK.size,alpha=0.5)+
+    theme(legend.position = 'top',legend.text = element_text(size=14))+
+    scale_x_continuous(breaks=seq(round(Limx)[1],round(Limx)[2]))+
+    scale_y_continuous(breaks=seq(round(Limy)[1],round(Limy)[2]))
+  if(add.yr) p=p+ggtitle(unique(d$yr))
+  print(p)
+  
+}
+fn.ck.spatial(d=Data.monthly%>%
+                filter(fishery%in%c('SGL','WCGL','SGL1','SGL2'))%>%
+                mutate(yr=FINYEAR,
+                       zn=zone,
+                       ln=LONG,
+                       la=LAT,
+                       blk=BLOCKX,
+                       Unik=Same.return)%>%
+                distinct(Unik,.keep_all = T),
+              BLK.data=BLOCK_60%>%
+                mutate(dumi=as.numeric(BlockCode))%>%
+                filter(dumi<85010)%>%
+                rowwise()%>% 
+                mutate(x = mean(c(NorthWestPointGPSLongitude, SouthEastPointGPSLongitude)),
+                       y = mean(c(NorthWestPointGPSLatitude, SouthEastPointGPSLatitude))),
+              Depth.data=Bathymetry,
+              BLK.size=5)
+ggsave(handl_OneDrive("Analyses/Catch and effort/Map_blocks_monthly.tiff"),
+       width = 14,height = 10,compression = "lzw")
 
 # A.9. Create Monthly effort dataset   
 Data.monthly$NETLEN=with(Data.monthly,ifelse(METHOD%in%c("LL","HL","DL")&NETLEN>0,NA,NETLEN))
@@ -2229,6 +2290,125 @@ if(Inspect.New.dat=="YES")
   Top.mon.eff=263.5 # 8500 m X 31 days
   # (i.e. monthly catch >Top.mon.ktch and monthly Km.gn.d > Top.mon.eff)  VIP!!!
   
+  
+  #Check spatial blocks and catch asigned to right zone
+
+    #shots outside normal fishing blocks
+  fn.ck.spatial(d=Current.data%>%
+                  filter(fishery%in%c('JASDGDL','WCDGDL'))%>%
+                  rename(date=SessionStartDate,
+                         BoatName=VesselName,
+                         TSNo=TripSheetNumber,
+                         DSNo=DailySheetNumber,
+                         SNo=SessionIndex)%>%
+                  mutate(yr=finyear,
+                         zn=zone,
+                         ln=Long,
+                         la=Lat,
+                         blk=block10,
+                         Unik=paste(SNo,DSNo,TSNo))%>%
+                  distinct(Unik,.keep_all = T),
+                BLK.data=BLOCK_60%>%
+                  mutate(dumi=as.numeric(BlockCode))%>%
+                  filter(dumi<85010)%>%
+                  rowwise()%>% 
+                  mutate(x = mean(c(NorthWestPointGPSLongitude, SouthEastPointGPSLongitude)),
+                         y = mean(c(NorthWestPointGPSLatitude, SouthEastPointGPSLatitude))),
+                Depth.data=Bathymetry,
+                BLK.size=4.5,
+                add.yr=TRUE,
+                pt.size=1.5,
+                pt.alpha=0.35)
+  ggsave(paste(handle,"Map_blocks_daily.tiff",sep='/'),width = 14,height = 10,compression = "lzw")
+  
+  ODD.blocks=c(34250,34260) #update after visual inspection of map 
+  out.catch.block=Current.data%>%
+    filter(fishery%in%c('JASDGDL','WCDGDL'))%>%
+    rename(date=SessionStartDate,
+           BoatName=VesselName,
+           TSNo=TripSheetNumber,
+           DSNo=DailySheetNumber,
+           SNo=SessionIndex)%>%
+    mutate(Unik=paste(SNo,DSNo,TSNo))%>%
+    distinct(Unik,.keep_all = T)%>%
+    filter(blockx%in%ODD.blocks | Lat<=-35.5 | (Lat<=-33.5 & Long<114.4))%>%
+    dplyr::select(fishery,BoatName,vessel,date,SNo,DSNo,TSNo,blockx,Lat,Long)
+  if(nrow(out.catch.block)>0)
+  {
+    write.csv(out.catch.block,file=paste(handle,"/Check.catch outside normal fishing grounds.csv",sep=""),row.names=F)
+    send.email(TO=Email.data.checks,
+               CC=Email.data.checks2,
+               BCC=Email.FishCube,
+               Subject=paste("Shark validation",Sys.time(),'NA_nfish.weight.csv',sep=' _ '),
+               Body= "Hi,
+              In the attached, I extracted records where fishing occurs outside normal fishing grounds
+              Cheers
+              Matias",  
+               Attachment=paste(handle,"/Check.catch outside normal fishing grounds.csv",sep="")) 
+  }
+  
+    #NA in zone
+  out.catch.no.zone=Current.data%>%
+    filter(fishery%in%c('JASDGDL','WCDGDL'))%>%
+    rename(date=SessionStartDate,
+           BoatName=VesselName,
+           TSNo=TripSheetNumber,
+           DSNo=DailySheetNumber,
+           SNo=SessionIndex)%>%
+    mutate(Unik=paste(SNo,DSNo,TSNo))%>%
+    distinct(Unik,.keep_all = T)%>%
+    filter(is.na(zone))%>%
+    dplyr::select(fishery,BoatName,vessel,date,SNo,DSNo,TSNo,zone)
+  if(nrow(out.catch.no.zone)>0)
+  {
+    write.csv(out.catch.no.zone,file=paste(handle,"/Check.NA zone.csv",sep=""),row.names=F)
+    send.email(TO=Email.data.checks,
+               CC=Email.data.checks2,
+               BCC=Email.FishCube,
+               Subject=paste("Shark validation",Sys.time(),'NA_nfish.weight.csv',sep=' _ '),
+               Body= "Hi,
+              I have started the data validation process for the new year data stream.
+              I will be sending a series of emails with queries
+              In the attached, I extracted records with NA in zone
+              Cheers
+              Matias",  
+               Attachment=paste(handle,"/Check.NA zone.csv",sep="")) 
+  }
+  
+    #wrong zone
+  out.check.zone=Current.data%>%
+    filter(fishery%in%c('JASDGDL','WCDGDL'))%>%
+    rename(date=SessionStartDate,
+           BoatName=VesselName,
+           TSNo=TripSheetNumber,
+           DSNo=DailySheetNumber,
+           SNo=SessionIndex)%>%
+    mutate(Unik=paste(SNo,DSNo,TSNo))%>%
+    distinct(Unik,.keep_all = T)%>%
+    mutate(zone.true=zone,
+           zone.true=case_when(Lat<(-33) & Long>116.5 & Long<(116+55.40/60)~'3',
+                               Lat<(-30) & Long>=(116+55.40/60)~'2',
+                               Lat<=(-33) & Long<=116.5~'1',
+                               TRUE~zone.true))%>%
+    filter(!zone.true==zone)%>%
+    dplyr::select(fishery,vessel,date,SNo,DSNo,TSNo,blockx,Lat,Long,zone,zone.true)
+  if(nrow(out.check.zone)>0)
+  {
+    write.csv(out.check.zone,file=paste(handle,"/Check.wrong zone.csv",sep=""),row.names=F)
+    send.email(TO=Email.data.checks,
+               CC=Email.data.checks2,
+               BCC=Email.FishCube,
+               Subject=paste("Shark validation",Sys.time(),'NA_nfish.weight.csv',sep=' _ '),
+               Body= "Hi,
+              I have started the data validation process for the new year data stream.
+              I will be sending a series of emails with queries
+              In the attached, I extracted records for which the zone is incorrect
+              Cheers
+              Matias",  
+               Attachment=paste(handle,"/Check.wrong zone.csv",sep="")) 
+  }
+  
+  
   #1. ID missing catch weight records in current year data when nfish reported  
   NA.livewt=Current.data%>%
               filter(is.na(livewt) & !TripLandedCondition%in%c('SC','NR'))%>%
@@ -2241,7 +2421,8 @@ if(Inspect.New.dat=="YES")
   {
     write.csv(NA.livewt,file=paste(handle,"/Check.NALivewt_missing  conversion factor for condition.species.csv",sep=""),row.names=F)
     send.email(TO=Email.data.checks,
-               CC=Email.FishCube,
+               CC=Email.data.checks2,
+               BCC=Email.FishCube,
                Subject=paste("Shark validation",Sys.time(),'NA_nfish.weight.csv',sep=' _ '),
                Body= "Hi,
               I have started the data validation process for the new year data stream.
@@ -2301,7 +2482,8 @@ if(Inspect.New.dat=="YES")
       write.csv(check.nfish.weight%>%mutate(livewt=ifelse(is.na(livewt),'',livewt)),
                 file=paste(handle,"/Check.no_live.weight.csv",sep=""),row.names=F)
       send.email(TO=Email.data.checks,
-                 CC=Email.FishCube,
+                 CC=Email.data.checks2,
+                 BCC=Email.FishCube,
                  Subject=paste("Shark validation",Sys.time(),'no_live.weight.csv',sep=' _ '),
                  Body= "Hi,
               In the attached, I extracted records where ‘livewt’ is blank but there are 
@@ -2389,7 +2571,8 @@ if(Inspect.New.dat=="YES")
              Max.wt=TW.max)
     write.csv(check.weights,file=paste(handle,"/Check.nfish.weight.typo.csv",sep=""),row.names=F)
     send.email(TO=Email.data.checks,
-               CC=Email.FishCube,
+               CC=Email.data.checks2,
+               BCC=Email.FishCube,
                Subject=paste("Shark validation",Sys.time(),'nfish.weight.typo.csv',sep=' _ '),
                Body= "For the attached file, could you please check that there are no typos in the nfish, landed weight and condition
                       columns as the average weight resulting from these 3 columns are outside the range for the species (TW.min & TW.max). 
@@ -2481,7 +2664,8 @@ if(Inspect.New.dat=="YES")
   {
     write.csv(Outer,file=paste(handle,"/Check.lat.and.long.csv",sep=""),row.names=F)
     send.email(TO=Email.data.checks,
-               CC=Email.FishCube,
+               CC=Email.data.checks2,
+               BCC=Email.FishCube,
                Subject=paste("Shark validation",Sys.time(),'lat.and.long.typo.csv',sep=' _ '),
                Body= "For the attached file, could you please check the latitude and longitude of the shot?
                       Currently they fall outside the species distribution. 
@@ -5749,7 +5933,7 @@ Max.list=list(NETLEN=Net.max, BDAYS=30, HOURS=10,
               SHOTS=3, nlines=5, HOOKS=2500,fdays=30)  #max realistic effort var values for daily effort
 Inspect.vars.combo=list(GN=c("NETLEN","SHOTS","HOURS"),
                         LL=c("HOOKS","SHOTS","HOURS"))
-Max.list.combo=list(GN=Max.list$NETLEN*Max.list$SHOTS*Max.list$HOURS, #ACA
+Max.list.combo=list(GN=Max.list$NETLEN*Max.list$SHOTS*Max.list$HOURS, 
                     LL=Max.list$HOOKS*Max.list$SHOTS*Max.list$HOURS)
 
 if(Inspect.New.dat=="YES")
@@ -6298,7 +6482,8 @@ if(Inspect.New.dat=="YES")
                 file=paste(handle,"/Check.effort variable beyond range_",Inspect.vars[v],".csv",sep=""),
                 row.names=F)
       send.email(TO=Email.data.checks,
-                 CC=Email.FishCube,
+                 CC=Email.data.checks2,
+                 BCC=Email.FishCube,
                  Subject=paste("Shark validation",Sys.time(),Inspect.vars[v] ,"beyond range",sep=' _ '),
                  Body= "Hi,
                       This effort variable is beyond the maximum (see column Max). Is this a typo or system error?
@@ -6355,7 +6540,8 @@ if(Inspect.New.dat=="YES")
                 file=paste(handle,"/Check.effort variable beyond range_",paste(Inspect.vars.combo[[v]],collapse='_'),".csv",sep=""),
                 row.names=F)
       send.email(TO=Email.data.checks,
-                 CC=Email.FishCube,
+                 CC=Email.data.checks2,
+                 BCC=Email.FishCube,
                  Subject=paste("Shark validation",Sys.time(),paste(Inspect.vars.combo[[v]],collapse='_') ,"beyond range",sep=' _ '),
                  Body= "Hi,
                       These effort variables are beyond the maximum (see column Max). Is this a typo or system error?
