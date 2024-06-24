@@ -648,6 +648,8 @@ if(file.exists("scan.teps.csv"))
  #  write.csv(TEPS,handl_OneDrive("Data/Catch and Effort/Historic/Historic.TEPS.res.csv"),row.names = F)  
 }
 
+#Prices of main species
+write.table(PRICES%>%filter(ASA.Species.Code%in%c(17001,17003,18003,18007)),"4.Table.Beach Prices_indicator species.csv",sep = ",",row.names = F)
 
 #Figures 2-3. 
 Boundary.blk=c(34160,35160,36160) #Boundary blocks
