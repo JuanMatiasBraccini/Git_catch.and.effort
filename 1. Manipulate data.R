@@ -129,7 +129,7 @@ setwd(handl_OneDrive("Data/Catch and Effort"))  # working directory
 First.run="NO"    
 #First.run="YES"
 
-Current.yr="2022-23"    #Set current financial year 
+Current.yr="2023-24"    #Set current financial year 
 Current.yr.dat=paste(substr(Current.yr,1,4),substr(Current.yr,6,7),sep="_")
 xx=paste(getwd(),Current.yr.dat,sep="/")
 if(!file.exists(xx)) dir.create(xx) 
@@ -911,7 +911,7 @@ Percent.fin.of.livewt=0.03
 
 #Species definition    
 Shark.species=5001:24900
-Ray.species=c(25000:31000,39001,990001)
+Ray.species=c(25000:31000,39001,90030)
 Scalefish.species=117001:599001   
 Indicator.species=c(17001,17003,18001,18003,18007)
 names(Indicator.species)=c("Gummy","Whiskery","Bronzy","Dusky","Sandbar")
@@ -1365,7 +1365,7 @@ Data.monthly$zone=as.character(with(Data.monthly,ifelse(LONG>=116.5 & LAT<=(-26)
                   ifelse(LAT>(-23) & LONG>=114 & LONG<123.75,"North",
                   ifelse(LAT>(-23) & LONG>=123.75,"Joint",NA))))))))
 
-#Check spatial blocks and catch asigned to right zone
+#Check spatial blocks and catch assigned to right zone
 world <- ne_countries(scale = "medium", returnclass = "sf")
 fn.ck.spatial=function(d,BLK.data,Depth.data,BLK.size,add.yr=FALSE,pt.size=3,pt.alpha=1)
 {
@@ -1404,7 +1404,7 @@ fn.ck.spatial(d=Data.monthly%>%
                        y = mean(c(NorthWestPointGPSLatitude, SouthEastPointGPSLatitude))),
               Depth.data=Bathymetry,
               BLK.size=5)
-ggsave(handl_OneDrive("Analyses/Catch and effort/Map_blocks_monthly.tiff"),
+ggsave(handl_OneDrive("Data/Catch and Effort/Check_these_vars/Monthly/Map_blocks_monthly.tiff"),
        width = 14,height = 10,compression = "lzw")
 
 # A.9. Create Monthly effort dataset   
@@ -1484,6 +1484,8 @@ Data.monthly=Data.monthly%>%
                                      LIVEWT))
 Data.monthly$Reporter=NA
 
+
+
 #SECTION B. ---- DATA MANIPULATION - DAILY LOGBOOKS ----
 
 #Check catch composition deeper than 100 m
@@ -1549,13 +1551,14 @@ if(do.ktch.deep)
 #Set hammerhead species to the original report to overwrite FishCube's reapportioning     
 if(reset.hammerhead.to.reported)
 {
+  species.spec.reporting.year=2023
   all.hammers=Data.daily%>%
               filter(species%in%c(19000,HammerheadSpecies))%>%
-              mutate(sname1=ifelse(species%in%HammerheadSpecies & year<2023,'Hammerhead Sharks',sname1),
-                     RSCommonName=ifelse(species%in%HammerheadSpecies & year<2023,'Hammerhead Sharks',RSCommonName),
-                     RSSpeciesCode=ifelse(species%in%HammerheadSpecies & year<2023,37019000,RSSpeciesCode),
-                     RSSpeciesId=ifelse(species%in%HammerheadSpecies & year<2023,90,RSSpeciesId),
-                     species=ifelse(species%in%HammerheadSpecies & year<2023,19000,species))
+              mutate(sname1=ifelse(species%in%HammerheadSpecies & year<species.spec.reporting.year,'Hammerhead Sharks',sname1),
+                     RSCommonName=ifelse(species%in%HammerheadSpecies & year<species.spec.reporting.year,'Hammerhead Sharks',RSCommonName),
+                     RSSpeciesCode=ifelse(species%in%HammerheadSpecies & year<species.spec.reporting.year,37019000,RSSpeciesCode),
+                     RSSpeciesId=ifelse(species%in%HammerheadSpecies & year<species.spec.reporting.year,90,RSSpeciesId),
+                     species=ifelse(species%in%HammerheadSpecies & year<species.spec.reporting.year,19000,species))
   Nms.hmrs=names(all.hammers)
   Nms.hmrs=Nms.hmrs[-match(c('nfish','livewt','TripLandedWeight'),Nms.hmrs)]
   all.hammers=all.hammers%>%
@@ -1641,56 +1644,56 @@ Data.daily=Data.daily%>%
                   ifelse(BoatName=="catch fillet release","catch fillet & release",
                          BoatName)))))))))))))))))))))),
          MastersName=tolower(MastersName),
-         MastersName=case_when(MastersName%in%c("a. joy","andrew joy")~"joy, andrew francis",
-                               MastersName%in%c("j.e.robb","j.e. robb","j e robb","j. e. robb","j. robb",
-                                                "j.robb","james e robb","james e. robb","james edward robb")~  "james robb",
-                               MastersName=="marcus branderhorst" ~ "branderhorst, marcus allen",
-                               MastersName%in%c("steve buckeridge","stephen buckeridge",
+         MastersName=case_when(MastersName%in% c("a. joy","andrew joy","andrew f joy")~"joy, andrew francis",
+                               MastersName%in% c("j.e.robb","j.e. robb","j e robb","j. e. robb","j. robb","james robb",
+                                                "j.robb","james e robb","james e. robb","james edward robb")~  "robb,james",
+                               MastersName%in%c("marcus branderhorst","marcus allen branderhorst") ~ "branderhorst, marcus allen",
+                               MastersName%in% c("steve buckeridge","stephen buckeridge",
                                                 "buckeridge, steve","stephen grant buckeridge")~ "buckeridge, stephen grant",
-                               MastersName%in%c("ryan bradley","ryan james bradley",'ryan, bradley')~ "bradley, ryan",
-                               MastersName== "sell, graeme edward"~ "graeme edward sell",
-                               MastersName== "john patrick richardson"~ "john richardson",
-                               MastersName== "murch, paul douglas"~ "paul douglas murch",
+                               MastersName%in% c("ryan bradley","ryan james bradley",'ryan, bradley')~ "bradley, ryan",
+                               MastersName%in% c("chris bradley","christopher anthony bradley")~ "bradley, chris",
+                               MastersName== "graeme edward sell"~ "sell, graeme edward",
+                               MastersName%in% c("john patrick richardson","john richardson","j.richardson")~ "richardson,john",
+                               MastersName%in% c("paul douglas murch","paul murch","p. murch")~ "murch, paul douglas",
                                MastersName== "stephen charles mcwhirter"~ "mcwhirter, stephen charles",
                                MastersName== "storm mansted"~ "mansted, storm",
-                               MastersName%in%c("anthony  mansted","anthony david mansted","anthony mansted")~ "mansted, anthony",
+                               MastersName%in% c("anthony  mansted","anthony david mansted","anthony mansted")~ "mansted, anthony",
                                MastersName== "mason thomas"~ "thomas, mason",
-                               MastersName%in%c("james tindall","james stuart tindall")~ "tindall, james stuart",
-                               MastersName%in%c("m.tonkin","m. tonkin","michael tonkin")~ "tonkin, michael",
-                               MastersName%in%c("jayson lindsay & scott farrant",
-                                                "jayson lyndsay  / scott farrant")~ "jayson lindsay / scott farrant",
-                               MastersName%in%c("scott  farrant")~ "scott farrant",
-                               MastersName== "anthony cooke"~ "cooke, anthony",
-                               MastersName== "jeffrey frank cooke"~ "jeffrey cooke",
+                               MastersName%in% c("james tindall","james stuart tindall")~ "tindall, james stuart",
+                               MastersName%in% c("m.tonkin","m. tonkin","michael tonkin")~ "tonkin, michael",
+                               MastersName%in% c("jayson lindsay & scott farrant","jayson lindsay / scott farrant",
+                                                "jayson lyndsay  / scott farrant")~ "lindsay, jayson / scott farrant",
+                               MastersName%in% c("scott  farrant")~ "scott farrant",
+                               MastersName%in% c("anthony james cooke","anthony cooke") ~ "cooke, anthony",
+                               MastersName%in% c("jeffrey frank cooke","jeffrey cooke","jeff cooke")~ "cooke, jeffrey",
                                MastersName%in% c("c. black","chris black","christopher black","christopher barry black")~  "black, christopher barry",
                                MastersName%in% c("tim  goodall","tim goodall")~  "goodall, tim",
                                MastersName%in% c("jamie walter thornton","j.thornton",
-                                                 "jw thornton")~  "j.w.thornton",
+                                                 "jw thornton","j.w.thornton")~  "thornton, j.w.",
                                MastersName%in% c("n. triantafyllou","neoclis triantafyllou")~ "triantafyllou, neoclis",
-                               MastersName== "d. hawkins"~ "hawkins, david joseph" ,
-                               MastersName== "darcy madgen"~  "madgen, darcy james",
-                               MastersName== "emanuel soulos"~  "soulos, emanuel nicholas",
-                               MastersName%in%c("n e soulos","n.e. soulos",
-                                                "n.e.soulas","n.e.soulos","ne soulos")~ "n.e soulos" ,
-                               MastersName%in%c("g.m. sharp","greg sharp","gregory mark sharp")~  "sharp, gregory mark",
-                               MastersName== "p. murch"~ "murch, paul douglas" ,
-                               MastersName%in%c("glen brodi","glen brodie","glen nicholas brodie")~ "brodie, glen",
-                               MastersName%in%c("geoffrey foster campbell","geoff campbell")~ "geoffrey campbell" ,
-                               MastersName%in%c("g. whetstone","greg whetstone","whetstone, gregory neil",
+                               MastersName%in% c("d. hawkins","david joseph hawkins")~ "hawkins, david joseph" ,
+                               MastersName%in% c("darcy madgen","darcy james madgen")~  "madgen, darcy james",
+                               MastersName%in% c("n e soulos","n.e. soulos","emanuel soulos","emanuel nicholas soulos","n.e soulos",
+                                                "n.e.soulas","n.e.soulos","ne soulos")~ "soulos, emanuel nicholas" ,
+                               MastersName%in% c("g.m. sharp","greg sharp","gregory mark sharp")~  "sharp, gregory mark",
+                               MastersName%in% c("glen brodi","glen brodie","glen nicholas brodie")~ "brodie, glen",
+                               MastersName%in% c("geoffrey foster campbell","geoff campbell","geoffrey campbell")~ "campbell,geoffrey",
+                               MastersName%in% c("g. whetstone","greg whetstone","whetstone, gregory neil",
                                                 "g whetstone","gregory neil whetstone")~ "whetstone,greg" ,
-                               MastersName%in%c("brian scimone","brian gregory scimone",
+                               MastersName%in% c("brian scimone","brian gregory scimone",
                                                 "scimone, brian gregory")~ "scimone, brian" ,
-                               MastersName%in%c("jason & brian scimone","brian & jason  scimone","brian & jason scimone",
+                               MastersName%in% c("jason & brian scimone","brian & jason  scimone","brian & jason scimone",
                                                 "brian / jason scimone")~ "brian / jason scimone" ,
-                               MastersName%in%c("c. henderson","chris henderson","chris  henderson")~ "chris henderson" ,
-                               MastersName%in% c("andrew  joy","andrew francis joy")~ "andrew f joy",
-                               MastersName%in%c("smythe, john lawrence","j smythe")~ "john smythe",
-                               MastersName== "m.bub"~ "mark robert bubb",
-                               MastersName== "manual karaterpos"~ "manuel karaterpos",
-                               MastersName%in%c("warrilow, peter charles","peter charles warrilow",
-                                                "p. warrilow","peter  warrilow")~ "peter warrilow",
+                               MastersName%in% c("c. henderson","chris henderson","chris  henderson",
+                                                 "chris henderson")~ "henderson, christian william",
+                               MastersName%in% c("andrew  joy","andrew francis joy","andrew f joy")~ "joy, andrew f",
+                               MastersName%in% c("smythe, john lawrence","j smythe","john smythe")~ "smythe, john",
+                               MastersName%in% c("m.bub","mark robert bubb","mark robert bubb(m.tonkin)")~ "bubb, mark robert",
+                               MastersName%in% c("manual karaterpos","manuel karaterpos","m.karaterpos")~ "karaterpos, manuel",
+                               MastersName%in% c("warrilow, peter charles","peter charles warrilow",
+                                                "p. warrilow","peter  warrilow","peter warrilow")~ "warrilow, peter",
                                MastersName== "phil  toumazos"~ "phil toumazos",
-                               MastersName%in%c("parker, roger joseph","roger joseph parker")~ "roger parker",
+                               MastersName%in% c("parker, roger joseph","roger joseph parker","roger parker")~ "parker, roger",
                                TRUE~MastersName))
 #export list of boats and skippers
 write.csv(Data.daily%>%distinct(vessel,BoatName,MastersName)%>%arrange(MastersName),
@@ -1758,7 +1761,7 @@ Data.daily=subset(Data.daily,!(finyear=="2005-06" & fishery%in%c('*','JASDGDL','
 
 #Daily data fixes
 #Fix some records identified as incorrect in CATCH INSPECTIONS and EFFORT INSPECTIONS  
-#note: the ammended values were provided by data entry girls
+#note: the amended values were provided by data entry girls
 
 id=subset(Data.daily,finyear=="2011-12" & TSNo=="TDGLF8000737" & 
             DSNo=="TDGLF8000734" & sname1=="Blue Morwong")
@@ -2055,6 +2058,12 @@ Data.daily$LatDeg=with(Data.daily,ifelse(vessel=="B 067" & blockx%in%c(35610,356
 Data.daily$LongDeg=with(Data.daily,ifelse(vessel=="B 067" & blockx%in%c(35610,35630,35640,35650) & LongDeg==0,116,LongDeg))
 
 #Add lat and long if NA for calculating zone (allocate to top left corner)
+Data.daily=Data.daily%>%
+  mutate(LatDeg=ifelse(is.na(LatDeg) & !is.na(LatFC), as.integer(LatFC), LatDeg),
+         LatMin=ifelse(is.na(LatMin) & !is.na(LatFC), 60*(as.numeric(LatFC)-floor(as.numeric(LatFC))), LatMin),
+         LongDeg=ifelse(is.na(LongDeg) & !is.na(LongFC), as.integer(LongFC) , LongDeg),
+         LongMin=ifelse(is.na(LongMin) & !is.na(LongFC), 60*(as.numeric(LongFC)-floor(as.numeric(LongFC))), LongMin))
+
 Data.daily$LatDeg=with(Data.daily,ifelse(is.na(LatDeg),as.numeric(substr(block10,1,2)),LatDeg))  
 Data.daily$LatMin=with(Data.daily,ifelse(is.na(LatMin),10*as.numeric(substr(block10,3,3)),LatMin))  
 Data.daily$LongDeg=with(Data.daily,ifelse(is.na(LongDeg),100+as.numeric(substr(block10,4,5)),LongDeg))
@@ -2164,6 +2173,7 @@ if(nrow(Data.daily.incomplete)>0)
                 ifelse(zone=='*',"West",
                 zone))))
 }
+
 
   #set up data set for Alex Hesp
 if(do.Alexs=="YES")
@@ -2278,22 +2288,21 @@ Current.data=Current.data%>%
 
 if(Inspect.New.dat=="YES")  
 {
-  #vars needed by Vero to inspect data
-  Vero.vars=c('SessionStartDate','VesselName','TripSheetNumber','DailySheetNumber',
-              'SessionIndex','RSSpeciesCommonName','Nfish','Landwt','livewt','RSSpeciesId','RSSpeciesCode')
-  
   #create file and path for checking new data
   handle=paste(handl_OneDrive("Data/Catch and Effort/Check_these_vars/Daily/"),Current.yr,sep="")
   if(!file.exists(handle)) dir.create(handle)
   
+  
+  #vars needed by Vero to inspect data
+  Vero.vars=c('SessionStartDate','VesselName','TripSheetNumber','DailySheetNumber',
+              'SessionIndex','RSSpeciesCommonName','Nfish','Landwt','livewt','RSSpeciesId','RSSpeciesCode')
+
   Top.mon.ktch=mean(c(15000,20000))
   Top.mon.eff=263.5 # 8500 m X 31 days
   # (i.e. monthly catch >Top.mon.ktch and monthly Km.gn.d > Top.mon.eff)  VIP!!!
   
   
-  #Check spatial blocks and catch asigned to right zone
-
-    #shots outside normal fishing blocks
+  #Check spatial blocks and catch assigned to right zone
   fn.ck.spatial(d=Current.data%>%
                   filter(fishery%in%c('JASDGDL','WCDGDL'))%>%
                   rename(date=SessionStartDate,
@@ -2321,7 +2330,7 @@ if(Inspect.New.dat=="YES")
                 pt.alpha=0.35)
   ggsave(paste(handle,"Map_blocks_daily.tiff",sep='/'),width = 14,height = 10,compression = "lzw")
   
-  ODD.blocks=c(34250,34260) #update after visual inspection of map 
+  ODD.blocks=c(33260,35190) #update after visual inspection of map 
   out.catch.block=Current.data%>%
     filter(fishery%in%c('JASDGDL','WCDGDL'))%>%
     rename(date=SessionStartDate,
@@ -2331,7 +2340,8 @@ if(Inspect.New.dat=="YES")
            SNo=SessionIndex)%>%
     mutate(Unik=paste(SNo,DSNo,TSNo))%>%
     distinct(Unik,.keep_all = T)%>%
-    filter(blockx%in%ODD.blocks | Lat<=-35.5 | (Lat<=-33.5 & Long<114.4))%>%
+    filter(blockx%in%ODD.blocks)%>%
+    filter(!(blockx==33260 & Lat>(-33.5)))%>%
     dplyr::select(fishery,BoatName,vessel,date,SNo,DSNo,TSNo,blockx,Lat,Long)
   if(nrow(out.catch.block)>0)
   {
@@ -2341,6 +2351,8 @@ if(Inspect.New.dat=="YES")
                BCC=Email.FishCube,
                Subject=paste("Shark validation",Sys.time(),'NA_nfish.weight.csv',sep=' _ '),
                Body= "Hi,
+              I have started the data validation process for the new year data stream.
+              I will be sending a series of emails with queries.
               In the attached, I extracted records where fishing occurs outside normal fishing grounds
               Cheers
               Matias",  
@@ -2426,7 +2438,7 @@ if(Inspect.New.dat=="YES")
                Subject=paste("Shark validation",Sys.time(),'NA_nfish.weight.csv',sep=' _ '),
                Body= "Hi,
               I have started the data validation process for the new year data stream.
-              I will be sending a series of emails with queries
+              I will be sending a series of emails with queries.
               In the attached, I extracted records with species and ‘nfish’ information but 
               NA in ‘livewt’ and ‘landwt’. Is this a typo or system error?
               Cheers
@@ -2445,9 +2457,10 @@ if(Inspect.New.dat=="YES")
   Cero.catch.shot=subset(Current.data,Sheet.shot%in%NA.Sheet.shot)
   table(Cero.catch.shot$species,useNA='ifany')
   
-  Cero.catch.shot=Current.data%>%
-    filter(RSSpeciesCommonName=="Nil Fish Caught" & !TripLandedCondition%in%c('SC','NR') )  #remove self consumption
-  
+  Cero.catch.shot=Current.data%>%   #not needed, this is taken care below 'if(nrow(check.nfish.weight)>0)'
+    filter((Landwt==0 | livewt==0) & !RSSpeciesCommonName=="Nil Fish Caught")%>%
+    filter(!TripLandedCondition%in%c('SC','NR') )  #remove self consumption
+
   #3. Check good weight calculation
   #note:this compares average weights from returns to the range of possible weights by species.
   #     for some species there's no Wei.range info.
@@ -2486,8 +2499,8 @@ if(Inspect.New.dat=="YES")
                  BCC=Email.FishCube,
                  Subject=paste("Shark validation",Sys.time(),'no_live.weight.csv',sep=' _ '),
                  Body= "Hi,
-              In the attached, I extracted records where ‘livewt’ is blank but there are 
-              values for ‘nfish’ and ‘landwt’.
+              In the attached, I extracted records where ‘landwt’ and/or ‘livewt’ is NA or 0 but there are 
+              values for ‘nfish’.
               Is this a typo or there’s a legit reason for not having a ‘livewt’ value?
               Cheers
               Matias",  
@@ -2496,7 +2509,7 @@ if(Inspect.New.dat=="YES")
     }
   }
 
-  #4. Check average weight for each species
+  #4.1 Check average weight for each species
   Current.data$Avg.wt=with(Current.data,livewt/Nfish)
   Uniq.sp=Current.data[,match(c("species","sname1"),names(Current.data))]
   Uniq.sp=Uniq.sp[!(duplicated(Uniq.sp$species)),]
@@ -2582,7 +2595,7 @@ if(Inspect.New.dat=="YES")
   }
 
   
-  # Compare average weight indicator species   
+  #4.2 Compare average weight indicator species   
   #note: this is not required, already taken care above
   do.indic="NO"
   if(do.indic=="YES")
@@ -2613,9 +2626,8 @@ if(Inspect.New.dat=="YES")
     if(nrow(Check.San.Weight)>0)write.csv(Check.San.Weight,paste(handle,"/Check.Weight.San.csv",sep=""),row.names=F)
   }
   
-  #flag species outside spatial distribution 
+  #5.flag species outside spatial distribution 
   library(sp)
-  
   Current.data$Lat=-abs(as.numeric(as.character(Current.data$Lat)))
   Current.data$Long=as.numeric(as.character(Current.data$Long))
   Dist.range=list('17001'=list(c(113,-29),c(129,-36)),  #Gummy Shark
@@ -2631,8 +2643,26 @@ if(Inspect.New.dat=="YES")
                   '39001'=list(c(113,-30),c(129,-36)),  #"Southern Eagle Ray" 
                   '18023'=list(c(113,-16),c(126,-36)),  #"Spinner Shark"
                   '12000'=list(c(113,-10),c(129,-36)),  #"Thresher Shark"
-                  '18022' =list(c(113,-14),c(129,-36))   #"Tiger Shark"  
+                  '18022' =list(c(113,-14),c(129,-36)),   #"Tiger Shark"
+                  '24900' =list(c(113,-29),c(129,-36)),   #"Angel Shark"
+                  '13000' =list(c(113,-26),c(129,-36)),   #"Wobbegong"
+                  '19001' =list(c(113,-10),c(118,-35)),   #"Scalloped Hammerhead"
+                  '19002' =list(c(113,-10),c(115,-30)),   #"Great Hammerhead"
+                  '19004' =list(c(113,-20),c(129,-36))   #"Smooth Hammerhead"
               )
+  dis.sp=sort(unique(Data.daily%>%
+                filter(finyear==Current.yr &species%in%c(Shark.species,Ray.species))%>%
+                  filter(!species%in%c(31000,20000,22999,9998,90030,27000))%>%
+                  pull(species)))
+  not.considered=dis.sp[which(!dis.sp%in%as.numeric(names(Dist.range)))]
+  if(length(not.considered)>0)
+  {
+    par(bg=2)
+    plot.new()
+    mtext("add distribution for these species",3,cex=1,col="white")
+    mtext(paste(not.considered,collapse = '-'),3,-2,cex=1,col="white")
+    par(bg="white")
+  }
   
   Outer=vector('list',length(Dist.range))
   smart.par(n.plots=length(Dist.range),MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(.1, 0.5, 0))
