@@ -6478,17 +6478,27 @@ if(Inspect.New.dat=="YES")
       filter(!is.na(!!rlang::sym(var)))
     if(nrow(d)>0)
     {
+      d$valid.max=valid.max
+      if(var=="HOURS")
+      {
+        d=d%>%
+          group_by(VESSEL)%>%
+          mutate(valid.max=mean(!!rlang::sym(var)))
+      }
+      rm(valid.max)
       ylim[2]=max(ylim[2],max(d[,var]))
       p=d%>%
         ggplot(aes_string(x='Session',y=var))+
         geom_point()+
-        geom_hline(yintercept = valid.max,color=2)+
+        geom_hline(aes(yintercept = valid.max),color=2)+
         facet_wrap(~VESSEL,scales='free')+
         ylim(ylim)
       print(p)
       
-      out.dodgy=d%>%filter(!!rlang::sym(var)>valid.max)%>%
-        dplyr::select(c("VESSEL","BoatName","TSNo","SNo","DSNo",all_of(var)))%>%
+      var1=var
+      if(var1=="HOURS")  var1=c(var,'SHOTS')
+      out.dodgy=d%>%filter(!!rlang::sym(var)>2*!!rlang::sym('valid.max'))%>%
+        dplyr::select(c("VESSEL","BoatName","TSNo","SNo","DSNo",'valid.max',all_of(var1)))%>%
         rename(TripSheetNumber=TSNo,
                DailySheetNumber=DSNo,
                SessionIndex=SNo)%>%
