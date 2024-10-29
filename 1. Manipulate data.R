@@ -1484,7 +1484,20 @@ Data.monthly=Data.monthly%>%
                                      LIVEWT))
 Data.monthly$Reporter=NA
 
-
+#Check for 0 or NA livewt records
+a=Data.monthly%>%filter(LANDWT==0 | LIVEWT==0 | is.na(LANDWT) | is.na(LIVEWT))%>%
+  dplyr::select(CONDITN,Factor,SNAME,fishery,LIVEWT,LANDWT)%>%
+  filter(is.na(LIVEWT) | LIVEWT==0)%>%
+  distinct(SNAME,CONDITN,Factor,LANDWT,LIVEWT)
+if(nrow(a)>0)
+{
+  par(bg=2)
+  plot.new()
+  mtext(paste("there are records",nrow(a)),3,cex=3,col="white")
+  mtext("with no weight",3,-2,cex=3,col="white")
+  par(bg="white")
+  
+}
 
 #SECTION B. ---- DATA MANIPULATION - DAILY LOGBOOKS ----
 
@@ -2900,6 +2913,19 @@ Data.daily.agg=aggregate(cbind(LANDWT,LIVEWT)~FINYEAR+YEAR+MONTH+VESSEL+METHOD+B
                                  Factor=ifelse(Factor>1e8,NA,Factor))
 Data.daily.agg=Data.daily.agg%>%rename(Landing.Port=PORT)
 
+#Check for 0 or NA livewt records
+a=Data.daily%>%filter(LANDWT==0 | LIVEWT==0 | is.na(LANDWT) | is.na(LIVEWT))%>%
+  dplyr::select(Same.return.SNo,CONDITN,Factor,nfish,fishery,LIVEWT,LANDWT,SNAME)%>%
+  filter(!SNAME=='Nil Fish Caught')%>%
+  filter(is.na(LIVEWT) | LIVEWT==0)
+if(nrow(a)>0)
+{
+  par(bg=2)
+  plot.new()
+  mtext(paste("there are records",nrow(a)),3,cex=3,col="white")
+  mtext("with no weight",3,-2,cex=3,col="white")
+  par(bg="white")
+}
 
 #SECTION C. ---- DATA MANIPULATION - CATCH MERGING AND CORRECTIONS ----
 
@@ -5659,6 +5685,27 @@ if(!do.sql.extraction)
   FishCUBE.daily=FishCUBE.daily[,-match("BLOCKX",names(FishCUBE.daily))]
 }
 
+#Data for Agustin Parks 2025
+do.this=FALSE
+if(do.this)
+{
+  Agus.monthly=Data.monthly%>%filter(SPECIES<=90030)%>%filter(!SPECIES%in%c(31000,22999,90030))%>%
+    mutate(SNAME=ifelse(SPECIES==18003,'Dusky Whaler',SNAME))%>%
+    group_by(SPECIES,SNAME,LAT,LONG,YEAR,MONTH,METHOD)%>%
+    summarise(LIVEWT.c=sum(LIVEWT.c,na.rm=T))%>%
+    ungroup()%>%
+    rename(Latitude=LAT,
+           Longitude=LONG)
+  write.csv(Agus.monthly,handl_OneDrive('Parks Australia/2025_project/Data/Data sets/WA/Commercial_monthly.csv'),row.names = F)
+  Agus.daily=Data.daily%>%filter(SPECIES<=90030)%>%filter(!SPECIES%in%c(31000,22999,90030))%>%
+    group_by(SPECIES,SNAME,LatFC,LongFC,YEAR,MONTH,METHOD)%>%
+    summarise(LIVEWT.c=sum(LIVEWT.c,na.rm=T))%>%
+    ungroup()%>%
+    rename(Latitude=LatFC,
+           Longitude=LongFC)
+  write.csv(Agus.daily,handl_OneDrive('Parks Australia/2025_project/Data/Data sets/WA/Commercial_daily.csv'),row.names = F)
+  
+}
 
   #C.9 Separate fisheries  into North and South                                                                   
 #note: no catch reapportioning of effort corrections done on northern data file

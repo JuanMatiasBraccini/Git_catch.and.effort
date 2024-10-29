@@ -5,6 +5,8 @@
 #       Irrelevant.Term not selected. If want to update SOI and Mean Freo Sealevel each year, run "Get.SOI.Freo.R"  in C:\Matias\Data\Oceanography
 #       Irrelevant.Term not selected. If want to update Temperature, run "SST.r"   in C:\Matias\Data\Oceanography
 
+#missing:
+#     look at the proportions of shots with 0 catches by fishers to see if there's a change in efficiency?
 # HEADER -----------------------------------------------------------------------
 rm(list=ls(all=TRUE))
 
