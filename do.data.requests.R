@@ -2287,7 +2287,7 @@ if(Check.school.shark.targeting=="YES")
           axis.text=element_text(size=12),
           strip.text = element_text(size = 8))
   
-  #map ACA
+  #map 
   oz_states <- ozmaps::ozmap_states
   d1=d%>%distinct(block10,.keep_all = T)
   p2=ggplot(oz_states) + 
@@ -2894,5 +2894,169 @@ if(do.SARDI.2024)
            Km.Gillnet.Hours=Km.Gillnet.Hours.c)
   
   write.csv(a1,paste(hndl,'/SARDI_2024_ASL_ERA.csv',sep=''),row.names = F)
+  
+}
+
+#G 4.40 Proportion of scalefish vs shark for Liv-------------------------------------------------------------------------
+do.this=FALSE
+if(do.this)
+{
+  
+  a=Data.daily%>%
+    filter(SPECIES<600000)%>%
+    filter(!SPECIES==9998)%>%
+    filter(LAT<=(-26))%>%
+    filter(fishery%in%c('*', 'JASDGDL','WCDGDL'))%>%
+    mutate(TYPE=ifelse(type=='elasmobranchs','elasmobranchs','scalefish'))
+  
+  oz_states <- ozmaps::ozmap_states
+  p=ggplot(oz_states) + 
+    geom_sf(fill='grey80') + 
+    coord_sf(xlim = c(113,129),ylim = c(-36,-26))
+  
+  #By weight
+  b=a%>%
+    mutate(LAT=LAT-1)%>%
+    group_by(FINYEAR,BLOCKX,LAT,LONG,TYPE)%>%
+    summarise(z=sum(LIVEWT,na.rm=T))%>%
+    ungroup()%>%
+    data.frame()
+  Yrs=sort(unique(b$FINYEAR))
+  Yrs=Yrs[(length(Yrs)-3):length(Yrs)]
+  plist=vector('list',length(Yrs))
+  for(y in 1:length(Yrs))
+  {
+    df.grobs <- b%>%
+      filter(FINYEAR==Yrs[y]) %>%
+      group_by(LONG, LAT) %>%
+      do(subplots = ggplot(.,
+                           aes(x = 1, y = z,fill=TYPE)) +
+           geom_col(position = "identity", width = 1, color = "transparent",
+                    alpha = 1,            # increase transparency to see map underneath
+                    show.legend = FALSE) +  # don't show legend for individual grobs
+           scale_y_continuous(limits = c(0, unique(.$z))) + 
+           theme_void()) %>%
+      mutate(subgrobs = list(annotation_custom(ggplotGrob(subplots),
+                                               x = LONG - 0,      # change from 1 to other 
+                                               y = LAT - 0,      # values if necessary,
+                                               xmax = LONG + 1,   # depending on the map's
+                                               ymax = LAT + 0.8))) # resolution.
+    pp=p + df.grobs$subgrobs+ggtitle(Yrs[y])+theme(plot.margin = unit(c(0,2,0,2), 'lines'))
+    if(y==2)
+    {
+      pp=pp+geom_text(data=data.frame(LAT=c(-28,-29),
+                                      LONG=c(122,122),
+                                      Type=factor(c('Elasmobranchs','Scalefish'))),
+                      aes(LONG,LAT,label=Type,color=Type),size=3,hjust='left',fontface = "bold")+
+        theme(legend.position = 'none')+ylab('')+xlab('')
+    }
+    
+    plist[[y]]=pp
+  }
+  ggarrange(plotlist = plist, ncol=2, nrow=2)
+  ggsave(paste(hndl,'Proportion scalefish/Map_by weight.tiff',sep='/'), width = 10, height = 6,compression = "lzw")
+  write.csv(b%>%rename(Livewt=z),paste(hndl,'Proportion scalefish/Map_by weight.csv',sep='/'),row.names = F)
+  
+  #By number of fish
+  b=a%>%
+    mutate(LAT=LAT-1)%>%
+    group_by(FINYEAR,BLOCKX,LAT,LONG,TYPE)%>%
+    summarise(z=sum(nfish,na.rm=T))%>%
+    ungroup()%>%
+    data.frame()
+  Yrs=sort(unique(b$FINYEAR))
+  Yrs=Yrs[(length(Yrs)-3):length(Yrs)]
+  plist=vector('list',length(Yrs))
+  for(y in 1:length(Yrs))
+  {
+    df.grobs <- b%>%
+      filter(FINYEAR==Yrs[y]) %>%
+      group_by(LONG, LAT) %>%
+      do(subplots = ggplot(.,
+                           aes(x = 1, y = z,fill=TYPE)) +
+           geom_col(position = "identity", width = 1, color = "transparent",
+                    alpha = 1,            # increase transparency to see map underneath
+                    show.legend = FALSE) +  # don't show legend for individual grobs
+           scale_y_continuous(limits = c(0, unique(.$z))) + 
+           theme_void()) %>%
+      mutate(subgrobs = list(annotation_custom(ggplotGrob(subplots),
+                                               x = LONG - 0,      # change from 1 to other 
+                                               y = LAT - 0,      # values if necessary,
+                                               xmax = LONG + 1,   # depending on the map's
+                                               ymax = LAT + 0.8))) # resolution.
+    pp=p + df.grobs$subgrobs+ggtitle(Yrs[y])+theme(plot.margin = unit(c(0,2,0,2), 'lines'))
+    if(y==2)
+    {
+      pp=pp+geom_text(data=data.frame(LAT=c(-28,-29),
+                                      LONG=c(122,122),
+                                      Type=factor(c('Elasmobranchs','Scalefish'))),
+                      aes(LONG,LAT,label=Type,color=Type),size=3,hjust='left',fontface = "bold")+
+        theme(legend.position = 'none')+ylab('')+xlab('')
+    }
+    
+    plist[[y]]=pp
+  }
+  ggarrange(plotlist = plist, ncol=2, nrow=2)
+  ggsave(paste(hndl,'Proportion scalefish/Map_by number of fish.tiff',sep='/'), width = 10, height = 6,compression = "lzw")
+  write.csv(b%>%rename(Nfish=z),paste(hndl,'Proportion scalefish/Map_by number of fish.csv',sep='/'),row.names = F)
+  
+  
+  #Proportion of scalefish by method, year, lat and long
+  a%>%
+    mutate(LAT=LAT-1,
+           METHOD=ifelse(!METHOD%in%c('GN','LL','HL'),'Other',METHOD))%>%
+    group_by(FINYEAR,LAT,LONG,TYPE,METHOD)%>%
+    summarise(z=sum(LIVEWT,na.rm=T))%>%
+    ungroup()%>%
+    data.frame()%>%
+    spread(TYPE,z)%>%
+    mutate(prop.scale=scalefish/(scalefish+elasmobranchs),
+           Year=as.numeric(substr(FINYEAR,1,4)))%>%
+    mutate(LAT=abs(LAT))%>%
+    filter(LONG>=113 & LONG<=128)%>%
+    ggplot(aes(Year,prop.scale,colour=METHOD))+
+    geom_point(size=.9)+
+    facet_grid(LAT~LONG)+ylab('Proportion of scalefish')+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  
+  ggsave(paste(hndl,'Proportion scalefish/Prop_weight_method_year.tiff',sep='/'), width = 12, height = 6,compression = "lzw")
+  
+  
+  b=a%>%
+    filter(LONG>=116 & LONG<=124 & LAT<(-33))%>%
+    mutate(Year=as.numeric(substr(FINYEAR,1,4)),
+           LAT=LAT-1,
+           METHOD=ifelse(!METHOD%in%c('GN','LL','HL'),'Other',METHOD))%>%
+    filter(Year>(max(Year)-4))%>%
+    group_by(FINYEAR,LAT,LONG,TYPE,METHOD,VESSEL)%>%
+    summarise(z=sum(LIVEWT,na.rm=T))%>%
+    ungroup()%>%
+    data.frame()%>%
+    spread(TYPE,z)%>%
+    mutate(prop.scale=scalefish/(scalefish+elasmobranchs))%>%
+    filter(prop.scale>0.3)
+  
+  
+  a%>%
+    filter(LONG>=116 & LONG<=124 & LAT<(-33))%>%
+    filter(VESSEL%in%unique(b$VESSEL))%>%
+    mutate(LAT=LAT-1,
+           METHOD=ifelse(!METHOD%in%c('GN','LL','HL'),'Other',METHOD))%>%
+    group_by(FINYEAR,LAT,LONG,TYPE,METHOD,VESSEL)%>%
+    summarise(z=sum(LIVEWT,na.rm=T))%>%
+    ungroup()%>%
+    data.frame()%>%
+    spread(TYPE,z)%>%
+    mutate(prop.scale=scalefish/(scalefish+elasmobranchs),
+           Year=as.numeric(substr(FINYEAR,1,4)))%>%
+    mutate(LAT=abs(LAT))%>%
+    filter(LONG>=113 & LONG<=128)%>%
+    ggplot(aes(Year,prop.scale,colour=METHOD))+
+    geom_point(size=.9)+
+    facet_grid(VESSEL~LONG)+ylab('Proportion of scalefish')+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  
+  ggsave(paste(hndl,'Proportion scalefish/Prop_weight_method_year_vessel.tiff',sep='/'), width = 12, height = 6,compression = "lzw")
+  
   
 }
