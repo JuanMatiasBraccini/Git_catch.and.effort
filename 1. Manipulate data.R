@@ -79,7 +79,7 @@
 # But now it is even easier to get different flavours of species standard weights. More tips at the bottom of this email.
 # 
 # Once again, the one stop-shop for catch and effort data is:
-#   Server:                 CP-SDBS0001P-19\RESP01
+#   Server:                 reports.dpird.wa.gov.au    # previous one was: CP-SDBS0001P-19\RESP01
 # Database:                ResearchDataWarehouseQuery
 # Tables:                 [dbo].[fcTourOperatorCatch]
 # [dbo].[fcTourOperatorEffort]
@@ -146,55 +146,60 @@ do.sql.extraction=TRUE
   #1.1 SQL Server database
 if(do.sql.extraction)
 {
-  #fishery codes table
+  #SQL connections
+  #Server <-"reports.dpird.wa.gov.au"  #new ACA. Use this one once all IS issues sorted
+  Server <-"CP-SDBS0001P-19\\RESP01"  #original
+  conn=odbcDriverConnect(connection=paste("Driver={SQL Server};server=",Server,";database=ResearchShared;trusted_connection=yes;",sep=""))
+  conn1=odbcDriverConnect(connection=paste("Driver={SQL Server};server=",Server,";database=ResearchDataWarehouseQuery;trusted_connection=yes;",sep=""))
+
+  #Monthly.log <- 'ceMonthlyLog'  #new  ACA. Use ceMonthlyLog if mismatch with monthlyrawlog is resolved. See Mark/Vero
+  Monthly.log <- 'monthlyrawlog' #original
+  #notes: 1. 'monthlyrawlog' is the raw monthly data always used; 
+  #         'monthlylog' is the one after the reapportioning of indicator species, etc that goes to FishCube.
+  #           So I need to keep using 'monthlyrawlog' for the purpose of cpue standardisation, catch reconstructions, etc
+  #           The variable SCRref identifies records that were modified, e.g. hammerheads: %>%filter(!is.na(SCRref) & grepl('Hammerhead',RSSpeciesCommonName))
+  #       2. The variable VESSEL was recorded in SQL (spaces and zeros dropped) so re-map it to allow my scripts to run
+  if(Monthly.log=='ceMonthlyLog')
+  {
+    Server.monthly <-"reports.dpird.wa.gov.au"
+    Database.monthly <- "ResearchDataWarehouseQuery"
+  }
+  if(Monthly.log=='monthlyrawlog')
+  {
+    Server.monthly <-"CP-SDBS0001P-19\\RESP01"
+    Database.monthly <- "ResearchDataWarehouseCE"
+  }
+  conn.monthly <- odbcDriverConnect(connection=paste("Driver={SQL Server};server=",Server.monthly,
+                                                     ";database=",Database.monthly,
+                                                     ";trusted_connection=yes;",sep=""))
+  Query.monthly=paste("SELECT * FROM",Monthly.log,
+                      "WHERE RSSpeciesEcologicalSuite = 'elasmobranchs' or RSInitiallyReportedFisheryCode in ('SGL','WCGL','C127','WANCS','CL02','JANS')")
+  
+  #Extract fishery codes table
   FisheryCodeTable=sqlFetch(channel=odbcConnectExcel2007('FisheryCodeTable.xlsx'),'CAEStoFISHCUBE')
   FisheryCodeTable <- remove_empty(FisheryCodeTable,which="cols")
   
-  #variable mapping
+  #Extract variable mapping
   channel <- odbcConnectExcel2007(handl_OneDrive("Data/Catch and Effort/SQL Shark Data Mapping.xlsx"))
   SQL.data.mapping_daily=sqlFetch(channel,"DailyMappings")
   SQL.data.mapping_monthly=sqlFetch(channel,"MonthlyMappings")
   close(channel)
   
-  #fish conditions
-  fish.conditions <- sqlQuery(channel=odbcDriverConnect(connection="Driver={SQL Server};
-                        server=CP-SDBS0001P-19\\RESP01;database=ResearchShared;
-                        trusted_connection=yes;"),
-                              query="SELECT * FROM Research.[vwSpeciesCondition]")
+  #Extract fish conditions
+  fish.conditions <- sqlQuery(conn, query="SELECT * FROM Research.[vwSpeciesCondition]")
   
-  #fish conversion factors
-  fish.conversion <- sqlQuery(channel=odbcDriverConnect(connection="Driver={SQL Server};
-                        server=CP-SDBS0001P-19\\RESP01;database=ResearchShared;
-                        trusted_connection=yes;"),
-                              query="SELECT * FROM Research.[vwSpeciesConditionFactor]")
+  #Extract fish conversion factors
+  fish.conversion <- sqlQuery(conn, query="SELECT * FROM Research.[vwSpeciesConditionFactor]")
   
+  #Extract species mapping
+  Species.mapping <- sqlQuery(conn1, query="SELECT * FROM [dbo].[rsSASSpecies]")
   
-  #species mapping
-  Species.mapping <- sqlQuery(channel=odbcDriverConnect(connection="Driver={SQL Server};
-                        server=CP-SDBS0001P-19\\RESP01;database=ResearchDataWarehouseQuery;
-                        trusted_connection=yes;"),
-                              query="SELECT * FROM [dbo].[rsSASSpecies]")
+  #Extract vessel mapping
+  Vessel.mapping <- sqlQuery(conn1, query="SELECT * FROM [dbo].[rsBoatLicence]")  
   
-  
-  #vessel mapping
-  Vessel.mapping <- sqlQuery(channel=odbcDriverConnect(connection="Driver={SQL Server};
-                        server=CP-SDBS0001P-19\\RESP01;database=ResearchDataWarehouseQuery;
-                        trusted_connection=yes;"),
-                              query="SELECT * FROM [dbo].[rsBoatLicence]")
-  
-  
-  #1. Daily returns from TDGDLF and NSF
-  # conn <- odbcDriverConnect('driver={SQL Server};
-  #                         server=F01-FIMS-SQLP01;database=ResearchDataWarehouseQuery; #old, provided by Paul F DELETE onec SQL stuff sorted
-  #                         trusted_connection=true')
-  # Daily_shark <- sqlQuery(conn, "SELECT * FROM ceSharkLog")
-  # Monthly_other <- sqlQuery(conn, "SELECT * FROM ceMonthlyLog
-  #                         WHERE species <= 31000 or fishery in ('SGL','WCGL','C127','CL02')")
-  system.time({Data.daily<- sqlQuery(channel=odbcDriverConnect(connection="Driver={SQL Server};
-                                                        server=CP-SDBS0001P-19\\RESP01;database=ResearchDataWarehouseQuery;
-                                                        trusted_connection=yes;"), 
-                                            query="SELECT * FROM ceSharkLog")})
-  
+  #Extract Daily returns from TDGDLF and NSF
+  system.time({Data.daily<- sqlQuery(conn1, query="SELECT * FROM ceSharkLog")})
+
   rename.daily=SQL.data.mapping_daily$OLD
   names(rename.daily)=SQL.data.mapping_daily$NEW
   rename.daily=subset(rename.daily,!is.na(names(rename.daily)))
@@ -205,7 +210,6 @@ if(do.sql.extraction)
     colnames(Data.daily)[id]=rename.daily[r]
     rm(id)
   }
-
   Data.daily=Data.daily%>%
     mutate(fishery=ifelse(fishery=='SDGDL','JASDGDL',fishery),  #Changed from JASDGDL to SDGDL in 2018 but need JASDGDL to run scripts
            Lat=ifelse(is.na(Lat) & !is.na(block10),
@@ -299,20 +303,9 @@ if(do.sql.extraction)
     rename(vessel=CAES)%>%
     dplyr::select(-FLAMS)
   
-  #2. Monthly returns from TDGDLF and NDS & shark catch in other fisheries with monthly returns 
-  #notes: 1. 'monthlyrawlog' is the raw monthly data always used; 
-  #         'monthlylog' is the one after the reapportioning of indicator species, etc that goes to FishCube.
-  #         So I need to keep using 'monthlyrawlog' for the purpose of cpue standardisation, catch reconstructions, etc
-  #         The variable SCRref identify records that were modify, e.g. hammerheads: !is.na(SCRref) & grepl('Hammerhead',RSSpeciesCommonName)
-  #       2. The variable VESSEL was recoded in SQL (spaces and zeros dropped) so re-map it to allow my scripts to run
-    #SQL data
-  system.time({Data.monthly <- sqlQuery(channel=odbcDriverConnect(connection="Driver={SQL Server};
-                                                    server=CP-SDBS0001P-19\\RESP01;database=ResearchDataWarehouseCE;
-                                                    trusted_connection=yes;"),
-                                         query="SELECT * FROM monthlyrawlog
-                                                WHERE RSSpeciesEcologicalSuite = 'elasmobranchs'
-                                                or RSInitiallyReportedFisheryCode in ('SGL','WCGL','C127','WANCS','CL02','JANS')")})
-    
+  #Extract Monthly returns from TDGDLF and NDS & shark catch in other fisheries with monthly returns 
+  system.time({Data.monthly <- sqlQuery(channel=conn.monthly, query=Query.monthly)})
+  odbcClose(conn.monthly)
   rename.monthly=SQL.data.mapping_monthly$OLD
   names(rename.monthly)=SQL.data.mapping_monthly$NEW
   rename.monthly=subset(rename.monthly,!is.na(names(rename.monthly)))
@@ -367,8 +360,6 @@ if(do.sql.extraction)
                                              SPECIES== 351000 ~ 351910,
                                              TRUE~SPECIES))
   Mesh.monthly=subset(Data.monthly,METHOD=="GN",select=c(VESSEL,FINYEAR,MONTH,BLOCKX,METHOD,MeshSizeHigh,MeshSizeLow))
-  
-  
   Keep.these.columns_monthly=c("FINYEAR","YEAR","MONTH","VESSEL","FDAYS","METHOD","BLOCKX","BDAYS","HOURS","HOOKS","SHOTS",
                                "NETLEN","SPECIES","SNAME","LIVEWT","CONDITN","LANDWT","Factor","fishery","PORT",
                                "RSSpeciesCode","type")
@@ -387,16 +378,13 @@ if(do.sql.extraction)
   
   
   #3. Daily returns from other fisheries that have reported shark
-  Data.mart.Logs=c('ceGDSLog','ceMACLog','ceNDSLog','cePFTLog','ceCWCDSLog')
+  Data.mart.Logs=tolower(c('ceGDSLog','ceMACLog','ceNDSLog','cePFTLog','ceCWCDSLog'))
   Data.daily_other=vector('list',length(Data.mart.Logs))
   names(Data.daily_other)=Data.mart.Logs
   Data.monthly_other=Data.daily_other
   for(l in 1:length(Data.daily_other))
   {
-    dummy <- sqlQuery(channel=odbcDriverConnect(connection="Driver={SQL Server};
-                                     server=CP-SDBS0001P-19\\RESP01;database=ResearchDataWarehouseQuery;
-                                     trusted_connection=yes;"),
-                      query=paste("SELECT * FROM",Data.mart.Logs[l],"WHERE RSSpeciesEcologicalSuite = 'elasmobranchs'"))
+    dummy <- sqlQuery(conn1, query=paste("SELECT * FROM",Data.mart.Logs[l],"WHERE RSSpeciesEcologicalSuite = 'elasmobranchs'"))
     if(is.data.frame(dummy))
     {
       if(nrow(dummy)>0)
@@ -461,14 +449,14 @@ if(do.sql.extraction)
                    CAESBlock=SessionMiddleCAESBlock,
                    CAESBlock=ifelse(is.na(CAESBlock) & Fishery=="PFT",19118,CAESBlock))
         }
-          
+        
         dummy=dummy%>%
           mutate(LatitudeDecimalDegrees=ifelse(is.na(LatitudeDecimalDegrees),
-                                                -abs(as.numeric(substr(Block10,1,2))+(10*as.numeric(substr(Block10,3,3))/60)),  
+                                               -abs(as.numeric(substr(Block10,1,2))+(10*as.numeric(substr(Block10,3,3))/60)),  
                                                LatitudeDecimalDegrees),
                  LongitudeDecimalDegrees=ifelse(is.na(LongitudeDecimalDegrees),
-                                               100+as.numeric(substr(Block10,4,5))+(10*as.numeric(substr(Block10,6,6))/60),
-                                               LongitudeDecimalDegrees),
+                                                100+as.numeric(substr(Block10,4,5))+(10*as.numeric(substr(Block10,6,6))/60),
+                                                LongitudeDecimalDegrees),
                  LongitudeDecimalDegrees=ifelse(is.na(LongitudeDecimalDegrees) & Fishery=="PFT",118,LongitudeDecimalDegrees),
                  LatitudeDecimalDegrees=ifelse(is.na(LatitudeDecimalDegrees) & Fishery=="PFT",-19.5,LatitudeDecimalDegrees))
         
@@ -532,7 +520,6 @@ if(do.sql.extraction)
   }
   Data.daily_other=compact(Data.daily_other)
   Data.daily_other=do.call(rbind,Data.daily_other)
-  
   Data.monthly_other=compact(Data.monthly_other)
   Data.monthly_other=do.call(rbind,Data.monthly_other)
 
@@ -646,17 +633,11 @@ if(do.sql.extraction)
                             distinct(Comments,DSNo),
                           by=c('DailySheetNumber'='DSNo'))
   
-  
-  
-  #2019 onwards
-  TEPS.current <- sqlQuery(channel=odbcDriverConnect(connection="Driver={SQL Server};
-                        server=CP-SDBS0001P-19\\RESP01;database=ResearchShared;
-                        trusted_connection=yes;"),
-                           query="SELECT  etp.*, s.StartBlock AS SessionStartBlock
-                                    FROM [ResearchDataWarehouseQuery].[dbo].[flTripEtp] etp
-                                    LEFT JOIN [ResearchDataWarehouseQuery].[dbo].[flTripSession] s ON etp.TripSessionId = s.TripSessionId
-                                    WHERE etp.[FisheryCode] in ('WCDGDL','OASC,OT','JASDGDL','SDGDL')")
-  
+  #2019 onwards   
+   TEPS.current <- sqlQuery(conn, query="SELECT  etp.*, s.StartBlock AS SessionStartBlock
+                                     FROM [ResearchDataWarehouseQuery].[dbo].[flTripEtp] etp
+                                     LEFT JOIN [ResearchDataWarehouseQuery].[dbo].[flTripSession] s ON etp.TripSessionId = s.TripSessionId
+                                     WHERE etp.[FisheryCode] in ('WCDGDL','OASC,OT','JASDGDL','SDGDL')")
   TEPS.current=TEPS.current%>%
     rename(DailySheetNumber=TripHeaderId,
          Comments=Notes,
@@ -715,11 +696,7 @@ if(!do.sql.extraction)
 #3. Catch price 
 if(do.sql.extraction)
 {
-  Server <-"CP-SDBS0001P-19\\RESP01"
-  Database <- "ResearchDataWarehouseQuery"
-  cn <- odbcDriverConnect(connection=paste("Driver={SQL Server};server=",Server,";database=",Database,";trusted_connection=yes;",sep=""))
-  PRICES <- sqlQuery(cn, "select * from dbo.rsSpeciesPrice") 
-  odbcClose(cn)
+  PRICES <- sqlQuery(conn1, "select * from dbo.rsSpeciesPrice") 
   PRICES=PRICES%>%
           filter(FinancialYear==Current.yr)%>%
           rename(RSSpeciesId=SpeciesId,
