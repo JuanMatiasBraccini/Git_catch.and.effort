@@ -1,4 +1,9 @@
-###--- SHARK GILLNET AND LONGLINE FISHERY CATCH AND EFFORT MANIPULATIONS ----###
+# ---------- SHARK GILLNET AND LONGLINE FISHERY CATCH AND EFFORT MANIPULATIONS ------------------------------------------------------
+
+#MISSING: I need Vero to identify the records where catch of 'shark' was reapportioned. 
+                # Fix it here 'Data.monthly$Reporter=Data.monthly$SCRref' and 
+#                        here '#Rectify Reporter variable defined in SQL'
+#         Sort out the issue of the new server, See 'use.new.server=TRUE'
 
 #NOTES:
   #NEW YEAR OF DATA:
@@ -147,13 +152,16 @@ do.sql.extraction=TRUE
 if(do.sql.extraction)
 {
   #SQL connections
-  #Server <-"reports.dpird.wa.gov.au"  #new ACA. Use this one once all IS issues sorted
-  Server <-"CP-SDBS0001P-19\\RESP01"  #original
+  use.new.server=TRUE #new. Use this one once all IS issues sorted
+  #use.new.server=FALSE
+  
+  if(use.new.server) Server <-"reports.dpird.wa.gov.au"  
+  if(!use.new.server) Server <-"CP-SDBS0001P-19\\RESP01"  #original 
   conn=odbcDriverConnect(connection=paste("Driver={SQL Server};server=",Server,";database=ResearchShared;trusted_connection=yes;",sep=""))
   conn1=odbcDriverConnect(connection=paste("Driver={SQL Server};server=",Server,";database=ResearchDataWarehouseQuery;trusted_connection=yes;",sep=""))
 
-  #Monthly.log <- 'ceMonthlyLog'  #new  ACA. Use ceMonthlyLog if mismatch with monthlyrawlog is resolved. See Mark/Vero
-  Monthly.log <- 'monthlyrawlog' #original
+  if(use.new.server) Monthly.log <- 'ceMonthlyLog'  #Use ceMonthlyLog if mismatch with monthlyrawlog is resolved. See Mark/Vero
+  if(!use.new.server) Monthly.log <- 'monthlyrawlog' #original
   #notes: 1. 'monthlyrawlog' is the raw monthly data always used; 
   #         'monthlylog' is the one after the reapportioning of indicator species, etc that goes to FishCube.
   #           So I need to keep using 'monthlyrawlog' for the purpose of cpue standardisation, catch reconstructions, etc
@@ -360,9 +368,17 @@ if(do.sql.extraction)
                                              SPECIES== 351000 ~ 351910,
                                              TRUE~SPECIES))
   Mesh.monthly=subset(Data.monthly,METHOD=="GN",select=c(VESSEL,FINYEAR,MONTH,BLOCKX,METHOD,MeshSizeHigh,MeshSizeLow))
+  #set to bad reporters if catch reapportioned by FishCube 
+  if('SCRref'%in%names(Data.monthly))
+  {
+    Data.monthly$Reporter=Data.monthly$SCRref
+  }else
+  {
+    Data.monthly$Reporter=NA
+  }
   Keep.these.columns_monthly=c("FINYEAR","YEAR","MONTH","VESSEL","FDAYS","METHOD","BLOCKX","BDAYS","HOURS","HOOKS","SHOTS",
                                "NETLEN","SPECIES","SNAME","LIVEWT","CONDITN","LANDWT","Factor","fishery","PORT",
-                               "RSSpeciesCode","type")
+                               "RSSpeciesCode","type","Reporter")
   Data.monthly=Data.monthly[,Keep.these.columns_monthly]
   
     #re-map vessel codes to previous codes
@@ -896,7 +912,9 @@ TARGETS=list(whiskery=17003,gummy=17001,dusky=c(18001,18003),sandbar=18007)
 N.species=length(TARGETS)
 Fix.species=c(18003,17001,17003,22999)  #species that need catch reapportioning
 HammerheadSpecies=c(19001,19002,19004)
-reset.hammerhead.to.reported=TRUE    #reset hammehead to originally reported record
+reset.hammerhead.to.reported=FALSE
+if(use.new.server) reset.hammerhead.to.reported=TRUE    #if using new server, reset hammerhead to originally reported record
+                                                        # because FishCube does an automatic reapportioning
 
 #Catch and effort misreporting  as adviced by Colin Simpfendorfer (2001) and Rory McAuley 
 Inc.per=1.05  #5% percent increase in catch and effort prior 1990                    
@@ -1015,20 +1033,15 @@ if(reset.hammerhead.to.reported)
     mutate(SNAME=ifelse(SPECIES%in%HammerheadSpecies,"Hammerhead Sharks",SNAME),
            RSSpeciesCode=ifelse(SPECIES%in%HammerheadSpecies,37019000,RSSpeciesCode),
            SPECIES=ifelse(SPECIES%in%HammerheadSpecies,19000,SPECIES))
-  
   Nms.hmrs=names(all.hammers)
   Nms.hmrs=Nms.hmrs[-match(c('LIVEWT','LANDWT'),Nms.hmrs)]
   all.hammers=all.hammers%>%
     group_by_at(Nms.hmrs)%>%
     summarise(LANDWT=sum(LANDWT,na.rm=T),
               LIVEWT=sum(LIVEWT,na.rm = T))
-  
   Data.monthly=Data.monthly%>%
     filter(!SPECIES%in%c(19000,HammerheadSpecies))
-  
   Data.monthly=rbind(Data.monthly,all.hammers%>%relocate(names(Data.monthly)))
-  
-  
 }
 
 
@@ -1059,7 +1072,7 @@ Data.monthly=Data.monthly[,-match(c("Split.Year.1","Split.Year.2"),names(Data.mo
 Data.monthly=Data.monthly[order(Data.monthly$YEAR.c,Data.monthly$MONTH,Data.monthly$VESSEL),]
 
 
-# A.4.2 Create dummy to group same return (finyear-month-vessel-method-block)             # REVIEW RORY
+# A.4.2 Create dummy to group same return (finyear-month-vessel-method-block)             
 Data.monthly$Same.return=with(Data.monthly,paste(FINYEAR,MONTH,VESSEL,METHOD,BLOCKX))
 Data.monthly$Same.return.SNo=Data.monthly$Same.return
 Data.monthly$TYPE.DATA="monthly"
@@ -1102,7 +1115,7 @@ only.liver.fin=Data.monthly%>%
                   filter(SPECIES%in%c(22997,22998))%>%
                   distinct(Same.return)%>%
                   pull(Same.return)
-if(length(only.liver.fin)>0)
+if(!use.new.server & length(only.liver.fin)>0) 
 {
   only.liver.fin=Data.monthly%>%
     filter(Same.return%in%only.liver.fin & SPECIES<50000)%>%
@@ -1169,7 +1182,7 @@ if(nrow(A)>0) Data.monthly=subset(Data.monthly,KEEP=="KEEP")
 Data.monthly$CONDITN=with(Data.monthly,
       ifelse(CONDITN%in%c("FI","LI"),"WF",CONDITN))
 if(nrow(A)>0) Data.monthly=Data.monthly[,-match("KEEP",names(Data.monthly))]
-if(length(only.liver.fin)>0) rm(A,add.only.liver.fin,only.liver.fin)
+if(!use.new.server & length(only.liver.fin)>0) rm(A,add.only.liver.fin,only.liver.fin)
 
 # A.4.3. Create copy of original file
 Data.monthly.original=Data.monthly
@@ -1311,6 +1324,9 @@ Data.monthly$LONG=floor(Data.monthly$LONG)
 #add Fishery code if missing
 Data.monthly=Data.monthly%>%
   mutate(fishery=case_when(fishery=='*'~NA_character_,
+                           fishery=='WCDGDL'~'WCGL',
+                           fishery=='JASDGDL' & LONG>=116.5~'SGL2',
+                           fishery=='JASDGDL' & LONG<116.5~'SGL1',
                            fishery=='SGL' & LONG>=116.5~'SGL2',
                            fishery=='SGL' & LONG<116.5~'SGL1',
                            TRUE~fishery),
@@ -1381,8 +1397,8 @@ fn.ck.spatial(d=Data.monthly%>%
                        y = mean(c(NorthWestPointGPSLatitude, SouthEastPointGPSLatitude))),
               Depth.data=Bathymetry,
               BLK.size=5)
-ggsave(handl_OneDrive("Data/Catch and Effort/Check_these_vars/Monthly/Map_blocks_monthly.tiff"),
-       width = 14,height = 10,compression = "lzw")
+# ggsave(handl_OneDrive("Data/Catch and Effort/Check_these_vars/Monthly/Map_blocks_monthly.tiff"),
+#        width = 14,height = 10,compression = "lzw")
 
 # A.9. Create Monthly effort dataset   
 Data.monthly$NETLEN=with(Data.monthly,ifelse(METHOD%in%c("LL","HL","DL")&NETLEN>0,NA,NETLEN))
@@ -1459,8 +1475,6 @@ Data.monthly=Data.monthly%>%
                 mutate(Factor=ifelse(grepl('Skates',SNAME) & is.na(Factor) & CONDITN%in%c('HD','WD','WF'),1.59,Factor),
                        LIVEWT=ifelse(grepl('Skates',SNAME) & is.na(LIVEWT) & CONDITN%in%c('HD','WD','WF'),LANDWT*Factor,
                                      LIVEWT))
-Data.monthly$Reporter=NA
-
 #Check for 0 or NA livewt records
 a=Data.monthly%>%filter(LANDWT==0 | LIVEWT==0 | is.na(LANDWT) | is.na(LIVEWT))%>%
   dplyr::select(CONDITN,Factor,SNAME,fishery,LIVEWT,LANDWT)%>%
@@ -1594,7 +1608,7 @@ if(do.financial.ass=="YES")
   
 }
 
-#Extract individual landwt 
+#Extract individual landwt not just trip landed weight
 Data.daily=Data.daily%>%
             mutate(landwt=livewt/(factor))
 
@@ -2865,7 +2879,7 @@ names(Data.daily)=sort(c(names(Data.monthly),"day","block10"))
 Data.daily.agg=aggregate(cbind(LANDWT,LIVEWT)~FINYEAR+YEAR+MONTH+VESSEL+METHOD+BLOCKX+blockxFC+
                            SPECIES+SNAME+CONDITN+Factor+YEAR.c+LAT+LONG+Same.return+
                            TYPE.DATA+Bioregion+zone+Estuary+RSCommonName+RSSpeciesId+
-                           FisheryZone+FisheryCode+PORT,
+                           FisheryZone+FisheryCode+PORT+Reporter,
                          data=Data.daily[,-match(c("day","block10"),names(Data.daily))]%>%
                            mutate(LANDWT=ifelse(is.na(LANDWT),1e9,LANDWT),
                                   CONDITN=ifelse(is.na(CONDITN),'unknown',CONDITN),
@@ -2892,16 +2906,24 @@ Data.daily.agg=Data.daily.agg%>%rename(Landing.Port=PORT)
 
 #Check for 0 or NA livewt records
 a=Data.daily%>%filter(LANDWT==0 | LIVEWT==0 | is.na(LANDWT) | is.na(LIVEWT))%>%
-  dplyr::select(Same.return.SNo,CONDITN,Factor,nfish,fishery,LIVEWT,LANDWT,SNAME)%>%
   filter(!SNAME=='Nil Fish Caught')%>%
   filter(is.na(LIVEWT) | LIVEWT==0)
 if(nrow(a)>0)
 {
   par(bg=2)
   plot.new()
-  mtext(paste("there are records",nrow(a)),3,cex=3,col="white")
+  mtext(paste("there are",nrow(a),"records"),3,cex=3,col="white")
   mtext("with no weight",3,-2,cex=3,col="white")
+  mtext("& SNAME is not Nil Fish Caught",3,-4,cex=2,col="white")
   par(bg="white")
+  write.csv(a%>%
+              mutate(SNo=substr(Same.return.SNo,1,2),
+                     DSNo=substr(Same.return.SNo,3,14),
+                     TSNo=substr(Same.return.SNo,16,27))%>%
+              dplyr::select(VESSEL,FINYEAR,SNo,DSNo,TSNo,block10,fishery,Landing.Port,LANDWT,LIVEWT,nfish,
+                            RSCommonName,RSSpeciesCode,SPECIES,CONDITN)%>%
+              arrange(VESSEL,TSNo,FINYEAR),"C:/Users/myb/OneDrive - Department of Primary Industries And Regional Development/Desktop/catch with no nfish, landwt or livewt but species is not nil catch.csv",row.names = F)
+  
 }
 
 #SECTION C. ---- DATA MANIPULATION - CATCH MERGING AND CORRECTIONS ----
@@ -2927,7 +2949,11 @@ for (i in 1:length(Factor.to.charact))
 {
   id=match(Factor.to.charact[i],names(Data.monthly))
   Data.monthly[,id]=as.character(Data.monthly[,id])
+  
+  id=match(Factor.to.charact[i],names(Data.daily.agg))
   Data.daily.agg[,id]=as.character(Data.daily.agg[,id])
+  
+  id=match(Factor.to.charact[i],names(Data.daily))
   Data.daily[,id]=as.character(Data.daily[,id])
 }
 for (i in 1:length(Effort.Factor.to.charact))
@@ -3281,9 +3307,21 @@ if(Reapportion.daily=="YES")
   Catch.prop.sandbar.daily=fun.prop(Data.daily,18007)
   Catch.prop.other.daily=fun.prop(Data.daily,Sharks.other)  
 }
-Catch.prop.school.daily=fun.prop(Data.daily,17008)
+Catch.prop.school.daily=fun.prop(Data.daily,17008) 
 Catch.prop.dogfish.daily=fun.prop(Data.daily,20000)
 
+#Rectify Reporter variable defined in SQL 
+table(Data.monthly$FINYEAR,Data.monthly$Reporter,useNA = 'ifany')
+Data.monthly=Data.monthly%>%
+  mutate(Reporter=case_when(Reporter%in%c('SCR20230823 Part1|','SCR20230823|',
+                                          "SCR20230823|SCR20240807|",
+                                          "SCR20220211|SCR20230823 Part1|",
+                                          "SCR20220211|SCR20230823|",
+                                          "SCR20220211|SCR20230823|SCR20240807|") & SPECIES==19000 ~ NA_character_,
+                            Reporter=="SCR20230227|" & SPECIES==25000 ~ NA_character_,
+                            Reporter=="SCR20220211|SCR20240810|" & SPECIES==18023 ~ NA_character_,
+                            Reporter=="|SCR20200602|" & SPECIES%in%c(26000,26999) ~ NA_character_,
+                            TRUE~Reporter))
 
 
   # Define vessel reporting category
@@ -3367,17 +3405,18 @@ Data.daily=Data.daily%>%left_join(Vessel.Report.daily,by=c("Same.return"))
 #Data.daily=merge(Data.daily,Vessel.Report.daily,by="Same.return",all.x=T)
 
   # Separate vessels into 'good' and 'bad' reporters
-Data.monthly$Reporter=NA
-
-
 #C.7.2 Northern split                               #Rory's rules 3c      
   #monthly
-Data.monthly$Reporter=with(Data.monthly,
-  ifelse((LAT<=(-26) & LAT>(-32) & LONG<125 & TYPE.DATA=="monthly" & METHOD=="GN" & SPECIES%in%c(22999,Indicator.species)) &
-           (Prop.Other.Ves.ID==1|(Prop.Whi.Ves.ID==0 | Prop.Dus.Ves.ID==0)),"bad","good"))
+if(Monthly.log=='monthlyrawlog')
+{
+  Data.monthly$Reporter=with(Data.monthly,
+                             ifelse((LAT<=(-26) & LAT>(-32) & LONG<125 & TYPE.DATA=="monthly" & METHOD=="GN" & SPECIES%in%c(22999,Indicator.species)) &
+                                      (Prop.Other.Ves.ID==1|(Prop.Whi.Ves.ID==0 | Prop.Dus.Ves.ID==0)),"bad","good"))
+  
+}
 
   #daily
-if(Reapportion.daily=="YES")
+if(Reapportion.daily=="YES" & Monthly.log=='monthlyrawlog')
 {
   Data.daily$Reporter=with(Data.daily,
        ifelse((LAT<=(-26) & LAT>(-32) & LONG<125 & METHOD=="GN" & SPECIES%in%c(22999,Indicator.species)) &
@@ -3387,21 +3426,25 @@ if(Reapportion.daily=="YES")
 
 #C.7.3 SW split                                     #Rory's rules 3d                
   #monthly
-Data.monthly$Reporter=with(Data.monthly,
-  ifelse((LAT<=(-32) & LONG<=125 & TYPE.DATA=="monthly" & 
-            METHOD=="GN" & 
-            SPECIES%in%c(22999,Indicator.species)) & 
-    (Prop.Other.Ves.ID==1|
-    (Prop.Whi.Ves.ID==0 & Prop.Dus.Ves.ID==0 & Prop.Gum.Ves.ID==0)|
-    (Prop.Dus.Ves.ID==0 & Prop.Gum.Ves.ID==0)|
-    (Prop.Dus.Ves.ID==0 & Prop.Whi.Ves.ID==0)|
-    (Prop.Gum.Ves.ID==0) & Prop.Whi.Ves.ID==0 |
-    (Prop.Dus.Ves.ID>0 & Prop.Dus.Ves.ID==Prop.Gum.Ves.ID)|
-    (Prop.Dus.Ves.ID>0 & Prop.Dus.Ves.ID==Prop.Whi.Ves.ID)|
-    (Prop.Gum.Ves.ID>0 & Prop.Gum.Ves.ID==Prop.Whi.Ves.ID)),"bad",Reporter))
+if(Monthly.log=='monthlyrawlog')
+{
+  Data.monthly$Reporter=with(Data.monthly,
+                             ifelse((LAT<=(-32) & LONG<=125 & TYPE.DATA=="monthly" & 
+                                       METHOD=="GN" & 
+                                       SPECIES%in%c(22999,Indicator.species)) & 
+                                      (Prop.Other.Ves.ID==1|
+                                         (Prop.Whi.Ves.ID==0 & Prop.Dus.Ves.ID==0 & Prop.Gum.Ves.ID==0)|
+                                         (Prop.Dus.Ves.ID==0 & Prop.Gum.Ves.ID==0)|
+                                         (Prop.Dus.Ves.ID==0 & Prop.Whi.Ves.ID==0)|
+                                         (Prop.Gum.Ves.ID==0) & Prop.Whi.Ves.ID==0 |
+                                         (Prop.Dus.Ves.ID>0 & Prop.Dus.Ves.ID==Prop.Gum.Ves.ID)|
+                                         (Prop.Dus.Ves.ID>0 & Prop.Dus.Ves.ID==Prop.Whi.Ves.ID)|
+                                         (Prop.Gum.Ves.ID>0 & Prop.Gum.Ves.ID==Prop.Whi.Ves.ID)),"bad",Reporter))
+  
+}
 
   #daily
-if(Reapportion.daily=="YES")
+if(Reapportion.daily=="YES" & Monthly.log=='monthlyrawlog')
 {
   Data.daily$Reporter=with(Data.daily,
           ifelse((LAT<=(-32) & LONG<=125 & METHOD=="GN" & SPECIES%in%c(22999,Indicator.species)) & 
@@ -3418,15 +3461,19 @@ if(Reapportion.daily=="YES")
 
 #C.7.4 SE split                                      #Rory's rules 3e               
   #monthly
-Data.monthly$Reporter=with(Data.monthly,
-          ifelse((LAT<=(-26) & LONG>125 & 
-        TYPE.DATA=="monthly" & METHOD=="GN"  & 
-        SPECIES%in%c(22999,Indicator.species)) & 
-            (Prop.Other.Ves.ID==1|
-            (Prop.Gum.Ves.ID==0 | Prop.Sch.Ves.ID==0)),"bad",Reporter))
+if(Monthly.log=='monthlyrawlog')
+{
+  Data.monthly$Reporter=with(Data.monthly,
+                             ifelse((LAT<=(-26) & LONG>125 & 
+                                       TYPE.DATA=="monthly" & METHOD=="GN"  & 
+                                       SPECIES%in%c(22999,Indicator.species)) & 
+                                      (Prop.Other.Ves.ID==1|
+                                         (Prop.Gum.Ves.ID==0 | Prop.Sch.Ves.ID==0)),"bad",Reporter))
+  
+}
 
   #daily
-if(Reapportion.daily=="YES")
+if(Reapportion.daily=="YES" & Monthly.log=='monthlyrawlog')
 {
   Data.daily$Reporter=with(Data.daily,
        ifelse((LAT<=(-26) & LONG>125 & METHOD=="GN"  & SPECIES%in%c(22999,Indicator.species)) & 
@@ -8910,7 +8957,12 @@ Exprt.list=list(
 
 if(exists('TEPS.current'))Exprt.list$TEPS.current=TEPS.current
 if(exists('PRICES'))Exprt.list$PRICES=PRICES
-
+do.dis=FALSE
+if(Monthly.log=='ceMonthlyLog' & do.dis)  
+{
+  dont.export=grep(paste(c('Data.monthly','Effort.monthly'),collapse='|'),names(Exprt.list))
+  Exprt.list=Exprt.list[-dont.export]
+}
 for(i in 1:length(Exprt.list)) fwrite(Exprt.list[[i]],paste(names(Exprt.list)[i],".csv",sep=""),row.names=F)
 rm(Exprt.list)
 
