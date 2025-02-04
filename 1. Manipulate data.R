@@ -3702,7 +3702,7 @@ if(Reapportion.daily=="YES")
 #C.7.7  Update good split catches                       #Rory's rules 4e                          
 #If valid average month-year-block proportions available, update "bad" records of Dusky, 
 # Gummy and whiskery with this
-
+#ACA
     #-monthly-
 Data.monthly$LIVEWT.reap=with(Data.monthly,ifelse(LAT<=(-26),LIVEWT,NA))
 
