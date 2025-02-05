@@ -1,6 +1,6 @@
 # ---------- SHARK GILLNET AND LONGLINE FISHERY CATCH AND EFFORT MANIPULATIONS ------------------------------------------------------
 
-#MISSING: I need Vero to identify the records where catch of 'shark' was reapportioned. 
+#MISSING: I need Vero to identify the records where catch of 'shark' was reapportioned so I can flag as 'bad' reported. 
                 # Fix it here 'Data.monthly$Reporter=Data.monthly$SCRref' and 
 #                        here '#Rectify Reporter variable defined in SQL'
 #         Sort out the issue of the new server, See 'use.new.server=TRUE'
@@ -379,6 +379,13 @@ if(do.sql.extraction)
   Keep.these.columns_monthly=c("FINYEAR","YEAR","MONTH","VESSEL","FDAYS","METHOD","BLOCKX","BDAYS","HOURS","HOOKS","SHOTS",
                                "NETLEN","SPECIES","SNAME","LIVEWT","CONDITN","LANDWT","Factor","fishery","PORT",
                                "RSSpeciesCode","type","Reporter")
+  if('lat'%in%names(Data.monthly))
+  {
+    Keep.these.columns_monthly=c(Keep.these.columns_monthly,"lat","long")
+    Data.monthly=Data.monthly%>%
+                    mutate(long=ifelse(nchar(long)<3,100+long,long))
+  }
+    
   Data.monthly=Data.monthly[,Keep.these.columns_monthly]
   
     #re-map vessel codes to previous codes
@@ -538,7 +545,12 @@ if(do.sql.extraction)
   Data.daily_other=do.call(rbind,Data.daily_other)
   Data.monthly_other=compact(Data.monthly_other)
   Data.monthly_other=do.call(rbind,Data.monthly_other)
-
+  if('lat'%in%names(Data.monthly_other))
+  {
+    Data.monthly_other=Data.monthly_other%>%  
+      mutate(lat=ifelse(is.na(lat),-as.numeric(substr(BLOCKX,1,2)),lat),
+             long=ifelse(is.na(long),as.numeric(substr(BLOCKX,3,5)),long))
+  }
   #add other' to 'main databases
   Data.daily=rbind(Data.daily,Data.daily_other[,match(names(Data.daily),names(Data.daily_other))]) 
   Data.monthly=rbind(Data.monthly,Data.monthly_other[,match(names(Data.monthly),names(Data.monthly_other))])
@@ -1176,7 +1188,7 @@ if(!do.sql.extraction)
     filter(!species==22998)    #remove fins as already part of 'shark other'
 }
 
-#b. now remove fins and livers
+#b. now remove fins and livers 
 Data.monthly=subset(Data.monthly,!(SPECIES%in%c(22997,22998)))
 if(nrow(A)>0) Data.monthly=subset(Data.monthly,KEEP=="KEEP")
 Data.monthly$CONDITN=with(Data.monthly,
@@ -1186,8 +1198,13 @@ if(!use.new.server & length(only.liver.fin)>0) rm(A,add.only.liver.fin,only.live
 
 # A.4.3. Create copy of original file
 Data.monthly.original=Data.monthly
-Data.monthly.original$LAT=-as.numeric(substr(Data.monthly.original$BLOCKX,1,2))
-Data.monthly.original$LONG=100+as.numeric(substr(Data.monthly.original$BLOCKX,3,4))
+if(!'lat'%in%colnames(Data.monthly.original)) Data.monthly.original=Data.monthly.original%>%mutate(lat=NA,long=NA)
+Data.monthly.original=Data.monthly.original%>%
+                        rename(LAT=lat,
+                               LONG=long)%>%
+                        mutate(LAT=-abs(LAT),
+                               LAT=ifelse(is.na(LAT),-as.numeric(substr(BLOCKX,1,2)),LAT),
+                               LONG=ifelse(is.na(LONG),100+as.numeric(substr(BLOCKX,3,4)),LONG))
 
 fn.chk.ktch=function(d1,d2,VAR1,VAR2)
 {
@@ -1256,36 +1273,43 @@ Data.monthly=Data.monthly%>%
 #           select(BLOCKX,LAT,LONG)%>%
 #           filter(BLOCKX%in%unique(Data.monthly$BLOCKX))
 
-Data.monthly$LAT=-as.numeric(substr(Data.monthly$BLOCKX,1,2))
-Data.monthly$LONG=100+as.numeric(substr(Data.monthly$BLOCKX,3,4))
-
+if(!'lat'%in%colnames(Data.monthly)) Data.monthly=Data.monthly%>%mutate(lat=NA,long=NA)
+Data.monthly=Data.monthly%>%
+              rename(LAT=lat,
+                     LONG=long)%>%
+              mutate(LAT=-abs(LAT),
+                     LAT=ifelse(is.na(LAT),-as.numeric(substr(BLOCKX,1,2)),LAT),
+                     LONG=ifelse(is.na(LONG),100+as.numeric(substr(BLOCKX,3,4)),LONG))
 Data.monthly$BLOCKX=Data.monthly$blockxFC   #reset block
 
 # adjust special cells to actual lat and long                                              
 #note: use ceiling for lat and floor for long to allocate lat and long of north-west corner
-Data.monthly$LAT=with(Data.monthly,ifelse(BLOCKX%in%c(96021),-25,
-                 ifelse(BLOCKX%in%c(96022,96023),-26,
-                ifelse(BLOCKX%in%c(97011),-27,
-                ifelse(BLOCKX%in%c(97012,97013),-28,       
-                ifelse(BLOCKX%in%c(97014,97015),-29,
-                ifelse(BLOCKX%in%c(96010),-33,
-                ifelse(BLOCKX%in%c(96000),-33,
-                ifelse(BLOCKX%in%c(96030,95050,95090,95040),-35,
-                ifelse(BLOCKX%in%c(85030),-34.4586,
-                ifelse(BLOCKX%in%c(85050),-34.2853,
-                ifelse(BLOCKX%in%c(85080),-33.917,
-                ifelse(BLOCKX%in%c(85110),-34.28,
-                ifelse(BLOCKX%in%c(95010),-31.9554,
-                ifelse(BLOCKX%in%c(95020),-32.5167,
-                ifelse(BLOCKX%in%c(95030),-33.3503,
-                ifelse(BLOCKX%in%c(95060),-34.9953,
-                ifelse(BLOCKX%in%c(95070),-34.9731,
-                ifelse(BLOCKX%in%c(95080),-34.9278,
-                ifelse(BLOCKX%in%c(85990),NA,
-                ifelse(BLOCKX==85010,-34.06976,
-                ifelse(BLOCKX%in%c(85130),-34.9278,LAT
+Data.monthly$LAT=with(Data.monthly,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(96021),-25,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(96022,96023),-26,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(97011),-27,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(97012,97013),-28,       
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(97014,97015),-29,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(96010),-33,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(96000),-33,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(96030,95050,95090,95040),-35,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85030),-34.4586,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85050),-34.2853,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85080),-33.917,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85110),-34.28,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(95010),-31.9554,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(95020),-32.5167,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(95030),-33.3503,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(95060),-34.9953,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(95070),-34.9731,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(95080),-34.9278,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85990),NA,
+                ifelse(!is.na(BLOCKX) & BLOCKX==85010,-34.06976,
+                ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85130),-34.9278,LAT
                 ))))))))))))))))))))))
-
+Data.monthly=Data.monthly%>%
+                mutate(LAT=ifelse(is.na(LAT)& PORT=="ALBANY" & Estuary=='YES',-35.1,LAT),
+                       LONG=ifelse(is.na(LONG)& PORT=="ALBANY" & Estuary=='YES',117.8,LONG))
 Data.monthly$LAT=ceiling(Data.monthly$LAT)
 
 if(min(Data.monthly$LAT,na.rm=T)<(-40))
@@ -1296,27 +1320,28 @@ if(min(Data.monthly$LAT,na.rm=T)<(-40))
 }
   
 
-Data.monthly$LONG=with(Data.monthly,ifelse(BLOCKX%in%c(96021),113,
-                  ifelse(BLOCKX%in%c(96022,96023),113,
-                  ifelse(BLOCKX%in%c(97011),113,
-                  ifelse(BLOCKX%in%c(97012,97013),113,       
-                  ifelse(BLOCKX%in%c(97014,97015),113,
-                  ifelse(BLOCKX%in%c(96010),115,
-                  ifelse(BLOCKX%in%c(96000),115,
-                  ifelse(BLOCKX%in%c(96030,95050,95090,95040),118,
-                  ifelse(BLOCKX%in%c(85030),118.8897,
-                  ifelse(BLOCKX%in%c(85050),119.4819,
-                  ifelse(BLOCKX%in%c(85080),120.050,
-                  ifelse(BLOCKX%in%c(85110),115.18,
-                  ifelse(BLOCKX%in%c(95010),115.8585,
-                  ifelse(BLOCKX%in%c(95020),115.7167,
-                  ifelse(BLOCKX%in%c(95030),115.6494,
-                  ifelse(BLOCKX%in%c(95060),117.4117,
-                  ifelse(BLOCKX%in%c(95070),116.9744,
-                  ifelse(BLOCKX%in%c(95080),116.4489,
-                  ifelse(BLOCKX%in%c(85990),NA,
-                  ifelse(BLOCKX==85010,115.1438 ,
-                  ifelse(BLOCKX%in%c(85130),116.4489,LONG
+Data.monthly$LONG=with(Data.monthly,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(96021),113,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(96022,96023),113,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(97011),113,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(97012,97013),113,       
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(97014,97015),113,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(96010),115,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(96000),115,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(96030,95050,95090,95040),118,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85030),118.8897,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85050),119.4819,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85080),120.050,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85110),115.18,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(95010),115.8585,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(95020),115.7167,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(95030),115.6494,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(95060),117.4117,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(95070),116.9744,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(95080),116.4489,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85990),NA,
+                  ifelse(!is.na(BLOCKX) & BLOCKX==85010,115.1438 ,
+                  ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85130),116.4489,LONG
                   ))))))))))))))))))))))
 
 Data.monthly$LONG=floor(Data.monthly$LONG)
@@ -1397,8 +1422,8 @@ fn.ck.spatial(d=Data.monthly%>%
                        y = mean(c(NorthWestPointGPSLatitude, SouthEastPointGPSLatitude))),
               Depth.data=Bathymetry,
               BLK.size=5)
-# ggsave(handl_OneDrive("Data/Catch and Effort/Check_these_vars/Monthly/Map_blocks_monthly.tiff"),
-#        width = 14,height = 10,compression = "lzw")
+ ggsave(handl_OneDrive("Data/Catch and Effort/Check_these_vars/Monthly/Map_blocks_monthly.tiff"),
+        width = 14,height = 10,compression = "lzw")
 
 # A.9. Create Monthly effort dataset   
 Data.monthly$NETLEN=with(Data.monthly,ifelse(METHOD%in%c("LL","HL","DL")&NETLEN>0,NA,NETLEN))
@@ -1469,8 +1494,6 @@ if(get.Mats.data.2023)
 }
 
 # Add Factor if not available but landwt and conditn available
-#a=Data.monthly%>%filter(is.na(LIVEWT))%>%dplyr::select(Factor,CONDITN,LANDWT,LIVEWT,SNAME)
-#a
 Data.monthly=Data.monthly%>%
                 mutate(Factor=ifelse(grepl('Skates',SNAME) & is.na(Factor) & CONDITN%in%c('HD','WD','WF'),1.59,Factor),
                        LIVEWT=ifelse(grepl('Skates',SNAME) & is.na(LIVEWT) & CONDITN%in%c('HD','WD','WF'),LANDWT*Factor,
@@ -1965,50 +1988,50 @@ Data.daily$TYPE.DATA="daily"
 
   #Fix estuaries lats and longs 
 Data.daily$LongDeg=with(Data.daily,
-                        ifelse(blockx%in%c(96021) & LatDeg>60,113,
-                        ifelse(blockx%in%c(96022,96023) & LatDeg,113,
-                        ifelse(blockx%in%c(97011) & LatDeg,113,
-                        ifelse(blockx%in%c(97012,97013) & LatDeg,113,       
-                        ifelse(blockx%in%c(97014,97015) & LatDeg,113,
-                        ifelse(blockx%in%c(96010) & LatDeg,115,
-                        ifelse(blockx%in%c(96000) & LatDeg,115,
-                        ifelse(blockx%in%c(96030,95050,95090,95040) & LatDeg,118,
-                        ifelse(blockx%in%c(85030) & LatDeg,118.8897,
-                        ifelse(blockx%in%c(85050) & LatDeg,119.4819,
-                        ifelse(blockx%in%c(85080) & LatDeg,120.050,
-                        ifelse(blockx%in%c(95010) & LatDeg,115.8585,
-                        ifelse(blockx%in%c(95020) & LatDeg,115.7167,
-                        ifelse(blockx%in%c(95030) & LatDeg,115.6494,
-                        ifelse(blockx%in%c(95060) & LatDeg,117.4117,
-                        ifelse(blockx%in%c(95070) & LatDeg,116.9744,
-                        ifelse(blockx%in%c(95080) & LatDeg,116.4489,
-                        ifelse(blockx%in%c(85990) & LatDeg,NA,
-                        ifelse(blockx==85010 & LatDeg,115.1438,
-                        ifelse(blockx%in%c(85130) & LatDeg,116.4489,
+                        ifelse(!is.na(blockx) & blockx%in%c(96021) & LatDeg>60,113,
+                        ifelse(!is.na(blockx) & blockx%in%c(96022,96023) & LatDeg,113,
+                        ifelse(!is.na(blockx) & blockx%in%c(97011) & LatDeg,113,
+                        ifelse(!is.na(blockx) & blockx%in%c(97012,97013) & LatDeg,113,       
+                        ifelse(!is.na(blockx) & blockx%in%c(97014,97015) & LatDeg,113,
+                        ifelse(!is.na(blockx) & blockx%in%c(96010) & LatDeg,115,
+                        ifelse(!is.na(blockx) & blockx%in%c(96000) & LatDeg,115,
+                        ifelse(!is.na(blockx) & blockx%in%c(96030,95050,95090,95040) & LatDeg,118,
+                        ifelse(!is.na(blockx) & blockx%in%c(85030) & LatDeg,118.8897,
+                        ifelse(!is.na(blockx) & blockx%in%c(85050) & LatDeg,119.4819,
+                        ifelse(!is.na(blockx) & blockx%in%c(85080) & LatDeg,120.050,
+                        ifelse(!is.na(blockx) & blockx%in%c(95010) & LatDeg,115.8585,
+                        ifelse(!is.na(blockx) & blockx%in%c(95020) & LatDeg,115.7167,
+                        ifelse(!is.na(blockx) & blockx%in%c(95030) & LatDeg,115.6494,
+                        ifelse(!is.na(blockx) & blockx%in%c(95060) & LatDeg,117.4117,
+                        ifelse(!is.na(blockx) & blockx%in%c(95070) & LatDeg,116.9744,
+                        ifelse(!is.na(blockx) & blockx%in%c(95080) & LatDeg,116.4489,
+                        ifelse(!is.na(blockx) & blockx%in%c(85990) & LatDeg,NA,
+                        ifelse(!is.na(blockx) & blockx==85010 & LatDeg,115.1438,
+                        ifelse(!is.na(blockx) & blockx%in%c(85130) & LatDeg,116.4489,
                                LongDeg)))))))))))))))))))))
 Data.daily$LongDeg=floor(Data.daily$LongDeg) 
 
 Data.daily$LatDeg=with(Data.daily,  
-                  ifelse(blockx%in%c(96021) & LatDeg>60,25,
-                  ifelse(blockx%in%c(96022,96023) & LatDeg>60,26,
-                  ifelse(blockx%in%c(97011) & LatDeg>60,27,
-                  ifelse(blockx%in%c(97012,97013) & LatDeg>60,28,       
-                  ifelse(blockx%in%c(97014,97015) & LatDeg>60,29,
-                  ifelse(blockx%in%c(96010) & LatDeg>60,33,
-                  ifelse(blockx%in%c(96000) & LatDeg>60,33,
-                  ifelse(blockx%in%c(96030,95050,95090,95040) & LatDeg>60,35,
-                  ifelse(blockx%in%c(85030) & LatDeg>60,34.4586,
-                  ifelse(blockx%in%c(85050) & LatDeg>60,34.2853,
-                  ifelse(blockx%in%c(85080) & LatDeg>60,33.917,
-                  ifelse(blockx%in%c(95010) & LatDeg>60,31.9554,
-                  ifelse(blockx%in%c(95020) & LatDeg>60,32.5167,
-                  ifelse(blockx%in%c(95030) & LatDeg>60,33.3503,
-                  ifelse(blockx%in%c(95060) & LatDeg>60,34.9953,
-                  ifelse(blockx%in%c(95070) & LatDeg>60,34.9731,
-                  ifelse(blockx%in%c(95080) & LatDeg>60,34.9278,
-                  ifelse(blockx%in%c(85990) & LatDeg>60,NA,
-                  ifelse(blockx==85010 & LatDeg>60,34.06976,
-                  ifelse(blockx%in%c(85130) & LatDeg>60,34.9278,
+                  ifelse(!is.na(blockx) & blockx%in%c(96021) & LatDeg>60,25,
+                  ifelse(!is.na(blockx) & blockx%in%c(96022,96023) & LatDeg>60,26,
+                  ifelse(!is.na(blockx) & blockx%in%c(97011) & LatDeg>60,27,
+                  ifelse(!is.na(blockx) & blockx%in%c(97012,97013) & LatDeg>60,28,       
+                  ifelse(!is.na(blockx) & blockx%in%c(97014,97015) & LatDeg>60,29,
+                  ifelse(!is.na(blockx) & blockx%in%c(96010) & LatDeg>60,33,
+                  ifelse(!is.na(blockx) & blockx%in%c(96000) & LatDeg>60,33,
+                  ifelse(!is.na(blockx) & blockx%in%c(96030,95050,95090,95040) & LatDeg>60,35,
+                  ifelse(!is.na(blockx) & blockx%in%c(85030) & LatDeg>60,34.4586,
+                  ifelse(!is.na(blockx) & blockx%in%c(85050) & LatDeg>60,34.2853,
+                  ifelse(!is.na(blockx) & blockx%in%c(85080) & LatDeg>60,33.917,
+                  ifelse(!is.na(blockx) & blockx%in%c(95010) & LatDeg>60,31.9554,
+                  ifelse(!is.na(blockx) & blockx%in%c(95020) & LatDeg>60,32.5167,
+                  ifelse(!is.na(blockx) & blockx%in%c(95030) & LatDeg>60,33.3503,
+                  ifelse(!is.na(blockx) & blockx%in%c(95060) & LatDeg>60,34.9953,
+                  ifelse(!is.na(blockx) & blockx%in%c(95070) & LatDeg>60,34.9731,
+                  ifelse(!is.na(blockx) & blockx%in%c(95080) & LatDeg>60,34.9278,
+                  ifelse(!is.na(blockx) & blockx%in%c(85990) & LatDeg>60,NA,
+                  ifelse(!is.na(blockx) & blockx==85010 & LatDeg>60,34.06976,
+                  ifelse(!is.na(blockx) & blockx%in%c(85130) & LatDeg>60,34.9278,
                          LatDeg)))))))))))))))))))))
 Data.daily$LatDeg=floor(Data.daily$LatDeg)
 
@@ -2061,6 +2084,10 @@ Data.daily$LongDeg=with(Data.daily,ifelse(blockx<35600 & LongDeg==0,100+as.numer
 Data.daily$LatDeg=with(Data.daily,ifelse(vessel=="B 067" & blockx%in%c(35610,35630,35640,35650) & LatDeg==0,35,LatDeg))  
 Data.daily$LongDeg=with(Data.daily,ifelse(vessel=="B 067" & blockx%in%c(35610,35630,35640,35650) & LongDeg==0,116,LongDeg))
 
+Data.daily=Data.daily%>%
+  mutate(LatDeg=ifelse(is.na(LatDeg) & fishery=="PFT",-19.5,LatDeg),
+         LongDeg=ifelse(is.na(LongDeg) & fishery=="PFT",118,LongDeg))
+
 #Add lat and long if NA for calculating zone (allocate to top left corner)
 Data.daily=Data.daily%>%
   mutate(LatDeg=ifelse(is.na(LatDeg) & !is.na(LatFC), as.integer(LatFC), LatDeg),
@@ -2068,15 +2095,16 @@ Data.daily=Data.daily%>%
          LongDeg=ifelse(is.na(LongDeg) & !is.na(LongFC), as.integer(LongFC) , LongDeg),
          LongMin=ifelse(is.na(LongMin) & !is.na(LongFC), 60*(as.numeric(LongFC)-floor(as.numeric(LongFC))), LongMin))
 
-Data.daily$LatDeg=with(Data.daily,ifelse(is.na(LatDeg),as.numeric(substr(block10,1,2)),LatDeg))  
-Data.daily$LatMin=with(Data.daily,ifelse(is.na(LatMin),10*as.numeric(substr(block10,3,3)),LatMin))  
-Data.daily$LongDeg=with(Data.daily,ifelse(is.na(LongDeg),100+as.numeric(substr(block10,4,5)),LongDeg))
-Data.daily$LongMin=with(Data.daily,ifelse(is.na(LongMin),10*as.numeric(substr(block10,6,6)),LongMin))
+Data.daily$LatDeg=with(Data.daily,ifelse(is.na(LatDeg)& !is.na(block10),as.numeric(substr(block10,1,2)),LatDeg))  
+Data.daily$LatMin=with(Data.daily,ifelse(is.na(LatMin)& !is.na(block10),10*as.numeric(substr(block10,3,3)),LatMin))  
+Data.daily$LongDeg=with(Data.daily,ifelse(is.na(LongDeg)& !is.na(block10),100+as.numeric(substr(block10,4,5)),LongDeg))
+Data.daily$LongMin=with(Data.daily,ifelse(is.na(LongMin)& !is.na(block10),10*as.numeric(substr(block10,6,6)),LongMin))
 
 Data.daily$LatMin=with(Data.daily,ifelse(is.na(LatMin) & is.na(block10),NA,LatMin))
 Data.daily$LongMin=with(Data.daily,ifelse(is.na(LongMin) & is.na(block10),NA,LongMin))
 
 Data.daily$blockx=Data.daily$blockxFC   #reset blockx to original
+Data.daily$LatDeg=-abs(Data.daily$LatDeg)
 
   #Fix zones                                                                           
 Data.daily$zone=as.character(Data.daily$zone)
@@ -2760,7 +2788,7 @@ Data.daily=Data.daily[order(Data.daily$year,Data.daily$month,Data.daily$vessel),
 Data.daily$LatDeg=abs(Data.daily$LatDeg)
 Data.daily$LatDeg=Data.daily$LatDeg+(Data.daily$LatMin/60)
 Data.daily$LongDeg=Data.daily$LongDeg+(Data.daily$LongMin/60)
-Data.daily$LatDeg=-Data.daily$LatDeg
+Data.daily$LatDeg=-abs(Data.daily$LatDeg)
 
 #Fix some bioregions
 Data.daily$Bioregion.old=Data.daily$Bioregion
@@ -2798,7 +2826,7 @@ if(First.run=='YES')
 }
 
 
-#Fix weights with NA weight or zero weight but with nfish
+#Amend weights with NA weight or zero weight but with nfish
 #note: This is needed to account for population extractions but not used for cpue stand. 
 #      Criteria:  Use species average for the block; if not available, use the overall average for the species
 Avrg.w8ts_daily_spcies.blk10=Data.daily%>%
@@ -2852,8 +2880,6 @@ names(Daily.nfish.agg)=c("FINYEAR","YEAR","MONTH","VESSEL","METHOD",
 # B.5. sort columns and drop some variables
 Data.daily$LAT=-as.numeric(substr(abs(Data.daily$LatDeg),1,2))  
 Data.daily$LONG=as.numeric(substr(Data.daily$LongDeg,1,3))
-#Data.daily$LatDeg=Data.daily$LAT
-#Data.daily$LongDeg=Data.daily$LONG
 
 Data.daily.depth.max=subset(Data.daily,select=c(Same.return.SNo,depthMax))
 Data.daily=Data.daily[,-match(c("depthMax"),names(Data.daily))]
@@ -2915,6 +2941,7 @@ if(nrow(a)>0)
   mtext(paste("there are",nrow(a),"records"),3,cex=3,col="white")
   mtext("with no weight",3,-2,cex=3,col="white")
   mtext("& SNAME is not Nil Fish Caught",3,-4,cex=2,col="white")
+  mtext(paste("they are",paste(unique(a$RSCommonName),collapse=',')),3,-6,cex=2,col="white")
   par(bg="white")
   write.csv(a%>%
               mutate(SNo=substr(Same.return.SNo,1,2),
@@ -2923,6 +2950,40 @@ if(nrow(a)>0)
               dplyr::select(VESSEL,FINYEAR,SNo,DSNo,TSNo,block10,fishery,Landing.Port,LANDWT,LIVEWT,nfish,
                             RSCommonName,RSSpeciesCode,SPECIES,CONDITN)%>%
               arrange(VESSEL,TSNo,FINYEAR),"C:/Users/myb/OneDrive - Department of Primary Industries And Regional Development/Desktop/catch with no nfish, landwt or livewt but species is not nil catch.csv",row.names = F)
+  
+}
+
+#check one off spatial dist (don't repeat, only do it in Inspections of new year's data)
+do.this=FALSE
+if(do.this)
+{
+  handle1=handl_OneDrive("Data/Catch and Effort/Check_these_vars/Daily/")
+  yrs=sort(unique(Data.daily.original$FINYEAR))
+  for(i in 1:length(yrs))
+  {
+    fn.ck.spatial(d=Data.daily.original%>%
+                    filter(FINYEAR==yrs[i] & fishery%in%c('JASDGDL','WCDGDL'))%>%
+                    mutate(yr=FINYEAR,
+                           zn=zone,
+                           ln=Long,
+                           la=Lat,
+                           blk=block10,
+                           Unik=Same.return.SNo)%>%
+                    distinct(Unik,.keep_all = T),
+                  BLK.data=BLOCK_60%>%
+                    mutate(dumi=as.numeric(BlockCode))%>%
+                    filter(dumi<85010)%>%
+                    rowwise()%>% 
+                    mutate(x = mean(c(NorthWestPointGPSLongitude, SouthEastPointGPSLongitude)),
+                           y = mean(c(NorthWestPointGPSLatitude, SouthEastPointGPSLatitude))),
+                  Depth.data=Bathymetry,
+                  BLK.size=4.5,
+                  add.yr=TRUE,
+                  pt.size=1.5,
+                  pt.alpha=0.35)
+    ggsave(paste(handle1,yrs[i],"/Map_blocks_daily.tiff",sep='/'),width = 14,height = 10,compression = "lzw")
+    
+  }
   
 }
 
@@ -3311,7 +3372,7 @@ Catch.prop.school.daily=fun.prop(Data.daily,17008)
 Catch.prop.dogfish.daily=fun.prop(Data.daily,20000)
 
 #Rectify Reporter variable defined in SQL 
-table(Data.monthly$FINYEAR,Data.monthly$Reporter,useNA = 'ifany')
+Tab.rep1=table(Data.monthly$YEAR.c,Data.monthly$Reporter,useNA = 'ifany')
 Data.monthly=Data.monthly%>%
   mutate(Reporter=case_when(Reporter%in%c('SCR20230823 Part1|','SCR20230823|',
                                           "SCR20230823|SCR20240807|",
@@ -3321,8 +3382,10 @@ Data.monthly=Data.monthly%>%
                             Reporter=="SCR20230227|" & SPECIES==25000 ~ NA_character_,
                             Reporter=="SCR20220211|SCR20240810|" & SPECIES==18023 ~ NA_character_,
                             Reporter=="|SCR20200602|" & SPECIES%in%c(26000,26999) ~ NA_character_,
+                            Reporter=="SCR20220211|"  ~ NA_character_,
+                            Reporter=="SCR20220211|SCR20240328|"  ~ NA_character_,
                             TRUE~Reporter))
-
+Tab.rep2=table(Data.monthly$YEAR.c,Data.monthly$Reporter,useNA = 'ifany')
 
   # Define vessel reporting category
 
@@ -3333,27 +3396,21 @@ Data.monthly=Data.monthly%>%
     #monthly
 Vessel.Report=data.frame(Same.return=as.character(unique(Data.monthly$Same.return)))
 Vessel.Report=Vessel.Report%>%left_join(Catch.prop.gummy$Prop.VesYrMonBlock,by=c("Same.return"))
-#Vessel.Report=merge(Vessel.Report,Catch.prop.gummy$Prop.VesYrMonBlock,by="Same.return",all.x=T)
 names(Vessel.Report)[match("Proportion",names(Vessel.Report))]="Prop.Gum.Ves.ID"
 Vessel.Report$Prop.Gum.Ves.ID=with(Vessel.Report,ifelse(is.na(Prop.Gum.Ves.ID),0,Prop.Gum.Ves.ID))   
 Vessel.Report=Vessel.Report%>%left_join(Catch.prop.whiskery$Prop.VesYrMonBlock,by=c("Same.return"))
-#Vessel.Report=merge(Vessel.Report,Catch.prop.whiskery$Prop.VesYrMonBlock,by="Same.return",all.x=T)
 names(Vessel.Report)[match("Proportion",names(Vessel.Report))]="Prop.Whi.Ves.ID"
 Vessel.Report$Prop.Whi.Ves.ID=with(Vessel.Report,ifelse(is.na(Prop.Whi.Ves.ID),0,Prop.Whi.Ves.ID))
 Vessel.Report=Vessel.Report%>%left_join(Catch.prop.dusky$Prop.VesYrMonBlock,by=c("Same.return"))
-#Vessel.Report=merge(Vessel.Report,Catch.prop.dusky$Prop.VesYrMonBlock,by="Same.return",all.x=T)
 names(Vessel.Report)[match("Proportion",names(Vessel.Report))]="Prop.Dus.Ves.ID"
 Vessel.Report$Prop.Dus.Ves.ID=with(Vessel.Report,ifelse(is.na(Prop.Dus.Ves.ID),0,Prop.Dus.Ves.ID))
 Vessel.Report=Vessel.Report%>%left_join(Catch.prop.other$Prop.VesYrMonBlock,by=c("Same.return"))
-#Vessel.Report=merge(Vessel.Report,Catch.prop.other$Prop.VesYrMonBlock,by="Same.return",all.x=T)
 names(Vessel.Report)[match("Proportion",names(Vessel.Report))]="Prop.Other.Ves.ID"
 Vessel.Report$Prop.Other.Ves.ID=with(Vessel.Report,ifelse(is.na(Prop.Other.Ves.ID),0,Prop.Other.Ves.ID))
 Vessel.Report=Vessel.Report%>%left_join(Catch.prop.school$Prop.VesYrMonBlock,by=c("Same.return"))
-#Vessel.Report=merge(Vessel.Report,Catch.prop.school$Prop.VesYrMonBlock,by="Same.return",all.x=T)
 names(Vessel.Report)[match("Proportion",names(Vessel.Report))]="Prop.Sch.Ves.ID"
 Vessel.Report$Prop.Sch.Ves.ID=with(Vessel.Report,ifelse(is.na(Prop.Sch.Ves.ID),0,Prop.Sch.Ves.ID))
 Vessel.Report=Vessel.Report%>%left_join(Catch.prop.dogfish$Prop.VesYrMonBlock,by=c("Same.return"))
-#Vessel.Report=merge(Vessel.Report,Catch.prop.dogfish$Prop.VesYrMonBlock,by="Same.return",all.x=T)
 names(Vessel.Report)[match("Proportion",names(Vessel.Report))]="Prop.DogS.Ves.ID"
 Vessel.Report$Prop.DogS.Ves.ID=with(Vessel.Report,ifelse(is.na(Prop.DogS.Ves.ID),0,Prop.DogS.Ves.ID))
 
@@ -3362,11 +3419,9 @@ if(Reapportion.daily=="NO")
 {
   Vessel.Report.daily=data.frame(Same.return=as.character(unique(Data.daily$Same.return)))
   Vessel.Report.daily=Vessel.Report.daily%>%left_join(Catch.prop.school.daily$Prop.VesYrMonBlock,by=c("Same.return"))
-  #Vessel.Report.daily=merge(Vessel.Report.daily,Catch.prop.school.daily$Prop.VesYrMonBlock,by="Same.return",all.x=T)
   names(Vessel.Report.daily)[match("Proportion",names(Vessel.Report.daily))]="Prop.Sch.Ves.ID"
   Vessel.Report.daily$Prop.Sch.Ves.ID=with(Vessel.Report.daily,ifelse(is.na(Prop.Sch.Ves.ID),0,Prop.Sch.Ves.ID))
   Vessel.Report.daily=Vessel.Report.daily%>%left_join(Catch.prop.dogfish.daily$Prop.VesYrMonBlock,by=c("Same.return"))
-  #Vessel.Report.daily=merge(Vessel.Report.daily,Catch.prop.dogfish.daily$Prop.VesYrMonBlock,by="Same.return",all.x=T)
   names(Vessel.Report.daily)[match("Proportion",names(Vessel.Report.daily))]="Prop.DogS.Ves.ID"
   Vessel.Report.daily$Prop.DogS.Ves.ID=with(Vessel.Report.daily,ifelse(is.na(Prop.DogS.Ves.ID),0,Prop.DogS.Ves.ID))  
 }
@@ -3394,15 +3449,11 @@ if(Reapportion.daily=="YES")
 }
 
 
-
-
 #_GILLNET REAPPORTIONING (within TDGDLF)_
 
   # Merge proportions to data
 Data.monthly=Data.monthly%>%left_join(Vessel.Report,by=c("Same.return"))
-#Data.monthly=merge(Data.monthly,Vessel.Report,by="Same.return",all.x=T)
 Data.daily=Data.daily%>%left_join(Vessel.Report.daily,by=c("Same.return"))
-#Data.daily=merge(Data.daily,Vessel.Report.daily,by="Same.return",all.x=T)
 
   # Separate vessels into 'good' and 'bad' reporters
 #C.7.2 Northern split                               #Rory's rules 3c      
@@ -3520,17 +3571,14 @@ Catch.prop.dusky=fun.prop(subset(Data.monthly,LAT <= Dusky.range[1] & LONG <= Du
 Good.split=data.frame(GoodsplitID=as.character(unique(Data.monthly$GoodsplitID)))
 
 Good.split=Good.split%>%left_join(Catch.prop.dusky$Prop.GoodsplitID,by=c("GoodsplitID"))
-#Good.split=merge(Good.split,Catch.prop.dusky$Prop.GoodsplitID,by="GoodsplitID",all.x=T)
 names(Good.split)[match("Proportion",names(Good.split))]="Prop.Dus.Good.spl"
 Good.split$Prop.Dus.Good.spl=with(Good.split,ifelse(is.na(Prop.Dus.Good.spl),0,Prop.Dus.Good.spl))
 
 Good.split=Good.split%>%left_join(Catch.prop.gummy$Prop.GoodsplitID,by=c("GoodsplitID"))
-#Good.split=merge(Good.split,Catch.prop.gummy$Prop.GoodsplitID,by="GoodsplitID",all.x=T)
 names(Good.split)[match("Proportion",names(Good.split))]="Prop.Gum.Good.spl"
 Good.split$Prop.Gum.Good.spl=with(Good.split,ifelse(is.na(Prop.Gum.Good.spl),0,Prop.Gum.Good.spl))
 
 Good.split=Good.split%>%left_join(Catch.prop.whiskery$Prop.GoodsplitID,by=c("GoodsplitID"))
-#Good.split=merge(Good.split,Catch.prop.whiskery$Prop.GoodsplitID,by="GoodsplitID",all.x=T)
 names(Good.split)[match("Proportion",names(Good.split))]="Prop.Whi.Good.spl"
 Good.split$Prop.Whi.Good.spl=with(Good.split,ifelse(is.na(Prop.Whi.Good.spl),0,Prop.Whi.Good.spl))
 
@@ -3566,23 +3614,19 @@ if(Reapportion.daily=="YES")
 Zone.good.split=data.frame(ZoneID=as.character(unique(Data.monthly$ZoneID)))
 
 Zone.good.split=Zone.good.split%>%left_join(Catch.prop.dusky$Prop.FinYrZone,by=c("ZoneID"))
-#Zone.good.split=merge(Zone.good.split,Catch.prop.dusky$Prop.FinYrZone,by="ZoneID",all.x=T)
 names(Zone.good.split)[match("Proportion",names(Zone.good.split))]="Prop.Dus.Zone.Good.spl"
 Zone.good.split$Prop.Dus.Zone.Good.spl=with(Zone.good.split,ifelse(is.na(Prop.Dus.Zone.Good.spl),
                                                                         0,Prop.Dus.Zone.Good.spl))
 
 Zone.good.split=Zone.good.split%>%left_join(Catch.prop.gummy$Prop.FinYrZone,by=c("ZoneID"))
-#Zone.good.split=merge(Zone.good.split,Catch.prop.gummy$Prop.FinYrZone,by="ZoneID",all.x=T)
 names(Zone.good.split)[match("Proportion",names(Zone.good.split))]="Prop.Gum.Zone.Good.spl"
 Zone.good.split$Prop.Gum.Zone.Good.spl=with(Zone.good.split,ifelse(is.na(Prop.Gum.Zone.Good.spl),
                                                                         0,Prop.Gum.Zone.Good.spl))
 
 Zone.good.split=Zone.good.split%>%left_join(Catch.prop.whiskery$Prop.FinYrZone,by=c("ZoneID"))
-#Zone.good.split=merge(Zone.good.split,Catch.prop.whiskery$Prop.FinYrZone,by="ZoneID",all.x=T)
 names(Zone.good.split)[match("Proportion",names(Zone.good.split))]="Prop.Whi.Zone.Good.spl"
 Zone.good.split$Prop.Whi.Zone.Good.spl=with(Zone.good.split,ifelse(is.na(Prop.Whi.Zone.Good.spl),
                                                                         0,Prop.Whi.Zone.Good.spl))
-
 
     #daily
 if(Reapportion.daily=="YES")
@@ -3612,23 +3656,19 @@ if(Reapportion.daily=="YES")
 Monthly.good.split=data.frame(MonthlyID=as.character(unique(Data.monthly$MonthlyID)))
 
 Monthly.good.split=Monthly.good.split%>%left_join(Catch.prop.dusky$Prop.FinYrMon,by=c("MonthlyID"))
-#Monthly.good.split=merge(Monthly.good.split,Catch.prop.dusky$Prop.FinYrMon,by="MonthlyID",all.x=T)
 names(Monthly.good.split)[match("Proportion",names(Monthly.good.split))]="Prop.Dus.Mon.Good.spl"
 Monthly.good.split$Prop.Dus.Mon.Good.spl=with(Monthly.good.split,ifelse(is.na(Prop.Dus.Mon.Good.spl),
                                                                         0,Prop.Dus.Mon.Good.spl))
 
 Monthly.good.split=Monthly.good.split%>%left_join(Catch.prop.gummy$Prop.FinYrMon,by=c("MonthlyID"))
-#Monthly.good.split=merge(Monthly.good.split,Catch.prop.gummy$Prop.FinYrMon,by="MonthlyID",all.x=T)
 names(Monthly.good.split)[match("Proportion",names(Monthly.good.split))]="Prop.Gum.Mon.Good.spl"
 Monthly.good.split$Prop.Gum.Mon.Good.spl=with(Monthly.good.split,ifelse(is.na(Prop.Gum.Mon.Good.spl),
                                                                         0,Prop.Gum.Mon.Good.spl))
 
 Monthly.good.split=Monthly.good.split%>%left_join(Catch.prop.whiskery$Prop.FinYrMon,by=c("MonthlyID"))
-#Monthly.good.split=merge(Monthly.good.split,Catch.prop.whiskery$Prop.FinYrMon,by="MonthlyID",all.x=T)
 names(Monthly.good.split)[match("Proportion",names(Monthly.good.split))]="Prop.Whi.Mon.Good.spl"
 Monthly.good.split$Prop.Whi.Mon.Good.spl=with(Monthly.good.split,ifelse(is.na(Prop.Whi.Mon.Good.spl),
                                                                         0,Prop.Whi.Mon.Good.spl))
-
 
     #daily
 if(Reapportion.daily=="YES")
@@ -3658,19 +3698,16 @@ if(Reapportion.daily=="YES")
 YrZn.good.split=data.frame(ZnID=as.character(unique(Data.monthly$ZnID)))
 
 YrZn.good.split=YrZn.good.split%>%left_join(Catch.prop.dusky$Prop.YrZone,by=c("ZnID"))
-#YrZn.good.split=merge(YrZn.good.split,Catch.prop.dusky$Prop.YrZone,by="ZnID",all.x=T)
 names(YrZn.good.split)[match("Proportion",names(YrZn.good.split))]="Prop.Dus.YrZn.Good.spl"
 YrZn.good.split$Prop.Dus.YrZn.Good.spl=with(YrZn.good.split,ifelse(is.na(Prop.Dus.YrZn.Good.spl),
                                                                         0,Prop.Dus.YrZn.Good.spl))
 
 YrZn.good.split=YrZn.good.split%>%left_join(Catch.prop.gummy$Prop.YrZone,by=c("ZnID"))
-#YrZn.good.split=merge(YrZn.good.split,Catch.prop.gummy$Prop.YrZone,by="ZnID",all.x=T)
 names(YrZn.good.split)[match("Proportion",names(YrZn.good.split))]="Prop.Gum.YrZn.Good.spl"
 YrZn.good.split$Prop.Gum.YrZn.Good.spl=with(YrZn.good.split,ifelse(is.na(Prop.Gum.YrZn.Good.spl),
                                                                         0,Prop.Gum.YrZn.Good.spl))
 
 YrZn.good.split=YrZn.good.split%>%left_join(Catch.prop.whiskery$Prop.YrZone,by=c("ZnID"))
-#YrZn.good.split=merge(YrZn.good.split,Catch.prop.whiskery$Prop.YrZone,by="ZnID",all.x=T)
 names(YrZn.good.split)[match("Proportion",names(YrZn.good.split))]="Prop.Whi.YrZn.Good.spl"
 YrZn.good.split$Prop.Whi.YrZn.Good.spl=with(YrZn.good.split,ifelse(is.na(Prop.Whi.YrZn.Good.spl),
                                                                         0,Prop.Whi.YrZn.Good.spl))
@@ -3702,12 +3739,11 @@ if(Reapportion.daily=="YES")
 #C.7.7  Update good split catches                       #Rory's rules 4e                          
 #If valid average month-year-block proportions available, update "bad" records of Dusky, 
 # Gummy and whiskery with this
-#ACA
-    #-monthly-
-Data.monthly$LIVEWT.reap=with(Data.monthly,ifelse(LAT<=(-26),LIVEWT,NA))
 
-    #add total catch of elasmobranchs for each record       
-  
+    #-monthly-
+Data.monthly$LIVEWT.reap=with(Data.monthly,ifelse(LAT<=(-26),LIVEWT,NA)) 
+
+  #add total catch of elasmobranchs for each record       
 Total.Sk.ktch=subset(Data.monthly,SPECIES%in%Fix.species)  #total catch of reap sp
 #Total.Sk.ktch=subset(Data.monthly,SPECIES%in%Elasmo.species) #total elasmo catch
 Total.Sk.other.ktch=subset(Data.monthly,SPECIES==Sharks.other)
@@ -3716,7 +3752,6 @@ names(Total.Sk.ktch)[2]="Tot.shk.livewt"
 Total.Sk.other.ktch=aggregate(LIVEWT~Same.return,data=Total.Sk.other.ktch,sum,na.rm=T)
 names(Total.Sk.other.ktch)[2]="Shark.other.livewt"
 Total.Sk.ktch=Total.Sk.ktch%>%left_join(Total.Sk.other.ktch,by=c("Same.return"))
-#Total.Sk.ktch=merge(Total.Sk.ktch,Total.Sk.other.ktch,by="Same.return",all.x=T)
 Total.Sk.ktch$Shark.other.livewt=with(Total.Sk.ktch,ifelse(is.na(Shark.other.livewt),0,Shark.other.livewt))
 
 Data.monthly=Data.monthly%>%left_join(Total.Sk.ktch,by=c("Same.return"))%>%
@@ -3724,12 +3759,6 @@ Data.monthly=Data.monthly%>%left_join(Total.Sk.ktch,by=c("Same.return"))%>%
                             left_join(Zone.good.split,by=c("ZoneID"))%>%
                             left_join(Monthly.good.split,by=c("MonthlyID"))%>%
                             left_join(YrZn.good.split,by=c("ZnID"))
-#Data.monthly=merge(Data.monthly,Total.Sk.ktch,by="Same.return",all.x=T)
-#Data.monthly=merge(Data.monthly,Good.split,by="GoodsplitID",all.x=T)
-#Data.monthly=merge(Data.monthly,Zone.good.split,by="ZoneID",all.x=T)
-#Data.monthly=merge(Data.monthly,Monthly.good.split,by="MonthlyID",all.x=T)
-#Data.monthly=merge(Data.monthly,YrZn.good.split,by="ZnID",all.x=T)
-
 
 #Normalise proportions if their sum is >1
   #Good.spl
@@ -3802,656 +3831,645 @@ if(Reapportion.daily=="YES")
 }
 
 
-
-
-#C.7.8 Reapportion the catch of gummy, whiskeries and duskies
-
+#C.7.8 Reapportion the catch of gummy, whiskeries and duskies   
+if(Monthly.log=='monthlyrawlog') 
+{
   #C.7.8.1 create bad reporter files for fixing catches
-    #monthly
-Bad.Reporters.All=subset(Data.monthly,Reporter=="bad")
-Data.monthly=subset(Data.monthly,Reporter=="good"|is.na(Reporter))
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Bad.Reporters.All.daily=subset(Data.daily,Reporter=="bad")
-  Data.daily=subset(Data.daily,Reporter=="good"|is.na(Reporter))  
-}
-
-
   #monthly
-Bad.Reporters=subset(Bad.Reporters.All,SPECIES%in%Fix.species)
-Bad.Reporters.otherSP=subset(Bad.Reporters.All,!SPECIES%in%Fix.species)
-Data.monthly=rbind(Data.monthly,Bad.Reporters.otherSP) #put back other species
-
+  Bad.Reporters.All=subset(Data.monthly,Reporter=="bad")
+  Data.monthly=subset(Data.monthly,Reporter=="good"|is.na(Reporter))
+  
   #daily
-if(Reapportion.daily=="YES")
-{
-  Bad.Reporters.daily=subset(Bad.Reporters.All.daily,SPECIES%in%Fix.species)
-  Bad.Reporters.otherSP.daily=subset(Bad.Reporters.All.daily,!SPECIES%in%Fix.species)
-  Data.daily=rbind(Data.daily,Bad.Reporters.otherSP.daily) #put back other species  
-}
-
-
-
-#C.7.8.2
-#note: remove duplicates of Same.return as Tot.shk.livewt is split proportionally
-#          among dusky, whiskery and gummy
-#note: this is used to just keep ancilliary information, the total catch from this return is reapportioned
-
+  if(Reapportion.daily=="YES")
+  {
+    Bad.Reporters.All.daily=subset(Data.daily,Reporter=="bad")
+    Data.daily=subset(Data.daily,Reporter=="good"|is.na(Reporter))  
+  }
+  
+  
   #monthly
-Agg.Sp.Ktch=aggregate(LIVEWT~Same.return,Bad.Reporters,sum)
-names(Agg.Sp.Ktch)[2]="Total.LIVEWT.reap"
-
-Bad.Reporters=Bad.Reporters[!duplicated(Bad.Reporters$Same.return),] 
-NroW=nrow(Bad.Reporters)
-
+  Bad.Reporters=subset(Bad.Reporters.All,SPECIES%in%Fix.species)
+  Bad.Reporters.otherSP=subset(Bad.Reporters.All,!SPECIES%in%Fix.species)
+  Data.monthly=rbind(Data.monthly,Bad.Reporters.otherSP) #put back other species
+  
   #daily
-if(Reapportion.daily=="YES")
-{
-  Agg.Sp.Ktch.daily=aggregate(LIVEWT.reap~Same.return,Bad.Reporters.daily,sum,na.rm=T)
-  names(Agg.Sp.Ktch.daily)[2]="Total.LIVEWT.reap"
-  Bad.Reporters.daily=Bad.Reporters.daily[!duplicated(Bad.Reporters.daily$Same.return),]
-  NroW.daily=nrow(Bad.Reporters.daily)  
-}
-
-
-# replicate Bad.Reporters four times to have the three species and shark others as a record
-    #monthly
-Bad.Reporters=rbind(Bad.Reporters,Bad.Reporters,Bad.Reporters,Bad.Reporters)
-Bad.Reporters=Bad.Reporters[order(Bad.Reporters$Same.return),]
-
-Bad.Reporters$Spec.old=Bad.Reporters$SPECIES
-Bad.Reporters$Sname.old=Bad.Reporters$SNAME
-
-Bad.Reporters$SPECIES=rep(Fix.species,NroW)
-Bad.Reporters$SNAME=rep(c("Bronze Whaler","Gummy Shark","Whiskery Shark","shark, other"),NroW)
-
+  if(Reapportion.daily=="YES")
+  {
+    Bad.Reporters.daily=subset(Bad.Reporters.All.daily,SPECIES%in%Fix.species)
+    Bad.Reporters.otherSP.daily=subset(Bad.Reporters.All.daily,!SPECIES%in%Fix.species)
+    Data.daily=rbind(Data.daily,Bad.Reporters.otherSP.daily) #put back other species  
+  }
+  
+  
+  
+  #C.7.8.2
+  #note: remove duplicates of Same.return as Tot.shk.livewt is split proportionally
+  #          among dusky, whiskery and gummy
+  #note: this is used to just keep ancilliary information, the total catch from this return is reapportioned
+  
+  #monthly
+  Agg.Sp.Ktch=aggregate(LIVEWT~Same.return,Bad.Reporters,sum)
+  names(Agg.Sp.Ktch)[2]="Total.LIVEWT.reap"
+  
+  Bad.Reporters=Bad.Reporters[!duplicated(Bad.Reporters$Same.return),] 
+  NroW=nrow(Bad.Reporters)
+  
   #daily
-if(Reapportion.daily=="YES")
-{
-  Bad.Reporters.daily=rbind(Bad.Reporters.daily,Bad.Reporters.daily,Bad.Reporters.daily,Bad.Reporters.daily)
-  Bad.Reporters.daily=Bad.Reporters.daily[order(Bad.Reporters.daily$Same.return),]
+  if(Reapportion.daily=="YES")
+  {
+    Agg.Sp.Ktch.daily=aggregate(LIVEWT.reap~Same.return,Bad.Reporters.daily,sum,na.rm=T)
+    names(Agg.Sp.Ktch.daily)[2]="Total.LIVEWT.reap"
+    Bad.Reporters.daily=Bad.Reporters.daily[!duplicated(Bad.Reporters.daily$Same.return),]
+    NroW.daily=nrow(Bad.Reporters.daily)  
+  }
   
-  Bad.Reporters.daily$Spec.old=Bad.Reporters.daily$SPECIES
-  Bad.Reporters.daily$Sname.old=Bad.Reporters.daily$SNAME
   
-  Bad.Reporters.daily$SPECIES=rep(Fix.species,NroW.daily)
-  Bad.Reporters.daily$SNAME=rep(c("Bronze Whaler","Gummy Shark","Whiskery Shark","shark, other"),NroW.daily)  
-}
-
-
-# reapportion catch
-Bad.Reporters$LIVEWT.reap=NA
-if(Reapportion.daily=="YES") Bad.Reporters.daily$LIVEWT.reap=NA
-
-#first use "Good.spl" (standardise the proportions to sum(split catch)=Tot.shk.livewt)
-  #Monthly
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
-    ifelse(SPECIES==18003 & Prop.Dus.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Good.spl),
-    ifelse(SPECIES==17001 & Prop.Gum.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Good.spl),
-    ifelse(SPECIES==17003 & Prop.Whi.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Good.spl),
-    LIVEWT.reap))))
-
-  #Daily
-if(Reapportion.daily=="YES") 
-{
-  Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
-       ifelse(SPECIES==18003 & Prop.Dus.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Good.spl),
-       ifelse(SPECIES==17001 & Prop.Gum.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Good.spl),
-       ifelse(SPECIES==17003 & Prop.Whi.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Good.spl),
-       LIVEWT.reap))))
-}
-
-#Second, if previous not available, use "Zone.Good.spl"
-  #Monthly
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
-    ifelse(SPECIES==18003 & is.na(LIVEWT.reap) & Prop.Dus.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Zone.Good.spl),
-    ifelse(SPECIES==17001 & is.na(LIVEWT.reap) & Prop.Gum.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Zone.Good.spl),
-    ifelse(SPECIES==17003 & is.na(LIVEWT.reap) & Prop.Whi.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Zone.Good.spl),
-    LIVEWT.reap))))
-
-  #Daily
-if(Reapportion.daily=="YES") 
-{
-  Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
-      ifelse(SPECIES==18003 & is.na(LIVEWT.reap) & Prop.Dus.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Zone.Good.spl),
-      ifelse(SPECIES==17001 & is.na(LIVEWT.reap) & Prop.Gum.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Zone.Good.spl),
-      ifelse(SPECIES==17003 & is.na(LIVEWT.reap) & Prop.Whi.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Zone.Good.spl),
-      LIVEWT.reap))))  
-}
-
-
-#Third, if previous are not available, use "Mon.Good.spl"             #Rory's rules 4f 
-  #Monthly
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
-    ifelse(SPECIES==18003 & is.na(LIVEWT.reap) & Prop.Dus.Mon.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Mon.Good.spl),
-    ifelse(SPECIES==17001 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Gum.YrZn.Good.spl),
-    ifelse(SPECIES==17003 & is.na(LIVEWT.reap) & Prop.Whi.Mon.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Mon.Good.spl),
-    LIVEWT.reap))))
-
-  #Daily
-if(Reapportion.daily=="YES") 
-{
-  Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
-    ifelse(SPECIES==18003 & is.na(LIVEWT.reap) & Prop.Dus.Mon.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Mon.Good.spl),
-    ifelse(SPECIES==17001 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Gum.YrZn.Good.spl),
-    ifelse(SPECIES==17003 & is.na(LIVEWT.reap) & Prop.Whi.Mon.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Mon.Good.spl),
-    LIVEWT.reap))))  
-}
-
-
-#rescale to avoid creating catch
-  #Monthly
-Bad.Reporters=Bad.Reporters%>%left_join(Agg.Sp.Ktch,by=c("Same.return"))
-#Bad.Reporters=merge(Bad.Reporters,Agg.Sp.Ktch,by="Same.return",all.x=T)
-
-Agg.reap.KtcH=aggregate(LIVEWT.reap~Same.return,Bad.Reporters,sum,na.rm=T)
-names(Agg.reap.KtcH)[2]="LIVEWT.reap.scaler"
-Bad.Reporters=Bad.Reporters%>%left_join(Agg.reap.KtcH,by=c("Same.return"))
-#Bad.Reporters=merge(Bad.Reporters,Agg.reap.KtcH,by="Same.return",all.x=T)
-
-
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,ifelse(Tot.shk.livewt>Total.LIVEWT.reap,
-                  LIVEWT.reap*(Total.LIVEWT.reap/Tot.shk.livewt),LIVEWT.reap))
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,ifelse(LIVEWT.reap.scaler>Total.LIVEWT.reap,
-                  LIVEWT.reap*(Total.LIVEWT.reap/LIVEWT.reap.scaler),LIVEWT.reap))
-
-  #Daily
-if(Reapportion.daily=="YES") 
-{
-  Bad.Reporters.daily=merge(Bad.Reporters.daily,Agg.Sp.Ktch.daily,by="Same.return",all.x=T)
+  # replicate Bad.Reporters four times to have the three species and shark others as a record
+  #monthly
+  Bad.Reporters=rbind(Bad.Reporters,Bad.Reporters,Bad.Reporters,Bad.Reporters)
+  Bad.Reporters=Bad.Reporters[order(Bad.Reporters$Same.return),]
   
-  Agg.reap.KtcH.daily=aggregate(LIVEWT.reap~Same.return,Bad.Reporters.daily,sum,na.rm=T)
-  names(Agg.reap.KtcH.daily)[2]="LIVEWT.reap.scaler"
-  Bad.Reporters.daily=merge(Bad.Reporters.daily,Agg.reap.KtcH.daily,by="Same.return",all.x=T)
-  Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,ifelse(Tot.shk.livewt>Total.LIVEWT.reap,
-                      LIVEWT.reap*(Total.LIVEWT.reap/Tot.shk.livewt),LIVEWT.reap))
-  Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,ifelse(LIVEWT.reap.scaler>Total.LIVEWT.reap,
-                      LIVEWT.reap*(Total.LIVEWT.reap/LIVEWT.reap.scaler),LIVEWT.reap))
+  Bad.Reporters$Spec.old=Bad.Reporters$SPECIES
+  Bad.Reporters$Sname.old=Bad.Reporters$SNAME
   
-}
-
-
-#Reset 'shark other' to the remainder
-    #monthly
-Remainder=aggregate(LIVEWT.reap~Same.return,Bad.Reporters,sum,na.rm=T)
-names(Remainder)[2]="Remainder"
-Bad.Reporters=Bad.Reporters%>%left_join(Remainder,by=c("Same.return"))
-#Bad.Reporters=merge(Bad.Reporters,Remainder,by="Same.return",all.x=T)
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
-                  ifelse(SPECIES==22999,Total.LIVEWT.reap-Remainder,LIVEWT.reap))
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,ifelse(LIVEWT.reap<0,0,LIVEWT.reap))
-
-
-  #check that reapportioned didn't add catch
-b=aggregate(LIVEWT.reap~Same.return,Bad.Reporters,sum,na.rm=T)                                                   
-A=Agg.Sp.Ktch%>%full_join(b,by=c("Same.return"))
-#A=merge(Agg.Sp.Ktch,b,by="Same.return")
-plot(A[,2],A[,3])
-lines(A[,2],A[,2])
-rm(A,b)
-
-Bad.Reporters=Bad.Reporters[,-match(c("Total.LIVEWT.reap","LIVEWT.reap.scaler","Remainder"),
-                                    names(Bad.Reporters))]
-
-Bad.Reporters$LIVEWT=with(Bad.Reporters,ifelse(SPECIES==22999,LIVEWT.orgnl,0))
-Bad.Reporters$LIVEWT.orgnl=with(Bad.Reporters,ifelse(SPECIES==22999,LIVEWT.orgnl,0))
-
-
-    #daily
-if(Reapportion.daily=="YES") 
-{
-  Remainder=aggregate(LIVEWT.reap~Same.return,Bad.Reporters.daily,sum,na.rm=T)
+  Bad.Reporters$SPECIES=rep(Fix.species,NroW)
+  Bad.Reporters$SNAME=rep(c("Bronze Whaler","Gummy Shark","Whiskery Shark","shark, other"),NroW)
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Bad.Reporters.daily=rbind(Bad.Reporters.daily,Bad.Reporters.daily,Bad.Reporters.daily,Bad.Reporters.daily)
+    Bad.Reporters.daily=Bad.Reporters.daily[order(Bad.Reporters.daily$Same.return),]
+    
+    Bad.Reporters.daily$Spec.old=Bad.Reporters.daily$SPECIES
+    Bad.Reporters.daily$Sname.old=Bad.Reporters.daily$SNAME
+    
+    Bad.Reporters.daily$SPECIES=rep(Fix.species,NroW.daily)
+    Bad.Reporters.daily$SNAME=rep(c("Bronze Whaler","Gummy Shark","Whiskery Shark","shark, other"),NroW.daily)  
+  }
+  
+  
+  # reapportion catch
+  Bad.Reporters$LIVEWT.reap=NA
+  if(Reapportion.daily=="YES") Bad.Reporters.daily$LIVEWT.reap=NA
+  
+  #first use "Good.spl" (standardise the proportions to sum(split catch)=Tot.shk.livewt)
+  #Monthly
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
+                                 ifelse(SPECIES==18003 & Prop.Dus.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Good.spl),
+                                        ifelse(SPECIES==17001 & Prop.Gum.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Good.spl),
+                                               ifelse(SPECIES==17003 & Prop.Whi.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Good.spl),
+                                                      LIVEWT.reap))))
+  
+  #Daily
+  if(Reapportion.daily=="YES") 
+  {
+    Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
+                                         ifelse(SPECIES==18003 & Prop.Dus.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Good.spl),
+                                                ifelse(SPECIES==17001 & Prop.Gum.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Good.spl),
+                                                       ifelse(SPECIES==17003 & Prop.Whi.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Good.spl),
+                                                              LIVEWT.reap))))
+  }
+  
+  #Second, if previous not available, use "Zone.Good.spl"
+  #Monthly
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
+                                 ifelse(SPECIES==18003 & is.na(LIVEWT.reap) & Prop.Dus.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Zone.Good.spl),
+                                        ifelse(SPECIES==17001 & is.na(LIVEWT.reap) & Prop.Gum.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Zone.Good.spl),
+                                               ifelse(SPECIES==17003 & is.na(LIVEWT.reap) & Prop.Whi.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Zone.Good.spl),
+                                                      LIVEWT.reap))))
+  
+  #Daily
+  if(Reapportion.daily=="YES") 
+  {
+    Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
+                                         ifelse(SPECIES==18003 & is.na(LIVEWT.reap) & Prop.Dus.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Zone.Good.spl),
+                                                ifelse(SPECIES==17001 & is.na(LIVEWT.reap) & Prop.Gum.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Zone.Good.spl),
+                                                       ifelse(SPECIES==17003 & is.na(LIVEWT.reap) & Prop.Whi.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Zone.Good.spl),
+                                                              LIVEWT.reap))))  
+  }
+  
+  
+  #Third, if previous are not available, use "Mon.Good.spl"             #Rory's rules 4f 
+  #Monthly
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
+                                 ifelse(SPECIES==18003 & is.na(LIVEWT.reap) & Prop.Dus.Mon.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Mon.Good.spl),
+                                        ifelse(SPECIES==17001 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Gum.YrZn.Good.spl),
+                                               ifelse(SPECIES==17003 & is.na(LIVEWT.reap) & Prop.Whi.Mon.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Mon.Good.spl),
+                                                      LIVEWT.reap))))
+  
+  #Daily
+  if(Reapportion.daily=="YES") 
+  {
+    Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
+                                         ifelse(SPECIES==18003 & is.na(LIVEWT.reap) & Prop.Dus.Mon.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Mon.Good.spl),
+                                                ifelse(SPECIES==17001 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Gum.YrZn.Good.spl),
+                                                       ifelse(SPECIES==17003 & is.na(LIVEWT.reap) & Prop.Whi.Mon.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Mon.Good.spl),
+                                                              LIVEWT.reap))))  
+  }
+  
+  
+  #rescale to avoid creating catch
+  #Monthly
+  Bad.Reporters=Bad.Reporters%>%left_join(Agg.Sp.Ktch,by=c("Same.return"))
+  #Bad.Reporters=merge(Bad.Reporters,Agg.Sp.Ktch,by="Same.return",all.x=T)
+  
+  Agg.reap.KtcH=aggregate(LIVEWT.reap~Same.return,Bad.Reporters,sum,na.rm=T)
+  names(Agg.reap.KtcH)[2]="LIVEWT.reap.scaler"
+  Bad.Reporters=Bad.Reporters%>%left_join(Agg.reap.KtcH,by=c("Same.return"))
+  #Bad.Reporters=merge(Bad.Reporters,Agg.reap.KtcH,by="Same.return",all.x=T)
+  
+  
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,ifelse(Tot.shk.livewt>Total.LIVEWT.reap,
+                                                      LIVEWT.reap*(Total.LIVEWT.reap/Tot.shk.livewt),LIVEWT.reap))
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,ifelse(LIVEWT.reap.scaler>Total.LIVEWT.reap,
+                                                      LIVEWT.reap*(Total.LIVEWT.reap/LIVEWT.reap.scaler),LIVEWT.reap))
+  
+  #Daily
+  if(Reapportion.daily=="YES") 
+  {
+    Bad.Reporters.daily=merge(Bad.Reporters.daily,Agg.Sp.Ktch.daily,by="Same.return",all.x=T)
+    
+    Agg.reap.KtcH.daily=aggregate(LIVEWT.reap~Same.return,Bad.Reporters.daily,sum,na.rm=T)
+    names(Agg.reap.KtcH.daily)[2]="LIVEWT.reap.scaler"
+    Bad.Reporters.daily=merge(Bad.Reporters.daily,Agg.reap.KtcH.daily,by="Same.return",all.x=T)
+    Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,ifelse(Tot.shk.livewt>Total.LIVEWT.reap,
+                                                                    LIVEWT.reap*(Total.LIVEWT.reap/Tot.shk.livewt),LIVEWT.reap))
+    Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,ifelse(LIVEWT.reap.scaler>Total.LIVEWT.reap,
+                                                                    LIVEWT.reap*(Total.LIVEWT.reap/LIVEWT.reap.scaler),LIVEWT.reap))
+    
+  }
+  
+  
+  #Reset 'shark other' to the remainder
+  #monthly
+  Remainder=aggregate(LIVEWT.reap~Same.return,Bad.Reporters,sum,na.rm=T)
   names(Remainder)[2]="Remainder"
-  Bad.Reporters.daily=merge(Bad.Reporters.daily,Remainder,by="Same.return",all.x=T)
-  Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
-                    ifelse(SPECIES==22999,Total.LIVEWT.reap-Remainder,LIVEWT.reap))
+  Bad.Reporters=Bad.Reporters%>%left_join(Remainder,by=c("Same.return"))
+  #Bad.Reporters=merge(Bad.Reporters,Remainder,by="Same.return",all.x=T)
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
+                                 ifelse(SPECIES==22999,Total.LIVEWT.reap-Remainder,LIVEWT.reap))
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,ifelse(LIVEWT.reap<0,0,LIVEWT.reap))
   
-  Bad.Reporters.daily=Bad.Reporters.daily[,-match(c("Total.LIVEWT.reap","LIVEWT.reap.scaler"),names(Bad.Reporters.daily))]
-  Bad.Reporters.daily$LIVEWT=with(Bad.Reporters.daily,ifelse(SPECIES==22999,LIVEWT.orgnl,0))
-  Bad.Reporters.daily$LIVEWT.orgnl=with(Bad.Reporters.daily,ifelse(SPECIES==22999,LIVEWT.orgnl,0))  
-}
-
-
-#create new vars
-    #monthly
-Bad.Reporters$Reporter.old=Bad.Reporters$Reporter
-Bad.Reporters$Reporter="good"
-Bad.Reporters$Spec.old=Bad.Reporters$SPECIES
-Bad.Reporters$Sname.old=Bad.Reporters$SNAME
-
-    #daily
-if(Reapportion.daily=="YES") 
-{
-  Bad.Reporters.daily$Reporter.old=Bad.Reporters.daily$Reporter
-  Bad.Reporters.daily$Reporter="good"
-  Bad.Reporters.daily$Spec.old=Bad.Reporters.daily$SPECIES
-  Bad.Reporters.daily$Sname.old=Bad.Reporters.daily$SNAME  
-}
-
-
-#add old species column to data
-    #monthly
-Data.monthly$Reporter.old="good"
-Data.monthly$Spec.old=Data.monthly$SPECIES
-Data.monthly$Sname.old=Data.monthly$SNAME
-
-    #daily
-if(Reapportion.daily=="YES") 
-{
-  Data.daily$Reporter.old="good"
-  Data.daily$Spec.old=Data.daily$SPECIES
-  Data.daily$Sname.old=Data.daily$SNAME  
-}
-
-#remove reportioned catch equal to 0
-Bad.Reporters=subset(Bad.Reporters,!LIVEWT.reap==0)
-
-#merge reapportioned catch
-  #monthly
-Bad.Reporters=Bad.Reporters[,match(names(Data.monthly),names(Bad.Reporters))]
-Data.monthly=rbind(Data.monthly,Bad.Reporters)  
-
+  
+  #check that reapportioned didn't add catch
+  b=aggregate(LIVEWT.reap~Same.return,Bad.Reporters,sum,na.rm=T)                                                   
+  A=Agg.Sp.Ktch%>%full_join(b,by=c("Same.return"))
+  #A=merge(Agg.Sp.Ktch,b,by="Same.return")
+  plot(A[,2],A[,3])
+  lines(A[,2],A[,2])
+  rm(A,b)
+  
+  Bad.Reporters=Bad.Reporters[,-match(c("Total.LIVEWT.reap","LIVEWT.reap.scaler","Remainder"),
+                                      names(Bad.Reporters))]
+  
+  Bad.Reporters$LIVEWT=with(Bad.Reporters,ifelse(SPECIES==22999,LIVEWT.orgnl,0))
+  Bad.Reporters$LIVEWT.orgnl=with(Bad.Reporters,ifelse(SPECIES==22999,LIVEWT.orgnl,0))
+  
+  
   #daily
-if(Reapportion.daily=="YES") 
-{
-  Bad.Reporters.daily=Bad.Reporters.daily[,match(names(Data.daily),names(Bad.Reporters.daily))]
-  Data.daily=rbind(Data.daily,Bad.Reporters.daily)  
+  if(Reapportion.daily=="YES") 
+  {
+    Remainder=aggregate(LIVEWT.reap~Same.return,Bad.Reporters.daily,sum,na.rm=T)
+    names(Remainder)[2]="Remainder"
+    Bad.Reporters.daily=merge(Bad.Reporters.daily,Remainder,by="Same.return",all.x=T)
+    Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
+                                         ifelse(SPECIES==22999,Total.LIVEWT.reap-Remainder,LIVEWT.reap))
+    
+    Bad.Reporters.daily=Bad.Reporters.daily[,-match(c("Total.LIVEWT.reap","LIVEWT.reap.scaler"),names(Bad.Reporters.daily))]
+    Bad.Reporters.daily$LIVEWT=with(Bad.Reporters.daily,ifelse(SPECIES==22999,LIVEWT.orgnl,0))
+    Bad.Reporters.daily$LIVEWT.orgnl=with(Bad.Reporters.daily,ifelse(SPECIES==22999,LIVEWT.orgnl,0))  
+  }
+  
+  
+  #create new vars
+  #monthly
+  Bad.Reporters$Reporter.old=Bad.Reporters$Reporter
+  Bad.Reporters$Reporter="good"
+  Bad.Reporters$Spec.old=Bad.Reporters$SPECIES
+  Bad.Reporters$Sname.old=Bad.Reporters$SNAME
+  
+  #daily
+  if(Reapportion.daily=="YES") 
+  {
+    Bad.Reporters.daily$Reporter.old=Bad.Reporters.daily$Reporter
+    Bad.Reporters.daily$Reporter="good"
+    Bad.Reporters.daily$Spec.old=Bad.Reporters.daily$SPECIES
+    Bad.Reporters.daily$Sname.old=Bad.Reporters.daily$SNAME  
+  }
+  
+  
+  #add old species column to data
+  #monthly
+  Data.monthly$Reporter.old="good"
+  Data.monthly$Spec.old=Data.monthly$SPECIES
+  Data.monthly$Sname.old=Data.monthly$SNAME
+  
+  #daily
+  if(Reapportion.daily=="YES") 
+  {
+    Data.daily$Reporter.old="good"
+    Data.daily$Spec.old=Data.daily$SPECIES
+    Data.daily$Sname.old=Data.daily$SNAME  
+  }
+  
+  #remove reportioned catch equal to 0
+  Bad.Reporters=subset(Bad.Reporters,!LIVEWT.reap==0)
+  
+  #merge reapportioned catch
+  #monthly
+  Bad.Reporters=Bad.Reporters[,match(names(Data.monthly),names(Bad.Reporters))]
+  Data.monthly=rbind(Data.monthly,Bad.Reporters)  
+  
+  #daily
+  if(Reapportion.daily=="YES") 
+  {
+    Bad.Reporters.daily=Bad.Reporters.daily[,match(names(Data.daily),names(Bad.Reporters.daily))]
+    Data.daily=rbind(Data.daily,Bad.Reporters.daily)  
+  }
+  
+  d2=subset(Data.monthly,LAT<=(-26) & !is.na(LIVEWT.reap) &TYPE.DATA=="monthly")
+  fn.chk.ktch(d1=subset(Data.monthly.original,Same.return
+                        %in%unique(d2$Same.return)),
+              d2=d2,
+              VAR1="LIVEWT",VAR2="LIVEWT.reap")
+  rm(d2)
 }
-
-d2=subset(Data.monthly,LAT<=(-26) & !is.na(LIVEWT.reap) &TYPE.DATA=="monthly")
-fn.chk.ktch(d1=subset(Data.monthly.original,Same.return
-                      %in%unique(d2$Same.return)),
-            d2=d2,
-            VAR1="LIVEWT",VAR2="LIVEWT.reap")
-rm(d2)
 
 
 #C.7.9 Make good sandbar reporters and 4h update good sandbard reporters         #Rory's rules 4g      
 #note: identify vessels that report sandbars within sandbar area
-
+if(Monthly.log=='monthlyrawlog')
+{
   #identify if reporting sandbar by same return
-    #monthly
-names(Catch.prop.sandbar$Prop.VesYrMonBlock)[2]="Prop.sandbar"
-Data.monthly=Data.monthly%>%left_join(Catch.prop.sandbar$Prop.VesYrMonBlock,by=c("Same.return"))
-#Data.monthly=merge(Data.monthly,Catch.prop.sandbar$Prop.VesYrMonBlock,by="Same.return",all.x=T)
-Data.monthly$Prop.sandbar=with(Data.monthly,ifelse(is.na(Prop.sandbar),0,Prop.sandbar))
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  names(Catch.prop.sandbar.daily$Prop.VesYrMonBlock)[2]="Prop.sandbar"
-  Data.daily=merge(Data.daily,Catch.prop.sandbar.daily$Prop.VesYrMonBlock,by="Same.return",all.x=T)
-  Data.daily$Prop.sandbar=with(Data.daily,ifelse(is.na(Prop.sandbar),0,Prop.sandbar))  
-}
-
-
-  #id bad reporters
-Data.monthly$SanBar.rep=with(Data.monthly,ifelse(Prop.sandbar==0 & YEAR.c>1984 & TYPE.DATA=="monthly" &
-        LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2] & METHOD=='GN',"bad",'good'))
-if(Reapportion.daily=="YES") Data.daily$SanBar.rep=with(Data.daily,ifelse(Prop.sandbar==0 & YEAR.c>1984 &TYPE.DATA=="monthly" &
-        LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2] & METHOD=='GN',"bad",'good'))
-
-Table.Reporter_sandbar=table(Data.monthly$FINYEAR,Data.monthly$SanBar.rep,useNA='ifany')
-
-  #separate bad sandbar reporters and reapportion only Species ==22999
-    #monthly
-Sanbar.dat=subset(Data.monthly,SanBar.rep=="bad" & SPECIES== 22999)
-Data.monthly=subset(Data.monthly,!(SanBar.rep=="bad" & SPECIES== 22999))
-Data.monthly$SanBar.rep="good"
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Sanbar.dat.daily=subset(Data.daily,SanBar.rep=="bad" & SPECIES== 22999)
-  Data.daily=subset(Data.daily,!(SanBar.rep=="bad" & SPECIES== 22999))
-  Data.daily$SanBar.rep="good"  
-}
-
-
-  #find first month-year with sandbar reporting for each vessel
-fn.sandbar.vessels=function(dat)
-{
-  SB.ves=unique(as.character(dat$VESSEL))
-  DUMMY=vector('list',length(SB.ves))
+  #monthly
+  names(Catch.prop.sandbar$Prop.VesYrMonBlock)[2]="Prop.sandbar"
+  Data.monthly=Data.monthly%>%left_join(Catch.prop.sandbar$Prop.VesYrMonBlock,by=c("Same.return"))
+  Data.monthly$Prop.sandbar=with(Data.monthly,ifelse(is.na(Prop.sandbar),0,Prop.sandbar))
   
-  for(i in 1:length(SB.ves))
+  #daily
+  if(Reapportion.daily=="YES")
   {
-    dummy=subset(dat,VESSEL==SB.ves[i])
-    dummy=dummy[order(dummy$YEAR.c,dummy$MONTH),]
-    id=which(dummy$SPECIES==18007)[1]
-    dummy$SanBar.rep="bad"
-    if(!is.na(id)) dummy$SanBar.rep[id:nrow(dummy)]="good"
-    DUMMY[[i]]=dummy
+    names(Catch.prop.sandbar.daily$Prop.VesYrMonBlock)[2]="Prop.sandbar"
+    Data.daily=merge(Data.daily,Catch.prop.sandbar.daily$Prop.VesYrMonBlock,by="Same.return",all.x=T)
+    Data.daily$Prop.sandbar=with(Data.daily,ifelse(is.na(Prop.sandbar),0,Prop.sandbar))  
   }
   
-  return(do.call(rbind,DUMMY))
   
-}
-
+  #id bad reporters
+  Data.monthly$SanBar.rep=with(Data.monthly,ifelse(Prop.sandbar==0 & YEAR.c>1984 & TYPE.DATA=="monthly" &
+                                                     LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2] & METHOD=='GN',"bad",'good'))
+  if(Reapportion.daily=="YES") Data.daily$SanBar.rep=with(Data.daily,ifelse(Prop.sandbar==0 & YEAR.c>1984 &TYPE.DATA=="monthly" &
+                                                                              LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2] & METHOD=='GN',"bad",'good'))
+  
+  Table.Reporter_sandbar=table(Data.monthly$FINYEAR,Data.monthly$SanBar.rep,useNA='ifany')
+  
+  #separate bad sandbar reporters and reapportion only Species ==22999
   #monthly
-Sanbar.dat.c=fn.sandbar.vessels(Sanbar.dat)
-Sanbar.dat.good=subset(Sanbar.dat.c,SanBar.rep=="good")
-Sanbar.dat.bad=subset(Sanbar.dat.c,SanBar.rep=="bad")
-
-
-Agg.Sp.Ktch=aggregate(LIVEWT.reap~Same.return,Sanbar.dat.bad,sum)
-names(Agg.Sp.Ktch)[2]="Total.LIVEWT.reap"
-
-
+  Sanbar.dat=subset(Data.monthly,SanBar.rep=="bad" & SPECIES== 22999)
+  Data.monthly=subset(Data.monthly,!(SanBar.rep=="bad" & SPECIES== 22999))
+  Data.monthly$SanBar.rep="good"
+  
   #daily
-if(Reapportion.daily=="YES")
-{
-  Sanbar.dat.c.daily=fn.sandbar.vessels(Sanbar.dat.daily)
-  Sanbar.dat.good.daily=subset(Sanbar.dat.c.daily,SanBar.rep=="good")
-  Sanbar.dat.bad.daily=subset(Sanbar.dat.c.daily,SanBar.rep=="bad")  
-}
-
-
-#merge good sandbar records back
-if(nrow(Sanbar.dat.good)>0)Data.monthly=rbind(Data.monthly,Sanbar.dat.good)
-if(Reapportion.daily=="YES")if(nrow(Sanbar.dat.good.daily)>0)Data.daily=rbind(Data.daily,Sanbar.dat.good.daily)
-
-
-# re-calculate sandbar proportions for good reporters
+  if(Reapportion.daily=="YES")
+  {
+    Sanbar.dat.daily=subset(Data.daily,SanBar.rep=="bad" & SPECIES== 22999)
+    Data.daily=subset(Data.daily,!(SanBar.rep=="bad" & SPECIES== 22999))
+    Data.daily$SanBar.rep="good"  
+  }
+  
+  
+  #find first month-year with sandbar reporting for each vessel
+  fn.sandbar.vessels=function(dat)
+  {
+    SB.ves=unique(as.character(dat$VESSEL))
+    DUMMY=vector('list',length(SB.ves))
+    
+    for(i in 1:length(SB.ves))
+    {
+      dummy=subset(dat,VESSEL==SB.ves[i])
+      dummy=dummy[order(dummy$YEAR.c,dummy$MONTH),]
+      id=which(dummy$SPECIES==18007)[1]
+      dummy$SanBar.rep="bad"
+      if(!is.na(id)) dummy$SanBar.rep[id:nrow(dummy)]="good"
+      DUMMY[[i]]=dummy
+    }
+    
+    return(do.call(rbind,DUMMY))
+    
+  }
+  
   #monthly
-Catch.prop.sandbar=fun.prop(subset(Data.monthly,SanBar.rep=="good" & METHOD=='GN'& 
-          LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2]),18007)
-
+  Sanbar.dat.c=fn.sandbar.vessels(Sanbar.dat)
+  Sanbar.dat.good=subset(Sanbar.dat.c,SanBar.rep=="good")
+  Sanbar.dat.bad=subset(Sanbar.dat.c,SanBar.rep=="bad")
+  
+  
+  Agg.Sp.Ktch=aggregate(LIVEWT.reap~Same.return,Sanbar.dat.bad,sum)
+  names(Agg.Sp.Ktch)[2]="Total.LIVEWT.reap"
+  
+  
   #daily
-if(Reapportion.daily=="YES") Catch.prop.sandbar.daily=fun.prop(subset(Data.daily,SanBar.rep=="good" & METHOD=='GN'& 
-          LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2]),18007)
-
-
-#good split table: Yr-Mn-Block 
-    #monthly
-Good.split.san=data.frame(GoodsplitID=as.character(unique(Data.monthly$GoodsplitID)))
-Good.split.san=Good.split.san%>%left_join(Catch.prop.sandbar$Prop.GoodsplitID,by=c("GoodsplitID"))
-#Good.split.san=merge(Good.split.san,Catch.prop.sandbar$Prop.GoodsplitID,by="GoodsplitID",all.x=T)
-names(Good.split.san)[match("Proportion",names(Good.split.san))]="Prop.San.Good.spl"
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Good.split.san.daily=data.frame(GoodsplitID=as.character(unique(Data.daily$GoodsplitID)))
-  Good.split.san.daily=merge(Good.split.san.daily,Catch.prop.sandbar.daily$Prop.GoodsplitID,by="GoodsplitID",all.x=T)
-  names(Good.split.san.daily)[match("Proportion",names(Good.split.san.daily))]="Prop.San.Good.spl"  
-}
-
-
-#good split table: Yr-Mn-Zone                            
-    #monthly
-Zone.good.split.san=data.frame(ZoneID=as.character(unique(Data.monthly$ZoneID)))
-Zone.good.split.san=Zone.good.split.san%>%left_join(Catch.prop.sandbar$Prop.FinYrZone,by=c("ZoneID"))
-#Zone.good.split.san=merge(Zone.good.split.san,Catch.prop.sandbar$Prop.FinYrZone,by="ZoneID",all.x=T)
-names(Zone.good.split.san)[match("Proportion",names(Zone.good.split.san))]="Prop.San.Zone.Good.spl"
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Zone.good.split.san.daily=data.frame(ZoneID=as.character(unique(Data.daily$ZoneID)))
-  Zone.good.split.san.daily=merge(Zone.good.split.san.daily,Catch.prop.sandbar.daily$Prop.FinYrZone,by="ZoneID",all.x=T)
-  names(Zone.good.split.san.daily)[match("Proportion",names(Zone.good.split.san.daily))]="Prop.San.Zone.Good.spl"  
-}
-
-
-# good split table: Yr-Mn                          
-    #monthly
-Monthly.good.split.san=data.frame(MonthlyID=as.character(unique(Data.monthly$MonthlyID)))
-Monthly.good.split.san=Monthly.good.split.san%>%left_join(Catch.prop.sandbar$Prop.FinYrMon,by=c("MonthlyID"))
-#Monthly.good.split.san=merge(Monthly.good.split.san,Catch.prop.sandbar$Prop.FinYrMon,by="MonthlyID",all.x=T)
-names(Monthly.good.split.san)[match("Proportion",names(Monthly.good.split.san))]="Prop.San.Mon.Good.spl"
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Monthly.good.split.san.daily=data.frame(MonthlyID=as.character(unique(Data.daily$MonthlyID)))
-  Monthly.good.split.san.daily=merge(Monthly.good.split.san.daily,Catch.prop.sandbar.daily$Prop.FinYrMon,by="MonthlyID",all.x=T)
-  names(Monthly.good.split.san.daily)[match("Proportion",names(Monthly.good.split.san.daily))]="Prop.San.Mon.Good.spl"  
-}
-
-
-#good split table: Yr-Zone                            
-    #monthly
-YrZn.good.split.san=data.frame(ZnID=as.character(unique(Data.monthly$ZnID)))
-YrZn.good.split.san=YrZn.good.split.san %>%left_join(Catch.prop.sandbar$Prop.YrZone,by=c("ZnID"))
-#YrZn.good.split.san=merge(YrZn.good.split.san,Catch.prop.sandbar$Prop.YrZone,by="ZnID",all.x=T)
-names(YrZn.good.split.san)[match("Proportion",names(YrZn.good.split.san))]="Prop.San.YrZn.Good.spl"
-YrZn.good.split.san$Prop.San.YrZn.Good.spl=with(YrZn.good.split.san,ifelse(is.na(Prop.San.YrZn.Good.spl),
-                                                                       0,Prop.San.YrZn.Good.spl))
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  YrZn.good.split.san.daily=data.frame(ZnID=as.character(unique(Data.daily$ZnID)))
-  YrZn.good.split.san.daily=merge(YrZn.good.split.san.daily,Catch.prop.sandbar.daily$Prop.YrZone,by="ZnID",all.x=T)
-  names(YrZn.good.split.san.daily)[match("Proportion",names(YrZn.good.split.san.daily))]="Prop.San.YrZn.Good.spl"
-  YrZn.good.split.san.daily$Prop.San.YrZn.Good.spl=with(YrZn.good.split.san.daily,ifelse(is.na(Prop.San.YrZn.Good.spl),
-                                                                                         0,Prop.San.YrZn.Good.spl))  
-}
-
-
-#good split table: Zone
-    #monthly
-Zn.good.split.san=data.frame(zone=as.character(unique(Data.monthly$zone)))
-Zn.good.split.san=Zn.good.split.san%>%left_join(Catch.prop.sandbar$Prop.Zone,by=c("zone"))
-#Zn.good.split.san=merge(Zn.good.split.san,Catch.prop.sandbar$Prop.Zone,by="zone",all.x=T)
-names(Zn.good.split.san)[match("Proportion",names(Zn.good.split.san))]="Prop.San.zone.Good.spl"
-Zn.good.split.san$Prop.San.zone.Good.spl=with(Zn.good.split.san,ifelse(is.na(Prop.San.zone.Good.spl),
-                                                                           0,Prop.San.zone.Good.spl))
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Zn.good.split.san.daily=data.frame(zone=as.character(unique(Data.daily$zone)))
-  Zn.good.split.san.daily=merge(Zn.good.split.san.daily,Catch.prop.sandbar.daily$Prop.Zone,by="zone",all.x=T)
-  names(Zn.good.split.san.daily)[match("Proportion",names(Zn.good.split.san.daily))]="Prop.San.zone.Good.spl"
-  Zn.good.split.san.daily$Prop.San.zone.Good.spl=with(Zn.good.split.san.daily,ifelse(is.na(Prop.San.zone.Good.spl),
-                                                                                     0,Prop.San.zone.Good.spl))  
-}
-
+  if(Reapportion.daily=="YES")
+  {
+    Sanbar.dat.c.daily=fn.sandbar.vessels(Sanbar.dat.daily)
+    Sanbar.dat.good.daily=subset(Sanbar.dat.c.daily,SanBar.rep=="good")
+    Sanbar.dat.bad.daily=subset(Sanbar.dat.c.daily,SanBar.rep=="bad")  
+  }
+  
+  
+  #merge good sandbar records back
+  if(nrow(Sanbar.dat.good)>0)Data.monthly=rbind(Data.monthly,Sanbar.dat.good)
+  if(Reapportion.daily=="YES")if(nrow(Sanbar.dat.good.daily)>0)Data.daily=rbind(Data.daily,Sanbar.dat.good.daily)
+  
+  
+  # re-calculate sandbar proportions for good reporters
+  #monthly
+  Catch.prop.sandbar=fun.prop(subset(Data.monthly,SanBar.rep=="good" & METHOD=='GN'& 
+                                       LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2]),18007)
+  
+  #daily
+  if(Reapportion.daily=="YES") Catch.prop.sandbar.daily=fun.prop(subset(Data.daily,SanBar.rep=="good" & METHOD=='GN'& 
+                                                                          LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2]),18007)
+  
+  
+  #good split table: Yr-Mn-Block 
+  #monthly
+  Good.split.san=data.frame(GoodsplitID=as.character(unique(Data.monthly$GoodsplitID)))
+  Good.split.san=Good.split.san%>%left_join(Catch.prop.sandbar$Prop.GoodsplitID,by=c("GoodsplitID"))
+  names(Good.split.san)[match("Proportion",names(Good.split.san))]="Prop.San.Good.spl"
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Good.split.san.daily=data.frame(GoodsplitID=as.character(unique(Data.daily$GoodsplitID)))
+    Good.split.san.daily=merge(Good.split.san.daily,Catch.prop.sandbar.daily$Prop.GoodsplitID,by="GoodsplitID",all.x=T)
+    names(Good.split.san.daily)[match("Proportion",names(Good.split.san.daily))]="Prop.San.Good.spl"  
+  }
+  
+  
+  #good split table: Yr-Mn-Zone                            
+  #monthly
+  Zone.good.split.san=data.frame(ZoneID=as.character(unique(Data.monthly$ZoneID)))
+  Zone.good.split.san=Zone.good.split.san%>%left_join(Catch.prop.sandbar$Prop.FinYrZone,by=c("ZoneID"))
+  names(Zone.good.split.san)[match("Proportion",names(Zone.good.split.san))]="Prop.San.Zone.Good.spl"
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Zone.good.split.san.daily=data.frame(ZoneID=as.character(unique(Data.daily$ZoneID)))
+    Zone.good.split.san.daily=merge(Zone.good.split.san.daily,Catch.prop.sandbar.daily$Prop.FinYrZone,by="ZoneID",all.x=T)
+    names(Zone.good.split.san.daily)[match("Proportion",names(Zone.good.split.san.daily))]="Prop.San.Zone.Good.spl"  
+  }
+  
+  
+  # good split table: Yr-Mn                          
+  #monthly
+  Monthly.good.split.san=data.frame(MonthlyID=as.character(unique(Data.monthly$MonthlyID)))
+  Monthly.good.split.san=Monthly.good.split.san%>%left_join(Catch.prop.sandbar$Prop.FinYrMon,by=c("MonthlyID"))
+  names(Monthly.good.split.san)[match("Proportion",names(Monthly.good.split.san))]="Prop.San.Mon.Good.spl"
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Monthly.good.split.san.daily=data.frame(MonthlyID=as.character(unique(Data.daily$MonthlyID)))
+    Monthly.good.split.san.daily=merge(Monthly.good.split.san.daily,Catch.prop.sandbar.daily$Prop.FinYrMon,by="MonthlyID",all.x=T)
+    names(Monthly.good.split.san.daily)[match("Proportion",names(Monthly.good.split.san.daily))]="Prop.San.Mon.Good.spl"  
+  }
+  
+  
+  #good split table: Yr-Zone                            
+  #monthly
+  YrZn.good.split.san=data.frame(ZnID=as.character(unique(Data.monthly$ZnID)))
+  YrZn.good.split.san=YrZn.good.split.san %>%left_join(Catch.prop.sandbar$Prop.YrZone,by=c("ZnID"))
+  names(YrZn.good.split.san)[match("Proportion",names(YrZn.good.split.san))]="Prop.San.YrZn.Good.spl"
+  YrZn.good.split.san$Prop.San.YrZn.Good.spl=with(YrZn.good.split.san,ifelse(is.na(Prop.San.YrZn.Good.spl),
+                                                                             0,Prop.San.YrZn.Good.spl))
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    YrZn.good.split.san.daily=data.frame(ZnID=as.character(unique(Data.daily$ZnID)))
+    YrZn.good.split.san.daily=merge(YrZn.good.split.san.daily,Catch.prop.sandbar.daily$Prop.YrZone,by="ZnID",all.x=T)
+    names(YrZn.good.split.san.daily)[match("Proportion",names(YrZn.good.split.san.daily))]="Prop.San.YrZn.Good.spl"
+    YrZn.good.split.san.daily$Prop.San.YrZn.Good.spl=with(YrZn.good.split.san.daily,ifelse(is.na(Prop.San.YrZn.Good.spl),
+                                                                                           0,Prop.San.YrZn.Good.spl))  
+  }
+  
+  
+  #good split table: Zone
+  #monthly
+  Zn.good.split.san=data.frame(zone=as.character(unique(Data.monthly$zone)))
+  Zn.good.split.san=Zn.good.split.san%>%left_join(Catch.prop.sandbar$Prop.Zone,by=c("zone"))
+  names(Zn.good.split.san)[match("Proportion",names(Zn.good.split.san))]="Prop.San.zone.Good.spl"
+  Zn.good.split.san$Prop.San.zone.Good.spl=with(Zn.good.split.san,ifelse(is.na(Prop.San.zone.Good.spl),
+                                                                         0,Prop.San.zone.Good.spl))
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Zn.good.split.san.daily=data.frame(zone=as.character(unique(Data.daily$zone)))
+    Zn.good.split.san.daily=merge(Zn.good.split.san.daily,Catch.prop.sandbar.daily$Prop.Zone,by="zone",all.x=T)
+    names(Zn.good.split.san.daily)[match("Proportion",names(Zn.good.split.san.daily))]="Prop.San.zone.Good.spl"
+    Zn.good.split.san.daily$Prop.San.zone.Good.spl=with(Zn.good.split.san.daily,ifelse(is.na(Prop.San.zone.Good.spl),
+                                                                                       0,Prop.San.zone.Good.spl))  
+  }
+  
   #monthly merging
-Sanbar.dat.bad=Sanbar.dat.bad %>% left_join(Good.split.san,by="GoodsplitID")%>%
-                                  left_join(Zone.good.split.san,by="ZoneID")%>%
-                                  left_join(Monthly.good.split.san,by="MonthlyID")%>%
-                                  left_join(YrZn.good.split.san,by="ZnID")%>%
-                                  left_join(Zn.good.split.san,by="zone")
-# Sanbar.dat.bad=merge(Sanbar.dat.bad,Good.split.san,by="GoodsplitID",all.x=T)
-# Sanbar.dat.bad=merge(Sanbar.dat.bad,Zone.good.split.san,by="ZoneID",all.x=T)
-# Sanbar.dat.bad=merge(Sanbar.dat.bad,Monthly.good.split.san,by="MonthlyID",all.x=T)
-# Sanbar.dat.bad=merge(Sanbar.dat.bad,YrZn.good.split.san,by="ZnID",all.x=T)
-# Sanbar.dat.bad=merge(Sanbar.dat.bad,Zn.good.split.san,by="zone",all.x=T)
-
-Sanbar.dat.bad$Prop.San.Good.spl=with(Sanbar.dat.bad,
-              ifelse(is.na(Prop.San.Good.spl),0,Prop.San.Good.spl))
-Sanbar.dat.bad$Prop.San.Zone.Good.spl=with(Sanbar.dat.bad,
-              ifelse(is.na(Prop.San.Zone.Good.spl),0,Prop.San.Zone.Good.spl))
-Sanbar.dat.bad$Prop.San.Mon.Good.spl=with(Sanbar.dat.bad,
-              ifelse(is.na(Prop.San.Mon.Good.spl),0,Prop.San.Mon.Good.spl))
-
+  Sanbar.dat.bad=Sanbar.dat.bad %>% left_join(Good.split.san,by="GoodsplitID")%>%
+    left_join(Zone.good.split.san,by="ZoneID")%>%
+    left_join(Monthly.good.split.san,by="MonthlyID")%>%
+    left_join(YrZn.good.split.san,by="ZnID")%>%
+    left_join(Zn.good.split.san,by="zone")
+  Sanbar.dat.bad$Prop.San.Good.spl=with(Sanbar.dat.bad,
+                                        ifelse(is.na(Prop.San.Good.spl),0,Prop.San.Good.spl))
+  Sanbar.dat.bad$Prop.San.Zone.Good.spl=with(Sanbar.dat.bad,
+                                             ifelse(is.na(Prop.San.Zone.Good.spl),0,Prop.San.Zone.Good.spl))
+  Sanbar.dat.bad$Prop.San.Mon.Good.spl=with(Sanbar.dat.bad,
+                                            ifelse(is.na(Prop.San.Mon.Good.spl),0,Prop.San.Mon.Good.spl))
+  
   #daily merging
-if(Reapportion.daily=="YES")
-{
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Good.split.san.daily,by="GoodsplitID",all.x=T)
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Zone.good.split.san.daily,by="ZoneID",all.x=T)
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Monthly.good.split.san.daily,by="MonthlyID",all.x=T)
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,YrZn.good.split.san.daily,by="ZnID",all.x=T)
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Zn.good.split.san.daily,by="zone",all.x=T)
-  Sanbar.dat.bad.daily$Prop.San.Good.spl=with(Sanbar.dat.bad.daily,
-                                              ifelse(is.na(Prop.San.Good.spl),0,Prop.San.Good.spl))
-  Sanbar.dat.bad.daily$Prop.San.Zone.Good.spl=with(Sanbar.dat.bad.daily,
-                                                   ifelse(is.na(Prop.San.Zone.Good.spl),0,Prop.San.Zone.Good.spl))
-  Sanbar.dat.bad.daily$Prop.San.Mon.Good.spl=with(Sanbar.dat.bad.daily,
-                                                  ifelse(is.na(Prop.San.Mon.Good.spl),0,Prop.San.Mon.Good.spl))  
-}
-
-
-# replicate Sanbar.dat.bad twice to have sandbar and shark others as a record
-#monthly
-NroW.san=nrow(Sanbar.dat.bad)
-Sanbar.dat.bad=rbind(Sanbar.dat.bad,Sanbar.dat.bad)   
-Sanbar.dat.bad=Sanbar.dat.bad[order(Sanbar.dat.bad$Same.return),]
-
-Sanbar.dat.bad$Spec.old=Sanbar.dat.bad$SPECIES
-Sanbar.dat.bad$Sname.old=Sanbar.dat.bad$SNAME
-Sanbar.dat.bad$SPECIES=rep(c(18007,22999),NroW.san)
-Sanbar.dat.bad$SNAME=rep(c("Sandbar Shark","shark, other"),NroW.san)
-
-#daily
-if(Reapportion.daily=="YES")
-{  
-  NroW.san.d=nrow(Sanbar.dat.bad.daily)
-  Sanbar.dat.bad.daily=rbind(Sanbar.dat.bad.daily,Sanbar.dat.bad.daily)
-  Sanbar.dat.bad.daily$Spec.old=Sanbar.dat.bad.daily$SPECIES
-  Sanbar.dat.bad.daily$Sname.old=Sanbar.dat.bad.daily$SNAME
-  Sanbar.dat.bad.daily$SPECIES=rep(c(18007,22999),NroW.san.d)
-  Sanbar.dat.bad.daily$SNAME=rep(c("Sandbar Shark","shark, other"),NroW.san.d)  
-}
-
-
-#C.7.10 Reapportion "sharks, other' in "bad" sandbar      #Rory's rules 4i-4o                   
-Sanbar.dat.bad$LIVEWT.reap.san=NA
-if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=NA
-
-#first use "Good.spl" 
-  #monthly
-Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
-   ifelse(SPECIES==18007 & Prop.San.Good.spl>0,LIVEWT.reap*Prop.San.Good.spl,LIVEWT.reap.san))
-
-  #daily
-if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,
-   ifelse(SPECIES==18007 & Prop.San.Good.spl>0,LIVEWT.reap*Prop.San.Good.spl,LIVEWT.reap.san))
-
-
-#Second, if previous not available, use "Zone.Good.spl"
-  #monthly
-Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
-   ifelse(SPECIES==18007 & Prop.San.Zone.Good.spl>0,LIVEWT.reap*Prop.San.Zone.Good.spl,LIVEWT.reap.san))
-
-  #daily
-if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,
-   ifelse(SPECIES==18007 & Prop.San.Zone.Good.spl>0,LIVEWT.reap*Prop.San.Zone.Good.spl,LIVEWT.reap.san))
-
-
-#third, if previous are not available, use "YrMonth.Good.spl"
-  #monthly
-Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
-   ifelse(SPECIES==18007,LIVEWT.reap*Prop.San.Mon.Good.spl,LIVEWT.reap.san))
-
-  #daily
-if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,
-    ifelse(SPECIES==18007,LIVEWT.reap*Prop.San.Mon.Good.spl,LIVEWT.reap.san))
-
-
-# #fourth, if previous are not available, use "YrZn.Good.spl"
-#  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
-#    ifelse(SPECIES==18007 & Prop.San.YrZn.Good.spl>0,LIVEWT.reap*Prop.San.YrZn.Good.spl,LIVEWT.reap.san))
-# 
-# #finally, use just zone if no other available
-#  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
-#     ifelse(SPECIES==18007,LIVEWT.reap*Prop.San.zone.Good.spl ,LIVEWT.reap.san))
-
-#put remainder in "shark other'
-    #monthly 
-InDx=1:(nrow(Sanbar.dat.bad)-1)
-Sanbar.dat.bad$Remainder= with(Sanbar.dat.bad,c(NA,LIVEWT.reap[InDx]-LIVEWT.reap.san[InDx]))
-Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,ifelse(SPECIES==22999,Remainder,LIVEWT.reap.san))
-Sanbar.dat.bad=Sanbar.dat.bad[,-match("Remainder",names(Sanbar.dat.bad))]
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  InDx=1:(nrow(Sanbar.dat.bad.daily)-1)
-  Sanbar.dat.bad.daily$Remainder= with(Sanbar.dat.bad.daily,c(NA,LIVEWT.reap[InDx]-LIVEWT.reap.san[InDx]))
-  Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,ifelse(SPECIES==22999,Remainder,LIVEWT.reap.san))
-  Sanbar.dat.bad.daily=Sanbar.dat.bad.daily[,-match("Remainder",names(Sanbar.dat.bad.daily))]
+  if(Reapportion.daily=="YES")
+  {
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Good.split.san.daily,by="GoodsplitID",all.x=T)
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Zone.good.split.san.daily,by="ZoneID",all.x=T)
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Monthly.good.split.san.daily,by="MonthlyID",all.x=T)
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,YrZn.good.split.san.daily,by="ZnID",all.x=T)
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Zn.good.split.san.daily,by="zone",all.x=T)
+    Sanbar.dat.bad.daily$Prop.San.Good.spl=with(Sanbar.dat.bad.daily,
+                                                ifelse(is.na(Prop.San.Good.spl),0,Prop.San.Good.spl))
+    Sanbar.dat.bad.daily$Prop.San.Zone.Good.spl=with(Sanbar.dat.bad.daily,
+                                                     ifelse(is.na(Prop.San.Zone.Good.spl),0,Prop.San.Zone.Good.spl))
+    Sanbar.dat.bad.daily$Prop.San.Mon.Good.spl=with(Sanbar.dat.bad.daily,
+                                                    ifelse(is.na(Prop.San.Mon.Good.spl),0,Prop.San.Mon.Good.spl))  
+  }
   
-}
-
-
-#rescale to equal to total catch or less              
+  
+  # replicate Sanbar.dat.bad twice to have sandbar and shark others as a record
   #monthly
-Sanbar.dat.bad=Sanbar.dat.bad%>%left_join(Agg.Sp.Ktch,by=c("Same.return"))
-#Sanbar.dat.bad=merge(Sanbar.dat.bad,Agg.Sp.Ktch,by="Same.return",all.x=T)
-Agg.reap.KtcH=aggregate(LIVEWT.reap.san~Same.return,Sanbar.dat.bad,sum,na.rm=T)
-names(Agg.reap.KtcH)[2]="LIVEWT.reap.scaler"
-Sanbar.dat.bad=Sanbar.dat.bad%>%left_join(Agg.reap.KtcH,by=c("Same.return"))
-#Sanbar.dat.bad=merge(Sanbar.dat.bad,Agg.reap.KtcH,by="Same.return",all.x=T)
-
-Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,ifelse(LIVEWT.reap.scaler>0,
-                    LIVEWT.reap.san*Total.LIVEWT.reap/LIVEWT.reap.scaler,LIVEWT.reap.san))
-
+  NroW.san=nrow(Sanbar.dat.bad)
+  Sanbar.dat.bad=rbind(Sanbar.dat.bad,Sanbar.dat.bad)   
+  Sanbar.dat.bad=Sanbar.dat.bad[order(Sanbar.dat.bad$Same.return),]
+  
+  Sanbar.dat.bad$Spec.old=Sanbar.dat.bad$SPECIES
+  Sanbar.dat.bad$Sname.old=Sanbar.dat.bad$SNAME
+  Sanbar.dat.bad$SPECIES=rep(c(18007,22999),NroW.san)
+  Sanbar.dat.bad$SNAME=rep(c("Sandbar Shark","shark, other"),NroW.san)
+  
   #daily
-if(Reapportion.daily=="YES")
-{
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Agg.Sp.Ktch.daily,by="Same.return",all.x=T)
-  Agg.reap.KtcH=aggregate(LIVEWT.reap.san~Same.return,Sanbar.dat.bad.daily,sum,na.rm=T)
+  if(Reapportion.daily=="YES")
+  {  
+    NroW.san.d=nrow(Sanbar.dat.bad.daily)
+    Sanbar.dat.bad.daily=rbind(Sanbar.dat.bad.daily,Sanbar.dat.bad.daily)
+    Sanbar.dat.bad.daily$Spec.old=Sanbar.dat.bad.daily$SPECIES
+    Sanbar.dat.bad.daily$Sname.old=Sanbar.dat.bad.daily$SNAME
+    Sanbar.dat.bad.daily$SPECIES=rep(c(18007,22999),NroW.san.d)
+    Sanbar.dat.bad.daily$SNAME=rep(c("Sandbar Shark","shark, other"),NroW.san.d)  
+  }
+  
+  
+  # Reapportion "sharks, other' in "bad" sandbar      #Rory's rules 4i-4o                   
+  Sanbar.dat.bad$LIVEWT.reap.san=NA
+  if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=NA
+  
+  #first use "Good.spl" 
+  #monthly
+  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
+                                      ifelse(SPECIES==18007 & Prop.San.Good.spl>0,LIVEWT.reap*Prop.San.Good.spl,LIVEWT.reap.san))
+  
+  #daily
+  if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,
+                                                                         ifelse(SPECIES==18007 & Prop.San.Good.spl>0,LIVEWT.reap*Prop.San.Good.spl,LIVEWT.reap.san))
+  
+  
+  #Second, if previous not available, use "Zone.Good.spl"
+  #monthly
+  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
+                                      ifelse(SPECIES==18007 & Prop.San.Zone.Good.spl>0,LIVEWT.reap*Prop.San.Zone.Good.spl,LIVEWT.reap.san))
+  
+  #daily
+  if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,
+                                                                         ifelse(SPECIES==18007 & Prop.San.Zone.Good.spl>0,LIVEWT.reap*Prop.San.Zone.Good.spl,LIVEWT.reap.san))
+  
+  
+  #third, if previous are not available, use "YrMonth.Good.spl"
+  #monthly
+  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
+                                      ifelse(SPECIES==18007,LIVEWT.reap*Prop.San.Mon.Good.spl,LIVEWT.reap.san))
+  
+  #daily
+  if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,
+                                                                         ifelse(SPECIES==18007,LIVEWT.reap*Prop.San.Mon.Good.spl,LIVEWT.reap.san))
+  
+  
+  # #fourth, if previous are not available, use "YrZn.Good.spl"
+  #  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
+  #    ifelse(SPECIES==18007 & Prop.San.YrZn.Good.spl>0,LIVEWT.reap*Prop.San.YrZn.Good.spl,LIVEWT.reap.san))
+  # 
+  # #finally, use just zone if no other available
+  #  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
+  #     ifelse(SPECIES==18007,LIVEWT.reap*Prop.San.zone.Good.spl ,LIVEWT.reap.san))
+  
+  #put remainder in "shark other'
+  #monthly 
+  InDx=1:(nrow(Sanbar.dat.bad)-1)
+  Sanbar.dat.bad$Remainder= with(Sanbar.dat.bad,c(NA,LIVEWT.reap[InDx]-LIVEWT.reap.san[InDx]))
+  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,ifelse(SPECIES==22999,Remainder,LIVEWT.reap.san))
+  Sanbar.dat.bad=Sanbar.dat.bad[,-match("Remainder",names(Sanbar.dat.bad))]
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    InDx=1:(nrow(Sanbar.dat.bad.daily)-1)
+    Sanbar.dat.bad.daily$Remainder= with(Sanbar.dat.bad.daily,c(NA,LIVEWT.reap[InDx]-LIVEWT.reap.san[InDx]))
+    Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,ifelse(SPECIES==22999,Remainder,LIVEWT.reap.san))
+    Sanbar.dat.bad.daily=Sanbar.dat.bad.daily[,-match("Remainder",names(Sanbar.dat.bad.daily))]
+    
+  }
+  
+  
+  #rescale to equal to total catch or less              
+  #monthly
+  Sanbar.dat.bad=Sanbar.dat.bad%>%left_join(Agg.Sp.Ktch,by=c("Same.return"))
+  Agg.reap.KtcH=aggregate(LIVEWT.reap.san~Same.return,Sanbar.dat.bad,sum,na.rm=T)
   names(Agg.reap.KtcH)[2]="LIVEWT.reap.scaler"
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Agg.reap.KtcH,by="Same.return",all.x=T)
+  Sanbar.dat.bad=Sanbar.dat.bad%>%left_join(Agg.reap.KtcH,by=c("Same.return"))
   
-  Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,ifelse(LIVEWT.reap.scaler>0,
-           LIVEWT.reap.san*Total.LIVEWT.reap/LIVEWT.reap.scaler,LIVEWT.reap.san))
-}
+  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,ifelse(LIVEWT.reap.scaler>0,
+                                                            LIVEWT.reap.san*Total.LIVEWT.reap/LIVEWT.reap.scaler,LIVEWT.reap.san))
   
-    #monthly                 
-Sanbar.dat.bad$LIVEWT.reap=Sanbar.dat.bad$LIVEWT.reap.san
-Sanbar.dat.bad=Sanbar.dat.bad[,-match(c("Prop.San.Good.spl","Prop.San.Zone.Good.spl","Prop.San.Mon.Good.spl",
-          "Prop.San.YrZn.Good.spl","Prop.San.zone.Good.spl","LIVEWT.reap.san"),names(Sanbar.dat.bad))]
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Sanbar.dat.bad.daily$LIVEWT.reap=Sanbar.dat.bad.daily$LIVEWT.reap.san
-  Sanbar.dat.bad.daily=Sanbar.dat.bad.daily[,-match(c("Prop.San.Good.spl","Prop.San.Zone.Good.spl","Prop.San.Mon.Good.spl",
-                  "Prop.San.YrZn.Good.spl","Prop.San.zone.Good.spl","LIVEWT.reap.san"),names(Sanbar.dat.bad.daily))]  
-}
-
-
-#create file for flagging bad reporters
-Sanbar.dat.bad$Reporter.old='bad'
-if(Reapportion.daily=="YES")Sanbar.dat.bad.daily$Reporter='bad'
-
-#remove reportioned catch equal to 0
-Sanbar.dat.bad=subset(Sanbar.dat.bad,!LIVEWT.reap==0)
-
-#merge corrected sandbar records                        
-  #monthly
-Sanbar.dat.bad=Sanbar.dat.bad[,-match(c("Total.LIVEWT.reap","LIVEWT.reap.scaler"),names(Sanbar.dat.bad))]
-Sanbar.dat.bad$Reporter='good'
-Data.monthly=rbind(Data.monthly,Sanbar.dat.bad)
-Data.monthly$Reporter.old=with(Data.monthly,ifelse(Reporter=="bad","bad",Reporter.old))
-
   #daily
-if(Reapportion.daily=="YES")
-{
-  Sanbar.dat.bad.daily=Sanbar.dat.bad.daily[,-match(c("Total.LIVEWT.reap","LIVEWT.reap.scaler"),names(Sanbar.dat.bad.daily))]
-  Sanbar.dat.bad.daily$Reporter.old=Sanbar.dat.bad.daily$Reporter
-  Sanbar.dat.bad.daily$Reporter='good'
-  Data.daily=rbind(Data.daily,Sanbar.dat.bad.daily)
-  Data.daily$Reporter.old=with(Data.daily,ifelse(Reporter=="bad","bad",Reporter.old))  
+  if(Reapportion.daily=="YES")
+  {
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Agg.Sp.Ktch.daily,by="Same.return",all.x=T)
+    Agg.reap.KtcH=aggregate(LIVEWT.reap.san~Same.return,Sanbar.dat.bad.daily,sum,na.rm=T)
+    names(Agg.reap.KtcH)[2]="LIVEWT.reap.scaler"
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Agg.reap.KtcH,by="Same.return",all.x=T)
+    
+    Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,ifelse(LIVEWT.reap.scaler>0,
+                                                                          LIVEWT.reap.san*Total.LIVEWT.reap/LIVEWT.reap.scaler,LIVEWT.reap.san))
+  }
+  
+  #monthly                 
+  Sanbar.dat.bad$LIVEWT.reap=Sanbar.dat.bad$LIVEWT.reap.san
+  Sanbar.dat.bad=Sanbar.dat.bad[,-match(c("Prop.San.Good.spl","Prop.San.Zone.Good.spl","Prop.San.Mon.Good.spl",
+                                          "Prop.San.YrZn.Good.spl","Prop.San.zone.Good.spl","LIVEWT.reap.san"),names(Sanbar.dat.bad))]
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Sanbar.dat.bad.daily$LIVEWT.reap=Sanbar.dat.bad.daily$LIVEWT.reap.san
+    Sanbar.dat.bad.daily=Sanbar.dat.bad.daily[,-match(c("Prop.San.Good.spl","Prop.San.Zone.Good.spl","Prop.San.Mon.Good.spl",
+                                                        "Prop.San.YrZn.Good.spl","Prop.San.zone.Good.spl","LIVEWT.reap.san"),names(Sanbar.dat.bad.daily))]  
+  }
+  
+  
+  #create file for flagging bad reporters
+  Sanbar.dat.bad$Reporter.old='bad'
+  if(Reapportion.daily=="YES")Sanbar.dat.bad.daily$Reporter='bad'
+  
+  #remove reportioned catch equal to 0
+  Sanbar.dat.bad=subset(Sanbar.dat.bad,!LIVEWT.reap==0)
+  
+  #merge corrected sandbar records                        
+  #monthly
+  Sanbar.dat.bad=Sanbar.dat.bad[,-match(c("Total.LIVEWT.reap","LIVEWT.reap.scaler"),names(Sanbar.dat.bad))]
+  Sanbar.dat.bad$Reporter='good'
+  Data.monthly=rbind(Data.monthly,Sanbar.dat.bad)
+  Data.monthly$Reporter.old=with(Data.monthly,ifelse(Reporter=="bad","bad",Reporter.old))
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Sanbar.dat.bad.daily=Sanbar.dat.bad.daily[,-match(c("Total.LIVEWT.reap","LIVEWT.reap.scaler"),names(Sanbar.dat.bad.daily))]
+    Sanbar.dat.bad.daily$Reporter.old=Sanbar.dat.bad.daily$Reporter
+    Sanbar.dat.bad.daily$Reporter='good'
+    Data.daily=rbind(Data.daily,Sanbar.dat.bad.daily)
+    Data.daily$Reporter.old=with(Data.daily,ifelse(Reporter=="bad","bad",Reporter.old))  
+  }
+  
+  
+  # if NA livewt reapportioned, then set to livewt (deals with LAT>(-26) cases)
+  Data.monthly$LIVEWT.reap=with(Data.monthly,ifelse(is.na(LIVEWT.reap),LIVEWT,LIVEWT.reap))
+  if(Reapportion.daily=="YES")  Data.daily$LIVEWT.reap=with(Data.daily,ifelse(is.na(LIVEWT.reap),LIVEWT,LIVEWT.reap))
+  
+  
+  #check catch
+  d2=subset(Data.monthly,LAT<=(-26) & !is.na(LIVEWT.reap) &TYPE.DATA=="monthly")
+  fn.chk.ktch(d1=subset(Data.monthly.original,Same.return
+                        %in%unique(d2$Same.return)),
+              d2=d2,
+              VAR1="LIVEWT",VAR2="LIVEWT.reap")
+  rm(d2)
+  
+  
+  
+  # Export percentage of GN records reapportioned by year
+  Table.Reporter=table(Data.monthly$Reporter.old)
+  write.csv(round(100*Table.Reporter[1]/sum(Table.Reporter),1),
+            handl_OneDrive("Analyses/Catch and effort/Outputs/Paper/Percent.GN.reapportioned.csv"))
 }
 
-
-# if NA livewt reapportioned, then set to livewt (deals with LAT>(-26) cases)
-Data.monthly$LIVEWT.reap=with(Data.monthly,ifelse(is.na(LIVEWT.reap),LIVEWT,LIVEWT.reap))
-if(Reapportion.daily=="YES")  Data.daily$LIVEWT.reap=with(Data.daily,ifelse(is.na(LIVEWT.reap),LIVEWT,LIVEWT.reap))
-
-
-#check catch
-d2=subset(Data.monthly,LAT<=(-26) & !is.na(LIVEWT.reap) &TYPE.DATA=="monthly")
-fn.chk.ktch(d1=subset(Data.monthly.original,Same.return
-                      %in%unique(d2$Same.return)),
-            d2=d2,
-            VAR1="LIVEWT",VAR2="LIVEWT.reap")
-rm(d2)
-
-
-
-# Export percentage of GN records reapportioned by year
-Table.Reporter=table(Data.monthly$Reporter.old)
-write.csv(round(100*Table.Reporter[1]/sum(Table.Reporter),1),
-          handl_OneDrive("Analyses/Catch and effort/Outputs/Paper/Percent.GN.reapportioned.csv"))
 
 
 #_LONGLINE REAPPORTIONING (within TDGDLF)_
@@ -4460,13 +4478,11 @@ write.csv(round(100*Table.Reporter[1]/sum(Table.Reporter),1),
     #monthly
 Catch.prop.sandbar=fun.prop(subset(Data.monthly,LAT<=Sandbar.range[1] & LONG <= Sandbar.range[2]),18007)
 Vessel.Report=Vessel.Report%>%left_join(Catch.prop.sandbar$Prop.VesYrMonBlock,by=c("Same.return"))
-#Vessel.Report=merge(Vessel.Report,Catch.prop.sandbar$Prop.VesYrMonBlock,by="Same.return",all.x=T)
 names(Vessel.Report)[match("Proportion",names(Vessel.Report))]="Prop.San.Ves.ID"
 Vessel.Report$Prop.San.Ves.ID=with(Vessel.Report,ifelse(is.na(Prop.San.Ves.ID),0,Prop.San.Ves.ID))
 Drop.these=names(Vessel.Report)[-match(c("Same.return","Prop.San.Ves.ID"),names(Vessel.Report))]
 Data.monthly=Data.monthly[,-match(Drop.these,names(Data.monthly))]
 Data.monthly=Data.monthly%>%left_join(Vessel.Report,by=c("Same.return"))
-#Data.monthly=merge(Data.monthly,Vessel.Report,by="Same.return",all.x=T)
 
     #daily
 if(Reapportion.daily=="YES")
@@ -4481,34 +4497,46 @@ if(Reapportion.daily=="YES")
 }
 
 
-#C.7.12 Northern LL split                                     #Rory's rules 6c            
+#C.8.1 Northern LL split                                     #Rory's rules 6c            
   #monthly
-Data.monthly$Reporter=with(Data.monthly,
-      ifelse((LAT<=(-26) & LAT>(-32) & LONG<125 & YEAR.c<2007 & TYPE.DATA=="monthly" & METHOD=="LL" &
-                SPECIES%in%c(22999,Indicator.species)) &
-          (Prop.Other.Ves.ID==1| (Prop.Dus.Ves.ID==0 | Prop.San.Ves.ID==0)),"bad","good"))
+if(Monthly.log=='monthlyrawlog')
+{
+  Data.monthly$Reporter=with(Data.monthly,
+                             ifelse((LAT<=(-26) & LAT>(-32) & LONG<125 & YEAR.c<2007 & TYPE.DATA=="monthly" & METHOD=="LL" &
+                                       SPECIES%in%c(22999,Indicator.species)) &
+                                      (Prop.Other.Ves.ID==1| (Prop.Dus.Ves.ID==0 | Prop.San.Ves.ID==0)),"bad","good"))
+  
+}
 
   #daily
-if(Reapportion.daily=="YES") Data.daily$Reporter=with(Data.daily,
-      ifelse((LAT<=(-26) & LAT>(-32) & LONG<125 & TYPE.DATA=="monthly" & METHOD=="LL" & SPECIES%in%c(22999,Indicator.species)) &
-          (Prop.Other.Ves.ID==1| (Prop.Dus.Ves.ID==0| Prop.San.Ves.ID==0)),"bad","good"))
+if(Reapportion.daily=="YES" & Monthly.log=='monthlyrawlog')
+{
+  Data.daily$Reporter=with(Data.daily,
+                           ifelse((LAT<=(-26) & LAT>(-32) & LONG<125 & TYPE.DATA=="monthly" & METHOD=="LL" & SPECIES%in%c(22999,Indicator.species)) &
+                                    (Prop.Other.Ves.ID==1| (Prop.Dus.Ves.ID==0| Prop.San.Ves.ID==0)),"bad","good"))
+}
 
 
-#C.7.13  SW LL split                                          #Rory's rules 6d           
+
+#C.8.2  SW LL split                                          #Rory's rules 6d           
   #monthly
-Data.monthly$Reporter=with(Data.monthly,
-      ifelse((LAT<=(-32) & LONG<125& YEAR.c<2007 & METHOD=="LL" & SPECIES%in%c(22999,Indicator.species)) &
-           (Prop.Other.Ves.ID==1|
-           (Prop.Whi.Ves.ID==0 & Prop.Dus.Ves.ID==0 & Prop.Gum.Ves.ID==0)|
-           (Prop.Whi.Ves.ID==0 & Prop.Gum.Ves.ID==0)|
-           (Prop.Dus.Ves.ID==0 & Prop.Whi.Ves.ID==0)|
-           (Prop.Dus.Ves.ID==0 & Prop.Gum.Ves.ID==0)|
-           (Prop.Dus.Ves.ID>0 & Prop.Dus.Ves.ID==Prop.Gum.Ves.ID)|
-           (Prop.Dus.Ves.ID>0 & Prop.Dus.Ves.ID==Prop.Whi.Ves.ID)|
-           (Prop.Gum.Ves.ID>0 & Prop.Gum.Ves.ID==Prop.Whi.Ves.ID)),"bad",Reporter))
+if(Monthly.log=='monthlyrawlog')
+{
+  Data.monthly$Reporter=with(Data.monthly,
+                             ifelse((LAT<=(-32) & LONG<125& YEAR.c<2007 & METHOD=="LL" & SPECIES%in%c(22999,Indicator.species)) &
+                                      (Prop.Other.Ves.ID==1|
+                                         (Prop.Whi.Ves.ID==0 & Prop.Dus.Ves.ID==0 & Prop.Gum.Ves.ID==0)|
+                                         (Prop.Whi.Ves.ID==0 & Prop.Gum.Ves.ID==0)|
+                                         (Prop.Dus.Ves.ID==0 & Prop.Whi.Ves.ID==0)|
+                                         (Prop.Dus.Ves.ID==0 & Prop.Gum.Ves.ID==0)|
+                                         (Prop.Dus.Ves.ID>0 & Prop.Dus.Ves.ID==Prop.Gum.Ves.ID)|
+                                         (Prop.Dus.Ves.ID>0 & Prop.Dus.Ves.ID==Prop.Whi.Ves.ID)|
+                                         (Prop.Gum.Ves.ID>0 & Prop.Gum.Ves.ID==Prop.Whi.Ves.ID)),"bad",Reporter))
+}
+
 
   #daily
-if(Reapportion.daily=="YES") 
+if(Reapportion.daily=="YES" & Monthly.log=='monthlyrawlog') 
 {
   Data.daily$Reporter=with(Data.daily,
                            ifelse((LAT<=(-32) & LONG<125 & METHOD=="LL" & SPECIES%in%c(22999,Indicator.species)) &
@@ -4523,15 +4551,19 @@ if(Reapportion.daily=="YES")
 }
 
 
-#C.7.14 SE split                                              #Rory's rules 6e         
+#C.8.3 SE split                                              #Rory's rules 6e         
     #monthly
-Data.monthly$Reporter=with(Data.monthly,
-       ifelse((LAT<=(-26) & LONG>=125 & YEAR.c<2007 & METHOD=="LL" & SPECIES%in%c(22999,Indicator.species)) & 
-          (Prop.Other.Ves.ID==1|(Prop.Gum.Ves.ID==0 & Prop.Sch.Ves.ID==0)),"bad",Reporter))
-Table.Reporter.LL=table(Data.monthly$Reporter,useNA='ifany')
+if(Monthly.log=='monthlyrawlog')
+{
+  Data.monthly$Reporter=with(Data.monthly,
+                             ifelse((LAT<=(-26) & LONG>=125 & YEAR.c<2007 & METHOD=="LL" & SPECIES%in%c(22999,Indicator.species)) & 
+                                      (Prop.Other.Ves.ID==1|(Prop.Gum.Ves.ID==0 & Prop.Sch.Ves.ID==0)),"bad",Reporter))
+  Table.Reporter.LL=table(Data.monthly$Reporter,useNA='ifany')
+  
+}
 
     #daily
-if(Reapportion.daily=="YES") 
+if(Reapportion.daily=="YES" & Monthly.log=='monthlyrawlog') 
 {
   Data.daily$Reporter=with(Data.daily,
                            ifelse((LAT<=(-26) & LONG>=125 & METHOD=="LL" & SPECIES%in%c(22999,Indicator.species)) & 
@@ -4541,7 +4573,7 @@ if(Reapportion.daily=="YES")
 }
 
 
-#C.7.15.1 Make good split table: Yr-Mn-Block                      #Apply Rory's rules 4b
+#C.8.3.1 Make good split table: Yr-Mn-Block                      #Apply Rory's rules 4b
 #not: set NA to 0 for those that don't occur
 rm(Catch.prop.gummy,Catch.prop.whiskery,Catch.prop.dusky,YrZn.good.split)
 if(Reapportion.daily=="YES") rm(Catch.prop.gummy.daily,Catch.prop.whiskery.daily,Catch.prop.dusky.daily,YrZn.good.split.daily)
@@ -4571,15 +4603,12 @@ if(Reapportion.daily=="YES")
   #monthly
 Good.split=data.frame(GoodsplitID=as.character(unique(Data.monthly$GoodsplitID)))
 Good.split=Good.split%>%left_join(Catch.prop.dusky$Prop.GoodsplitID,by=c("GoodsplitID"))
-#Good.split=merge(Good.split,Catch.prop.dusky$Prop.GoodsplitID,by="GoodsplitID",all.x=T)
 names(Good.split)[match("Proportion",names(Good.split))]="Prop.Dus.Good.spl"
 Good.split$Prop.Dus.Good.spl=with(Good.split,ifelse(is.na(Prop.Dus.Good.spl),0,Prop.Dus.Good.spl))
 Good.split=Good.split%>%left_join(Catch.prop.gummy$Prop.GoodsplitID,by=c("GoodsplitID"))
-#Good.split=merge(Good.split,Catch.prop.gummy$Prop.GoodsplitID,by="GoodsplitID",all.x=T)
 names(Good.split)[match("Proportion",names(Good.split))]="Prop.Gum.Good.spl"
 Good.split$Prop.Gum.Good.spl=with(Good.split,ifelse(is.na(Prop.Gum.Good.spl),0,Prop.Gum.Good.spl))
 Good.split=Good.split%>%left_join(Catch.prop.whiskery$Prop.GoodsplitID,by=c("GoodsplitID"))
-#Good.split=merge(Good.split,Catch.prop.whiskery$Prop.GoodsplitID,by="GoodsplitID",all.x=T)
 names(Good.split)[match("Proportion",names(Good.split))]="Prop.Whi.Good.spl"
 Good.split$Prop.Whi.Good.spl=with(Good.split,ifelse(is.na(Prop.Whi.Good.spl),0,Prop.Whi.Good.spl))
 
@@ -4600,22 +4629,19 @@ if(Reapportion.daily=="YES")
 }
 
 
-#C.7.15.2 Make good split table: Yr-Mn-Zone                            
+#C.8.3.2 Make good split table: Yr-Mn-Zone                            
 
   #monthly
 Zone.good.split=data.frame(ZoneID=as.character(unique(Data.monthly$ZoneID)))
 Zone.good.split=Zone.good.split%>%left_join(Catch.prop.dusky$Prop.FinYrZone,by=c("ZoneID"))
-#Zone.good.split=merge(Zone.good.split,Catch.prop.dusky$Prop.FinYrZone,by="ZoneID",all.x=T)
 names(Zone.good.split)[match("Proportion",names(Zone.good.split))]="Prop.Dus.Zone.Good.spl"
 Zone.good.split$Prop.Dus.Zone.Good.spl=with(Zone.good.split,ifelse(is.na(Prop.Dus.Zone.Good.spl),
                                                                    0,Prop.Dus.Zone.Good.spl))
 Zone.good.split=Zone.good.split%>%left_join(Catch.prop.gummy$Prop.FinYrZone,by=c("ZoneID"))
-#Zone.good.split=merge(Zone.good.split,Catch.prop.gummy$Prop.FinYrZone,by="ZoneID",all.x=T)
 names(Zone.good.split)[match("Proportion",names(Zone.good.split))]="Prop.Gum.Zone.Good.spl"
 Zone.good.split$Prop.Gum.Zone.Good.spl=with(Zone.good.split,ifelse(is.na(Prop.Gum.Zone.Good.spl),
                                                                    0,Prop.Gum.Zone.Good.spl))
 Zone.good.split=Zone.good.split%>%left_join(Catch.prop.whiskery$Prop.FinYrZone,by=c("ZoneID"))
-#Zone.good.split=merge(Zone.good.split,Catch.prop.whiskery$Prop.FinYrZone,by="ZoneID",all.x=T)
 names(Zone.good.split)[match("Proportion",names(Zone.good.split))]="Prop.Whi.Zone.Good.spl"
 Zone.good.split$Prop.Whi.Zone.Good.spl=with(Zone.good.split,ifelse(is.na(Prop.Whi.Zone.Good.spl),         
                                                                    0,Prop.Whi.Zone.Good.spl))
@@ -4640,21 +4666,18 @@ if(Reapportion.daily=="YES")
 }
 
 
-#C.7.15.3 Make good split table: Yr-Mn                          #Rory's rules 4c  
+#C.8.3.3 Make good split table: Yr-Mn                          #Rory's rules 4c  
     #monthly
 Monthly.good.split=data.frame(MonthlyID=as.character(unique(Data.monthly$MonthlyID)))
 Monthly.good.split=Monthly.good.split%>%left_join(Catch.prop.dusky$Prop.FinYrMon,by=c("MonthlyID"))
-#Monthly.good.split=merge(Monthly.good.split,Catch.prop.dusky$Prop.FinYrMon,by="MonthlyID",all.x=T)
 names(Monthly.good.split)[match("Proportion",names(Monthly.good.split))]="Prop.Dus.Mon.Good.spl"
 Monthly.good.split$Prop.Dus.Mon.Good.spl=with(Monthly.good.split,ifelse(is.na(Prop.Dus.Mon.Good.spl),
                                                                         0,Prop.Dus.Mon.Good.spl))
 Monthly.good.split=Monthly.good.split%>%left_join(Catch.prop.gummy$Prop.FinYrMon,by=c("MonthlyID"))
-#Monthly.good.split=merge(Monthly.good.split,Catch.prop.gummy$Prop.FinYrMon,by="MonthlyID",all.x=T)
 names(Monthly.good.split)[match("Proportion",names(Monthly.good.split))]="Prop.Gum.Mon.Good.spl"
 Monthly.good.split$Prop.Gum.Mon.Good.spl=with(Monthly.good.split,ifelse(is.na(Prop.Gum.Mon.Good.spl),
                                                                         0,Prop.Gum.Mon.Good.spl))
 Monthly.good.split=Monthly.good.split%>%left_join(Catch.prop.whiskery$Prop.FinYrMon,by=c("MonthlyID"))
-#Monthly.good.split=merge(Monthly.good.split,Catch.prop.whiskery$Prop.FinYrMon,by="MonthlyID",all.x=T)
 names(Monthly.good.split)[match("Proportion",names(Monthly.good.split))]="Prop.Whi.Mon.Good.spl"
 Monthly.good.split$Prop.Whi.Mon.Good.spl=with(Monthly.good.split,ifelse(is.na(Prop.Whi.Mon.Good.spl),
                                                                         0,Prop.Whi.Mon.Good.spl))
@@ -4679,21 +4702,18 @@ if(Reapportion.daily=="YES")
 }
 
 
-#C.7.15.4 Make good split table: Yr-Zn                            
+#C.8.4.4 Make good split table: Yr-Zn                            
     #monthly
 YrZn.good.split=data.frame(ZnID=as.character(unique(Data.monthly$ZnID)))
 YrZn.good.split=YrZn.good.split%>%left_join(Catch.prop.dusky$Prop.YrZone,by=c("ZnID"))
-#YrZn.good.split=merge(YrZn.good.split,Catch.prop.dusky$Prop.YrZone,by="ZnID",all.x=T)
 names(YrZn.good.split)[match("Proportion",names(YrZn.good.split))]="Prop.Dus.YrZn.Good.spl"
 YrZn.good.split$Prop.Dus.YrZn.Good.spl=with(YrZn.good.split,ifelse(is.na(Prop.Dus.YrZn.Good.spl),
                                                                    0,Prop.Dus.YrZn.Good.spl))
 YrZn.good.split=YrZn.good.split%>%left_join(Catch.prop.gummy$Prop.YrZone,by=c("ZnID"))
-#YrZn.good.split=merge(YrZn.good.split,Catch.prop.gummy$Prop.YrZone,by="ZnID",all.x=T)
 names(YrZn.good.split)[match("Proportion",names(YrZn.good.split))]="Prop.Gum.YrZn.Good.spl"
 YrZn.good.split$Prop.Gum.YrZn.Good.spl=with(YrZn.good.split,ifelse(is.na(Prop.Gum.YrZn.Good.spl),
                                                                    0,Prop.Gum.YrZn.Good.spl))
 YrZn.good.split=YrZn.good.split%>%left_join(Catch.prop.whiskery$Prop.YrZone,by=c("ZnID"))
-#YrZn.good.split=merge(YrZn.good.split,Catch.prop.whiskery$Prop.YrZone,by="ZnID",all.x=T)
 names(YrZn.good.split)[match("Proportion",names(YrZn.good.split))]="Prop.Whi.YrZn.Good.spl"
 YrZn.good.split$Prop.Whi.YrZn.Good.spl=with(YrZn.good.split,ifelse(is.na(Prop.Whi.YrZn.Good.spl),
                                                                    0,Prop.Whi.YrZn.Good.spl))
@@ -4719,7 +4739,7 @@ if(Reapportion.daily=="YES")
 
 
 
-#C.7.15.4  Update good split catches                       #Rory's rules 4e                          
+#C.8.4.5  Update good split catches                       #Rory's rules 4e                          
     #monthly
 Recalc=c(names(Good.split)[-1],names(Zone.good.split)[-1],names(Monthly.good.split)[-1],
          names(YrZn.good.split)[-1])
@@ -4729,10 +4749,6 @@ Data.monthly=Data.monthly %>% left_join(Good.split,by="GoodsplitID") %>%
                               left_join(Zone.good.split,by="ZoneID")%>%
                               left_join(Monthly.good.split,by="MonthlyID")%>%
                               left_join(YrZn.good.split,by="ZnID")
-# Data.monthly=merge(Data.monthly,Good.split,by="GoodsplitID",all.x=T)
-# Data.monthly=merge(Data.monthly,Zone.good.split,by="ZoneID",all.x=T)
-# Data.monthly=merge(Data.monthly,Monthly.good.split,by="MonthlyID",all.x=T)
-# Data.monthly=merge(Data.monthly,YrZn.good.split,by="ZnID",all.x=T)
 
   #daily
 if(Reapportion.daily=="YES")
@@ -4807,629 +4823,613 @@ Data.monthly=Data.monthly[,-match("dummy",names(Data.monthly))]
 if(Reapportion.daily=="YES")Data.daily=Data.daily[,-match("dummy",names(Data.daily))]
 
 
-#C.7.16 Reaportion the catch of gummy, whiskeries and duskies
-
-  #C.7.16.1 create bad reporter files for fixing catches
+#C.8.5 Reapportion the catch of gummy, whiskeries and duskies
+if(Monthly.log=='monthlyrawlog')
+{
+  #C.8.5.1 create bad reporter files for fixing catches
   #monthly
-Bad.Reporters.All=subset(Data.monthly,Reporter=="bad")
-Data.monthly=subset(Data.monthly,Reporter=="good"|is.na(Reporter))
-Bad.Reporters=subset(Bad.Reporters.All,SPECIES%in%Fix.species)
-Bad.Reporters.otherSP=subset(Bad.Reporters.All,!SPECIES%in%Fix.species)
-Data.monthly=rbind(Data.monthly,Bad.Reporters.otherSP) #put back other species
-Data.monthly$Reporter='good'
-
-#daily
-if(Reapportion.daily=="YES")
-{
-  Bad.Reporters.All.daily=subset(Data.daily,Reporter=="bad")
-  Data.daily=subset(Data.daily,Reporter=="good"|is.na(Reporter))
-  Bad.Reporters.daily=subset(Bad.Reporters.All.daily,SPECIES%in%Fix.species)
-  Bad.Reporters.otherSP.daily=subset(Bad.Reporters.All.daily,!SPECIES%in%Fix.species)
-  Data.daily=rbind(Data.daily,Bad.Reporters.otherSP.daily) #put back other species
-  Data.daily$Reporter='good'
+  Bad.Reporters.All=subset(Data.monthly,Reporter=="bad")
+  Data.monthly=subset(Data.monthly,Reporter=="good"|is.na(Reporter))
+  Bad.Reporters=subset(Bad.Reporters.All,SPECIES%in%Fix.species)
+  Bad.Reporters.otherSP=subset(Bad.Reporters.All,!SPECIES%in%Fix.species)
+  Data.monthly=rbind(Data.monthly,Bad.Reporters.otherSP) #put back other species
+  Data.monthly$Reporter='good'
   
-}
-
-
-#C.7.16.2
-#note: remove duplicates of Same.return as Tot.shk.livewt is split proportionally
-#          among dusky, whiskery and gummy
-Agg.Sp.Ktch=aggregate(LIVEWT~Same.return,Bad.Reporters,sum)
-names(Agg.Sp.Ktch)[2]="Total.LIVEWT.reap"
-Bad.Reporters=Bad.Reporters[!duplicated(Bad.Reporters$Same.return),]
-NroW=nrow(Bad.Reporters)
-
-if(Reapportion.daily=="YES")
-{
-  Agg.Sp.Ktch.daily=aggregate(LIVEWT.reap~Same.return,Bad.Reporters.daily,sum,na.rm=T)
-  names(Agg.Sp.Ktch.daily)[2]="Total.LIVEWT.reap"  
-  Bad.Reporters.daily=Bad.Reporters.daily[!duplicated(Bad.Reporters.daily$Same.return),]
-  NroW.daily=nrow(Bad.Reporters.daily)  
-}
-
-
-# replicate Bad.Reporters three times to have the three species and shark others as a record
-    #monthly
-Bad.Reporters=rbind(Bad.Reporters,Bad.Reporters,Bad.Reporters,Bad.Reporters)
-Bad.Reporters=Bad.Reporters[order(Bad.Reporters$Same.return),]
-Bad.Reporters$Spec.old=Bad.Reporters$SPECIES
-Bad.Reporters$Sname.old=Bad.Reporters$SNAME
-Bad.Reporters$SPECIES=rep(Fix.species,NroW)
-Bad.Reporters$SNAME=rep(c("Bronze Whaler","Gummy Shark","Whiskery Shark","shark, other"),NroW)
-
   #daily
-if(Reapportion.daily=="YES")
-{
-  Bad.Reporters.daily=rbind(Bad.Reporters.daily,Bad.Reporters.daily,Bad.Reporters.daily,Bad.Reporters.daily)
-  Bad.Reporters.daily=Bad.Reporters.daily[order(Bad.Reporters.daily$Same.return),]
-  Bad.Reporters.daily$Spec.old=Bad.Reporters.daily$SPECIES
-  Bad.Reporters.daily$Sname.old=Bad.Reporters.daily$SNAME
-  Bad.Reporters.daily$SPECIES=rep(Fix.species,NroW.daily)
-  Bad.Reporters.daily$SNAME=rep(c("Bronze Whaler","Gummy Shark","Whiskery Shark","shark, other"),NroW.daily)
+  if(Reapportion.daily=="YES")
+  {
+    Bad.Reporters.All.daily=subset(Data.daily,Reporter=="bad")
+    Data.daily=subset(Data.daily,Reporter=="good"|is.na(Reporter))
+    Bad.Reporters.daily=subset(Bad.Reporters.All.daily,SPECIES%in%Fix.species)
+    Bad.Reporters.otherSP.daily=subset(Bad.Reporters.All.daily,!SPECIES%in%Fix.species)
+    Data.daily=rbind(Data.daily,Bad.Reporters.otherSP.daily) #put back other species
+    Data.daily$Reporter='good'
+    
+  }
   
-}
-
-
-# reapportion catch
-Bad.Reporters$LIVEWT.reap=NA
-if(Reapportion.daily=="YES") Bad.Reporters.daily$LIVEWT.reap=NA
-
-#first use "Good.spl" (standardise the proportions to sum(split catch)=Tot.shk.livewt)
-    #monthly
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
-      ifelse(SPECIES==18003 & Prop.Dus.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Good.spl),
-      ifelse(SPECIES==17001 & Prop.Gum.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Good.spl),
-      ifelse(SPECIES==17003 & Prop.Whi.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Good.spl),
-      LIVEWT.reap))))
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
-                                       ifelse(SPECIES==18003 & Prop.Dus.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Good.spl),
-                                              ifelse(SPECIES==17001 & Prop.Gum.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Good.spl),
-                                                     ifelse(SPECIES==17003 & Prop.Whi.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Good.spl),
-                                                            LIVEWT.reap))))
   
-}
-
-#Second, if previous not available, use "Zone.Good.spl"
-    #monthly
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
-  ifelse(SPECIES==18003 & is.na(LIVEWT.reap) & Prop.Dus.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Zone.Good.spl),
-  ifelse(SPECIES==17001 & is.na(LIVEWT.reap) & Prop.Gum.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Zone.Good.spl),
-  ifelse(SPECIES==17003 & is.na(LIVEWT.reap) & Prop.Whi.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Zone.Good.spl),
-  LIVEWT.reap))))
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
-                                       ifelse(SPECIES==18003 & is.na(LIVEWT.reap) & Prop.Dus.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Zone.Good.spl),
-                                              ifelse(SPECIES==17001 & is.na(LIVEWT.reap) & Prop.Gum.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Zone.Good.spl),
-                                                     ifelse(SPECIES==17003 & is.na(LIVEWT.reap) & Prop.Whi.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Zone.Good.spl),
-                                                            LIVEWT.reap))))
-}
-
-
-
-#Third, if previous are not available, use "Mon.Good.spl"             #Rory's rules 4f 
-    #monthly
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
-        ifelse(SPECIES==18003 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Dus.Mon.Good.spl),
-        ifelse(SPECIES==17001 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Gum.YrZn.Good.spl),
-        ifelse(SPECIES==17003 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Whi.Mon.Good.spl),
-        LIVEWT.reap))))
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
-                                       ifelse(SPECIES==18003 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Dus.Mon.Good.spl),
-                                              ifelse(SPECIES==17001 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Gum.YrZn.Good.spl),
-                                                     ifelse(SPECIES==17003 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Whi.Mon.Good.spl),
-                                                            LIVEWT.reap))))
+  #C.8.5.2
+  #note: remove duplicates of Same.return as Tot.shk.livewt is split proportionally
+  #          among dusky, whiskery and gummy
+  Agg.Sp.Ktch=aggregate(LIVEWT~Same.return,Bad.Reporters,sum)
+  names(Agg.Sp.Ktch)[2]="Total.LIVEWT.reap"
+  Bad.Reporters=Bad.Reporters[!duplicated(Bad.Reporters$Same.return),]
+  NroW=nrow(Bad.Reporters)
   
-}
-
-
-#rescale to equal to total catch or less
-    #monthly
-Bad.Reporters=Bad.Reporters%>%left_join(Agg.Sp.Ktch,by=c("Same.return"))
-#Bad.Reporters=merge(Bad.Reporters,Agg.Sp.Ktch,by="Same.return",all.x=T)
-Agg.reap.KtcH=aggregate(LIVEWT.reap~Same.return,Bad.Reporters,sum,na.rm=T)
-names(Agg.reap.KtcH)[2]="LIVEWT.reap.scaler"
-Bad.Reporters=Bad.Reporters%>%left_join(Agg.reap.KtcH,by=c("Same.return"))
-#Bad.Reporters=merge(Bad.Reporters,Agg.reap.KtcH,by="Same.return",all.x=T)
-
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
-    ifelse(Tot.shk.livewt>Total.LIVEWT.reap,LIVEWT.reap*(Total.LIVEWT.reap/Tot.shk.livewt),LIVEWT.reap))
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
-    ifelse(LIVEWT.reap.scaler>Total.LIVEWT.reap,LIVEWT.reap*(Total.LIVEWT.reap/LIVEWT.reap.scaler),LIVEWT.reap))
-
-
+  if(Reapportion.daily=="YES")
+  {
+    Agg.Sp.Ktch.daily=aggregate(LIVEWT.reap~Same.return,Bad.Reporters.daily,sum,na.rm=T)
+    names(Agg.Sp.Ktch.daily)[2]="Total.LIVEWT.reap"  
+    Bad.Reporters.daily=Bad.Reporters.daily[!duplicated(Bad.Reporters.daily$Same.return),]
+    NroW.daily=nrow(Bad.Reporters.daily)  
+  }
+  
+  
+  # replicate Bad.Reporters three times to have the three species and shark others as a record
+  #monthly
+  Bad.Reporters=rbind(Bad.Reporters,Bad.Reporters,Bad.Reporters,Bad.Reporters)
+  Bad.Reporters=Bad.Reporters[order(Bad.Reporters$Same.return),]
+  Bad.Reporters$Spec.old=Bad.Reporters$SPECIES
+  Bad.Reporters$Sname.old=Bad.Reporters$SNAME
+  Bad.Reporters$SPECIES=rep(Fix.species,NroW)
+  Bad.Reporters$SNAME=rep(c("Bronze Whaler","Gummy Shark","Whiskery Shark","shark, other"),NroW)
+  
   #daily
-if(Reapportion.daily=="YES")
-{
-  Bad.Reporters.daily
-  Bad.Reporters.daily=merge(Bad.Reporters.daily,Agg.Sp.Ktch.daily,by="Same.return",all.x=T)
-  Agg.reap.KtcH.daily=aggregate(LIVEWT.reap~Same.return,Bad.Reporters.daily,sum,na.rm=T)
-  names(Agg.reap.KtcH.daily)[2]="LIVEWT.reap.scaler"
-  Bad.Reporters.daily=merge(Bad.Reporters.daily,Agg.reap.KtcH.daily,by="Same.return",all.x=T)
+  if(Reapportion.daily=="YES")
+  {
+    Bad.Reporters.daily=rbind(Bad.Reporters.daily,Bad.Reporters.daily,Bad.Reporters.daily,Bad.Reporters.daily)
+    Bad.Reporters.daily=Bad.Reporters.daily[order(Bad.Reporters.daily$Same.return),]
+    Bad.Reporters.daily$Spec.old=Bad.Reporters.daily$SPECIES
+    Bad.Reporters.daily$Sname.old=Bad.Reporters.daily$SNAME
+    Bad.Reporters.daily$SPECIES=rep(Fix.species,NroW.daily)
+    Bad.Reporters.daily$SNAME=rep(c("Bronze Whaler","Gummy Shark","Whiskery Shark","shark, other"),NroW.daily)
+    
+  }
   
-  Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
-      ifelse(Tot.shk.livewt>Total.LIVEWT.reap,LIVEWT.reap*(Total.LIVEWT.reap/Tot.shk.livewt),LIVEWT.reap))
-  Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
-      ifelse(LIVEWT.reap.scaler>Total.LIVEWT.reap,LIVEWT.reap*(Total.LIVEWT.reap/LIVEWT.reap.scaler),LIVEWT.reap))
   
-}
-
-
-#Reset 'shark other' to the remainder
-    #monthly
-Remainder=aggregate(LIVEWT.reap~Same.return,Bad.Reporters,sum,na.rm=T)
-names(Remainder)[2]="Remainder"
-Bad.Reporters=Bad.Reporters%>%left_join(Remainder,by=c("Same.return"))
-#Bad.Reporters=merge(Bad.Reporters,Remainder,by="Same.return",all.x=T)
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
-                               ifelse(SPECIES==22999,Total.LIVEWT.reap-Remainder,LIVEWT.reap))
-Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,ifelse(LIVEWT.reap<0,0,LIVEWT.reap))
-
-#check that reapportioned didn't add catch
-b=aggregate(LIVEWT.reap~Same.return,Bad.Reporters,sum,na.rm=T)                                                   
-A=Agg.Sp.Ktch%>%full_join(b,by=c("Same.return"))
-#A=merge(Agg.Sp.Ktch,b,by="Same.return")
-plot(A[,2],A[,3])
-lines(A[,2],A[,2])
-sum(A[,2])==sum(A[,3])
-rm(A,b)
-
-Bad.Reporters=Bad.Reporters[,-match(c("Total.LIVEWT.reap","LIVEWT.reap.scaler","Remainder"),
-                                    names(Bad.Reporters))]
-Bad.Reporters$LIVEWT=with(Bad.Reporters,ifelse(SPECIES==22999,LIVEWT.orgnl,0))
-Bad.Reporters$LIVEWT.orgnl=with(Bad.Reporters,ifelse(SPECIES==22999,LIVEWT.orgnl,0))
-
-
-#daily
-if(Reapportion.daily=="YES") 
-{
-  Remainder=aggregate(LIVEWT.reap~Same.return,Bad.Reporters.daily,sum,na.rm=T)
+  # reapportion catch
+  Bad.Reporters$LIVEWT.reap=NA
+  if(Reapportion.daily=="YES") Bad.Reporters.daily$LIVEWT.reap=NA
+  
+  #first use "Good.spl" (standardise the proportions to sum(split catch)=Tot.shk.livewt)
+  #monthly
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
+                                 ifelse(SPECIES==18003 & Prop.Dus.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Good.spl),
+                                        ifelse(SPECIES==17001 & Prop.Gum.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Good.spl),
+                                               ifelse(SPECIES==17003 & Prop.Whi.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Good.spl),
+                                                      LIVEWT.reap))))
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
+                                         ifelse(SPECIES==18003 & Prop.Dus.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Good.spl),
+                                                ifelse(SPECIES==17001 & Prop.Gum.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Good.spl),
+                                                       ifelse(SPECIES==17003 & Prop.Whi.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Good.spl),
+                                                              LIVEWT.reap))))
+    
+  }
+  
+  #Second, if previous not available, use "Zone.Good.spl"
+  #monthly
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
+                                 ifelse(SPECIES==18003 & is.na(LIVEWT.reap) & Prop.Dus.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Zone.Good.spl),
+                                        ifelse(SPECIES==17001 & is.na(LIVEWT.reap) & Prop.Gum.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Zone.Good.spl),
+                                               ifelse(SPECIES==17003 & is.na(LIVEWT.reap) & Prop.Whi.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Zone.Good.spl),
+                                                      LIVEWT.reap))))
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
+                                         ifelse(SPECIES==18003 & is.na(LIVEWT.reap) & Prop.Dus.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Dus.Zone.Good.spl),
+                                                ifelse(SPECIES==17001 & is.na(LIVEWT.reap) & Prop.Gum.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Gum.Zone.Good.spl),
+                                                       ifelse(SPECIES==17003 & is.na(LIVEWT.reap) & Prop.Whi.Zone.Good.spl>0,(Tot.shk.livewt*Prop.Whi.Zone.Good.spl),
+                                                              LIVEWT.reap))))
+  }
+  
+  
+  
+  #Third, if previous are not available, use "Mon.Good.spl"             #Rory's rules 4f 
+  #monthly
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
+                                 ifelse(SPECIES==18003 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Dus.Mon.Good.spl),
+                                        ifelse(SPECIES==17001 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Gum.YrZn.Good.spl),
+                                               ifelse(SPECIES==17003 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Whi.Mon.Good.spl),
+                                                      LIVEWT.reap))))
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
+                                         ifelse(SPECIES==18003 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Dus.Mon.Good.spl),
+                                                ifelse(SPECIES==17001 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Gum.YrZn.Good.spl),
+                                                       ifelse(SPECIES==17003 & is.na(LIVEWT.reap),(Tot.shk.livewt*Prop.Whi.Mon.Good.spl),
+                                                              LIVEWT.reap))))
+    
+  }
+  
+  
+  #rescale to equal to total catch or less
+  #monthly
+  Bad.Reporters=Bad.Reporters%>%left_join(Agg.Sp.Ktch,by=c("Same.return"))
+  Agg.reap.KtcH=aggregate(LIVEWT.reap~Same.return,Bad.Reporters,sum,na.rm=T)
+  names(Agg.reap.KtcH)[2]="LIVEWT.reap.scaler"
+  Bad.Reporters=Bad.Reporters%>%left_join(Agg.reap.KtcH,by=c("Same.return"))
+  
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
+                                 ifelse(Tot.shk.livewt>Total.LIVEWT.reap,LIVEWT.reap*(Total.LIVEWT.reap/Tot.shk.livewt),LIVEWT.reap))
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
+                                 ifelse(LIVEWT.reap.scaler>Total.LIVEWT.reap,LIVEWT.reap*(Total.LIVEWT.reap/LIVEWT.reap.scaler),LIVEWT.reap))
+  
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Bad.Reporters.daily
+    Bad.Reporters.daily=merge(Bad.Reporters.daily,Agg.Sp.Ktch.daily,by="Same.return",all.x=T)
+    Agg.reap.KtcH.daily=aggregate(LIVEWT.reap~Same.return,Bad.Reporters.daily,sum,na.rm=T)
+    names(Agg.reap.KtcH.daily)[2]="LIVEWT.reap.scaler"
+    Bad.Reporters.daily=merge(Bad.Reporters.daily,Agg.reap.KtcH.daily,by="Same.return",all.x=T)
+    
+    Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
+                                         ifelse(Tot.shk.livewt>Total.LIVEWT.reap,LIVEWT.reap*(Total.LIVEWT.reap/Tot.shk.livewt),LIVEWT.reap))
+    Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
+                                         ifelse(LIVEWT.reap.scaler>Total.LIVEWT.reap,LIVEWT.reap*(Total.LIVEWT.reap/LIVEWT.reap.scaler),LIVEWT.reap))
+    
+  }
+  
+  
+  #Reset 'shark other' to the remainder
+  #monthly
+  Remainder=aggregate(LIVEWT.reap~Same.return,Bad.Reporters,sum,na.rm=T)
   names(Remainder)[2]="Remainder"
-  Bad.Reporters.daily=merge(Bad.Reporters.daily,Remainder,by="Same.return",all.x=T)
-  Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
-                                       ifelse(SPECIES==22999,Total.LIVEWT.reap-Remainder,LIVEWT.reap))
+  Bad.Reporters=Bad.Reporters%>%left_join(Remainder,by=c("Same.return"))
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,
+                                 ifelse(SPECIES==22999,Total.LIVEWT.reap-Remainder,LIVEWT.reap))
+  Bad.Reporters$LIVEWT.reap=with(Bad.Reporters,ifelse(LIVEWT.reap<0,0,LIVEWT.reap))
   
-  Bad.Reporters.daily=Bad.Reporters.daily[,-match(c("Total.LIVEWT.reap","LIVEWT.reap.scaler"),names(Bad.Reporters.daily))]
-  Bad.Reporters.daily$LIVEWT=with(Bad.Reporters.daily,ifelse(SPECIES==22999,LIVEWT.orgnl,0))
-  Bad.Reporters.daily$LIVEWT.orgnl=with(Bad.Reporters.daily,ifelse(SPECIES==22999,LIVEWT.orgnl,0))  
-}
-
-
-#create new vars
-    #monthly
-Bad.Reporters$Reporter.old=Bad.Reporters$Reporter
-Bad.ReportCatch.prop.dusky=fun.prop(subset(Data.monthly,LAT <= Dusky.range[1] & LONG <= Dusky.range[2]),18003)
-Bad.Reporters$Reporter="good"
-Bad.Reporters$Spec.old=Bad.Reporters$SPECIES
-Bad.Reporters$Sname.old=Bad.Reporters$SNAME
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Bad.Reporters.daily$Reporter.old=Bad.Reporters.daily$Reporter
-  Bad.ReportCatch.prop.dusky.daily=fun.prop(subset(Data.daily,LAT <= Dusky.range[1] & LONG <= Dusky.range[2]),18003)
-  Bad.Reporters.daily$Reporter="good"
-  Bad.Reporters.daily$Spec.old=Bad.Reporters.daily$SPECIES
-  Bad.Reporters.daily$Sname.old=Bad.Reporters.daily$SNAME
+  #check that reapportioned didn't add catch
+  b=aggregate(LIVEWT.reap~Same.return,Bad.Reporters,sum,na.rm=T)                                                   
+  A=Agg.Sp.Ktch%>%full_join(b,by=c("Same.return"))
+  plot(A[,2],A[,3])
+  lines(A[,2],A[,2])
+  sum(A[,2])==sum(A[,3])
+  rm(A,b)
   
+  Bad.Reporters=Bad.Reporters[,-match(c("Total.LIVEWT.reap","LIVEWT.reap.scaler","Remainder"),
+                                      names(Bad.Reporters))]
+  Bad.Reporters$LIVEWT=with(Bad.Reporters,ifelse(SPECIES==22999,LIVEWT.orgnl,0))
+  Bad.Reporters$LIVEWT.orgnl=with(Bad.Reporters,ifelse(SPECIES==22999,LIVEWT.orgnl,0))
+  
+  
+  #daily
+  if(Reapportion.daily=="YES") 
+  {
+    Remainder=aggregate(LIVEWT.reap~Same.return,Bad.Reporters.daily,sum,na.rm=T)
+    names(Remainder)[2]="Remainder"
+    Bad.Reporters.daily=merge(Bad.Reporters.daily,Remainder,by="Same.return",all.x=T)
+    Bad.Reporters.daily$LIVEWT.reap=with(Bad.Reporters.daily,
+                                         ifelse(SPECIES==22999,Total.LIVEWT.reap-Remainder,LIVEWT.reap))
+    
+    Bad.Reporters.daily=Bad.Reporters.daily[,-match(c("Total.LIVEWT.reap","LIVEWT.reap.scaler"),names(Bad.Reporters.daily))]
+    Bad.Reporters.daily$LIVEWT=with(Bad.Reporters.daily,ifelse(SPECIES==22999,LIVEWT.orgnl,0))
+    Bad.Reporters.daily$LIVEWT.orgnl=with(Bad.Reporters.daily,ifelse(SPECIES==22999,LIVEWT.orgnl,0))  
+  }
+  
+  
+  #create new vars
+  #monthly
+  Bad.Reporters$Reporter.old=Bad.Reporters$Reporter
+  Bad.ReportCatch.prop.dusky=fun.prop(subset(Data.monthly,LAT <= Dusky.range[1] & LONG <= Dusky.range[2]),18003)
+  Bad.Reporters$Reporter="good"
+  Bad.Reporters$Spec.old=Bad.Reporters$SPECIES
+  Bad.Reporters$Sname.old=Bad.Reporters$SNAME
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Bad.Reporters.daily$Reporter.old=Bad.Reporters.daily$Reporter
+    Bad.ReportCatch.prop.dusky.daily=fun.prop(subset(Data.daily,LAT <= Dusky.range[1] & LONG <= Dusky.range[2]),18003)
+    Bad.Reporters.daily$Reporter="good"
+    Bad.Reporters.daily$Spec.old=Bad.Reporters.daily$SPECIES
+    Bad.Reporters.daily$Sname.old=Bad.Reporters.daily$SNAME
+    
+  }
+  
+  #remove reportioned catch equal to 0
+  Bad.Reporters=subset(Bad.Reporters,!LIVEWT.reap==0)
+  
+  #merge reapportioned catch
+  #monthly
+  Bad.Reporters=Bad.Reporters[,match(names(Data.monthly),names(Bad.Reporters))]
+  Data.monthly=rbind(Data.monthly,Bad.Reporters)
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Bad.Reporters.daily=Bad.Reporters.daily[,match(names(Data.daily),names(Bad.Reporters.daily))]
+    Data.daily=rbind(Data.daily,Bad.Reporters.daily) 
+  }
 }
-
-#remove reportioned catch equal to 0
-Bad.Reporters=subset(Bad.Reporters,!LIVEWT.reap==0)
-
-#merge reapportioned catch
-    #monthly
-Bad.Reporters=Bad.Reporters[,match(names(Data.monthly),names(Bad.Reporters))]
-Data.monthly=rbind(Data.monthly,Bad.Reporters)
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Bad.Reporters.daily=Bad.Reporters.daily[,match(names(Data.daily),names(Bad.Reporters.daily))]
-  Data.daily=rbind(Data.daily,Bad.Reporters.daily) 
-}
-
 
 
 #REAPPORTION SANDBAR (6k-6s)
-
-#C.7.17 Make good sandbar reporters and 4h update good sandbard reporters         #Rory's rules 4g    
-#note: identify vessels that report sandbars within sandbar area
-
-#id bad reporters
-    #monthly
-Data.monthly$SanBar.rep=NA
-Data.monthly$SanBar.rep=with(Data.monthly,ifelse(Prop.sandbar==0 & YEAR.c>1984 & TYPE.DATA=="monthly" &
-             LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2] & METHOD=='LL',"bad","good"))
-
-    #daily
-if(Reapportion.daily=="YES")
+if(Monthly.log=='monthlyrawlog')
 {
-  Data.daily$SanBar.rep=NA
-  Data.daily$SanBar.rep=with(Data.daily,ifelse(Prop.sandbar==0 & YEAR.c>1984 & TYPE.DATA=="monthly" &
-     LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2] & METHOD=='LL',"bad","good"))
+  #C.8.6 Make good sandbar reporters and 4h update good sandbard reporters         #Rory's rules 4g    
+  #note: identify vessels that report sandbars within sandbar area
   
-}
-
-
-#separate bad and  good sandbar reporters and reapportion only Species ==22999
-    #monthly
-Sanbar.dat=subset(Data.monthly,SanBar.rep=="bad" & SPECIES== 22999)
-Data.monthly=subset(Data.monthly,!(SanBar.rep=="bad" & SPECIES== 22999))
-Data.monthly$SanBar.rep="good"
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Sanbar.dat.daily=subset(Data.daily,SanBar.rep=="bad" & SPECIES== 22999)
-  Data.daily=subset(Data.daily,!(SanBar.rep=="bad" & SPECIES== 22999))
-  Data.daily$SanBar.rep="good"  
-}
-
-
-#find first month-year with sandbar reporting for each vessel
-fn.sandbar.vessels=function(dat)
-{
-  SB.ves=unique(as.character(dat$VESSEL))
-  DUMMY=vector('list',length(SB.ves))
+  #id bad reporters
+  #monthly
+  Data.monthly$SanBar.rep=NA
+  Data.monthly$SanBar.rep=with(Data.monthly,ifelse(Prop.sandbar==0 & YEAR.c>1984 & TYPE.DATA=="monthly" &
+                                                     LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2] & METHOD=='LL',"bad","good"))
   
-  for(i in 1:length(SB.ves))
+  #daily
+  if(Reapportion.daily=="YES")
   {
-    dummy=subset(dat,VESSEL==SB.ves[i])
-    dummy=dummy[order(dummy$YEAR.c,dummy$MONTH),]
-    id=which(dummy$SPECIES==18007)[1]
-    dummy$SanBar.rep="bad"
-    if(!is.na(id)) dummy$SanBar.rep[id:nrow(dummy)]="good"
-    DUMMY[[i]]=dummy
+    Data.daily$SanBar.rep=NA
+    Data.daily$SanBar.rep=with(Data.daily,ifelse(Prop.sandbar==0 & YEAR.c>1984 & TYPE.DATA=="monthly" &
+                                                   LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2] & METHOD=='LL',"bad","good"))
+    
   }
   
-  return(do.call(rbind,DUMMY))
   
-}
-
-    #monthly
-Sanbar.dat.c=fn.sandbar.vessels(Sanbar.dat)
-Sanbar.dat.good=subset(Sanbar.dat.c,SanBar.rep=="good")
-Sanbar.dat.bad=subset(Sanbar.dat.c,SanBar.rep=="bad")
-
-Agg.Sp.Ktch=aggregate(LIVEWT.reap~Same.return,Sanbar.dat.bad,sum)
-names(Agg.Sp.Ktch)[2]="Total.LIVEWT.reap"
-
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Sanbar.dat.c.daily=fn.sandbar.vessels(Sanbar.dat.daily)
-  Sanbar.dat.good.daily=subset(Sanbar.dat.c.daily,SanBar.rep=="good")
-  Sanbar.dat.bad.daily=subset(Sanbar.dat.c.daily,SanBar.rep=="bad")
-}
-
-
-
-#merge good sandbar records back
-if(nrow(Sanbar.dat.good)>0)Data.monthly=rbind(Data.monthly,Sanbar.dat.good)
-if(Reapportion.daily=="YES") if(nrow(Sanbar.dat.good.daily)>0)Data.daily=rbind(Data.daily,Sanbar.dat.good.daily)
-
-
-# re-calculate sandbar proportions for good reporters
-Catch.prop.sandbar=fun.prop(subset(Data.monthly,SanBar.rep=="good" & METHOD=='LL'&
-          LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2]),18007)
-
-if(Reapportion.daily=="YES") Catch.prop.sandbar.daily=fun.prop(subset(Data.daily,SanBar.rep=="good" & METHOD=='LL'&
-          LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2]),18007)
-
-
-#good split table: Yr-Mn-Block 
-    #monthly
-Good.split.san=data.frame(GoodsplitID=as.character(unique(Data.monthly$GoodsplitID)))
-Good.split.san=Good.split.san%>%left_join(Catch.prop.sandbar$Prop.GoodsplitID,by=c("GoodsplitID"))
-#Good.split.san=merge(Good.split.san,Catch.prop.sandbar$Prop.GoodsplitID,by="GoodsplitID",all.x=T)
-names(Good.split.san)[match("Proportion",names(Good.split.san))]="Prop.San.Good.spl"
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Good.split.san.daily=data.frame(GoodsplitID=as.character(unique(Data.daily$GoodsplitID)))
-  Good.split.san.daily=merge(Good.split.san.daily,Catch.prop.sandbar.daily$Prop.GoodsplitID,by="GoodsplitID",all.x=T)
-  names(Good.split.san.daily)[match("Proportion",names(Good.split.san.daily))]="Prop.San.Good.spl"
-  
-}
-
-
-#good split table: Yr-Mn-Zone                            
-    #monthly
-Zone.good.split.san=data.frame(ZoneID=as.character(unique(Data.monthly$ZoneID)))
-Zone.good.split.san=Zone.good.split.san%>%left_join(Catch.prop.sandbar$Prop.FinYrZone,by=c("ZoneID"))
-#Zone.good.split.san=merge(Zone.good.split.san,Catch.prop.sandbar$Prop.FinYrZone,by="ZoneID",all.x=T)
-names(Zone.good.split.san)[match("Proportion",names(Zone.good.split.san))]="Prop.San.Zone.Good.spl"
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Zone.good.split.san.daily=data.frame(ZoneID=as.character(unique(Data.daily$ZoneID)))
-  Zone.good.split.san.daily=merge(Zone.good.split.san.daily,Catch.prop.sandbar.daily$Prop.FinYrZone,by="ZoneID",all.x=T)
-  names(Zone.good.split.san.daily)[match("Proportion",names(Zone.good.split.san.daily))]="Prop.San.Zone.Good.spl"
-  
-}
-
-
-# good split table: Yr-Mn                          
-    #monthly
-Monthly.good.split.san=data.frame(MonthlyID=as.character(unique(Data.monthly$MonthlyID)))
-Monthly.good.split.san=Monthly.good.split.san%>%left_join(Catch.prop.sandbar$Prop.FinYrMon,by=c("MonthlyID"))
-#Monthly.good.split.san=merge(Monthly.good.split.san,Catch.prop.sandbar$Prop.FinYrMon,by="MonthlyID",all.x=T)
-names(Monthly.good.split.san)[match("Proportion",names(Monthly.good.split.san))]="Prop.San.Mon.Good.spl"
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Monthly.good.split.san.daily=data.frame(MonthlyID=as.character(unique(Data.daily$MonthlyID)))
-  Monthly.good.split.san.daily=merge(Monthly.good.split.san.daily,Catch.prop.sandbar.daily$Prop.FinYrMon,by="MonthlyID",all.x=T)
-  names(Monthly.good.split.san.daily)[match("Proportion",names(Monthly.good.split.san.daily))]="Prop.San.Mon.Good.spl"
-  
-}
-
-
-#good split table: Yr-Zone                            
-    #monthly
-YrZn.good.split.san=data.frame(ZnID=as.character(unique(Data.monthly$ZnID)))
-YrZn.good.split.san=YrZn.good.split.san%>%left_join(Catch.prop.sandbar$Prop.YrZone,by=c("ZnID"))
-#YrZn.good.split.san=merge(YrZn.good.split.san,Catch.prop.sandbar$Prop.YrZone,by="ZnID",all.x=T)
-names(YrZn.good.split.san)[match("Proportion",names(YrZn.good.split.san))]="Prop.San.YrZn.Good.spl"
-YrZn.good.split.san$Prop.San.YrZn.Good.spl=with(YrZn.good.split.san,ifelse(is.na(Prop.San.YrZn.Good.spl),
-                                                                           0,Prop.San.YrZn.Good.spl))
-    #daily
-if(Reapportion.daily=="YES")
-{
-  YrZn.good.split.san.daily=data.frame(ZnID=as.character(unique(Data.daily$ZnID)))
-  YrZn.good.split.san.daily=merge(YrZn.good.split.san.daily,Catch.prop.sandbar.daily$Prop.YrZone,by="ZnID",all.x=T)
-  names(YrZn.good.split.san.daily)[match("Proportion",names(YrZn.good.split.san.daily))]="Prop.San.YrZn.Good.spl"
-  YrZn.good.split.san.daily$Prop.San.YrZn.Good.spl=with(YrZn.good.split.san.daily,ifelse(is.na(Prop.San.YrZn.Good.spl),
-                                                                                         0,Prop.San.YrZn.Good.spl))
-  
-}
-
-
-#good split table: Zone
-    #monthly
-Zn.good.split.san=data.frame(zone=as.character(unique(Data.monthly$zone)))
-Zn.good.split.san=Zn.good.split.san%>%left_join(Catch.prop.sandbar$Prop.Zone,by=c("zone"))
-#Zn.good.split.san=merge(Zn.good.split.san,Catch.prop.sandbar$Prop.Zone,by="zone",all.x=T)
-names(Zn.good.split.san)[match("Proportion",names(Zn.good.split.san))]="Prop.San.zone.Good.spl"
-Zn.good.split.san$Prop.San.zone.Good.spl=with(Zn.good.split.san,ifelse(is.na(Prop.San.zone.Good.spl),
-                                                                       0,Prop.San.zone.Good.spl))
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Zn.good.split.san.daily=data.frame(zone=as.character(unique(Data.daily$zone)))
-  Zn.good.split.san.daily=merge(Zn.good.split.san.daily,Catch.prop.sandbar.daily$Prop.Zone,by="zone",all.x=T)
-  names(Zn.good.split.san.daily)[match("Proportion",names(Zn.good.split.san.daily))]="Prop.San.zone.Good.spl"
-  Zn.good.split.san.daily$Prop.San.zone.Good.spl=with(Zn.good.split.san.daily,ifelse(is.na(Prop.San.zone.Good.spl),
-                                                                                     0,Prop.San.zone.Good.spl))
-  
-}
-
-    #monthly 
-Sanbar.dat.bad=Sanbar.dat.bad%>% left_join(Good.split.san,by="GoodsplitID")%>%
-                                 left_join(Zone.good.split.san,by="ZoneID")%>%
-                                 left_join(Monthly.good.split.san,by="MonthlyID")%>%
-                                 left_join(YrZn.good.split.san,by="ZnID")%>%
-                                 left_join(Zn.good.split.san,by="zone")
-
-# Sanbar.dat.bad=merge(Sanbar.dat.bad,Good.split.san,by="GoodsplitID",all.x=T)
-# Sanbar.dat.bad=merge(Sanbar.dat.bad,Zone.good.split.san,by="ZoneID",all.x=T)
-# Sanbar.dat.bad=merge(Sanbar.dat.bad,Monthly.good.split.san,by="MonthlyID",all.x=T)
-# Sanbar.dat.bad=merge(Sanbar.dat.bad,YrZn.good.split.san,by="ZnID",all.x=T)
-# Sanbar.dat.bad=merge(Sanbar.dat.bad,Zn.good.split.san,by="zone",all.x=T)
-
-Sanbar.dat.bad$Prop.San.Good.spl=with(Sanbar.dat.bad,
-             ifelse(is.na(Prop.San.Good.spl),0,Prop.San.Good.spl))
-Sanbar.dat.bad$Prop.San.Zone.Good.spl=with(Sanbar.dat.bad,
-             ifelse(is.na(Prop.San.Zone.Good.spl),0,Prop.San.Zone.Good.spl))
-Sanbar.dat.bad$Prop.San.Mon.Good.spl=with(Sanbar.dat.bad,
-            ifelse(is.na(Prop.San.Mon.Good.spl),0,Prop.San.Mon.Good.spl))
-
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Good.split.san.daily,by="GoodsplitID",all.x=T)
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Zone.good.split.san.daily,by="ZoneID",all.x=T)
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Monthly.good.split.san.daily,by="MonthlyID",all.x=T)
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,YrZn.good.split.san.daily,by="ZnID",all.x=T)
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Zn.good.split.san.daily,by="zone",all.x=T)
-  Sanbar.dat.bad.daily$Prop.San.Good.spl=with(Sanbar.dat.bad.daily,
-                                              ifelse(is.na(Prop.San.Good.spl),0,Prop.San.Good.spl))
-  Sanbar.dat.bad.daily$Prop.San.Zone.Good.spl=with(Sanbar.dat.bad.daily,
-                                                   ifelse(is.na(Prop.San.Zone.Good.spl),0,Prop.San.Zone.Good.spl))
-  Sanbar.dat.bad.daily$Prop.San.Mon.Good.spl=with(Sanbar.dat.bad.daily,
-                                                  ifelse(is.na(Prop.San.Mon.Good.spl),0,Prop.San.Mon.Good.spl))
-  
-}
-
-
-# replicate Sanbar.dat.bad twice to have sandbar and shark others as a record
-#monthly
-NroW.san=nrow(Sanbar.dat.bad)
-Sanbar.dat.bad=rbind(Sanbar.dat.bad,Sanbar.dat.bad)
-Sanbar.dat.bad=Sanbar.dat.bad[order(Sanbar.dat.bad$Same.return),]
-
-Sanbar.dat.bad$Spec.old=Sanbar.dat.bad$SPECIES
-Sanbar.dat.bad$Sname.old=Sanbar.dat.bad$SNAME
-Sanbar.dat.bad$SPECIES=rep(c(18007,22999),NroW.san)
-Sanbar.dat.bad$SNAME=rep(c("Sandbar Shark","shark, other"),NroW.san)
-
-#daily
-if(Reapportion.daily=="YES")
-{  
-  NroW.san.d=nrow(Sanbar.dat.bad.daily)
-  Sanbar.dat.bad.daily=rbind(Sanbar.dat.bad.daily,Sanbar.dat.bad.daily)
-  Sanbar.dat.bad.daily$Spec.old=Sanbar.dat.bad.daily$SPECIES
-  Sanbar.dat.bad.daily$Sname.old=Sanbar.dat.bad.daily$SNAME
-  Sanbar.dat.bad.daily$SPECIES=rep(c(18007,22999),NroW.san.d)
-  Sanbar.dat.bad.daily$SNAME=rep(c("Sandbar Shark","shark, other"),NroW.san.d)  
-}
-
-
-#C.7.17.1 Reapportion "sharks, other' in "bad" sandbar      #Rory's rules 4i-4o                     
-Sanbar.dat.bad$LIVEWT.reap.san=NA
-if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=NA
-
-
-#first use "Good.spl" 
+  #separate bad and  good sandbar reporters and reapportion only Species ==22999
   #monthly
-Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
-    ifelse(SPECIES==18007 & Prop.San.Good.spl>0,LIVEWT.reap*Prop.San.Good.spl,LIVEWT.reap.san))
-
-  #daily
-if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,
-    ifelse(SPECIES==18007 & Prop.San.Good.spl>0,LIVEWT.reap*Prop.San.Good.spl,LIVEWT.reap.san))
-
-
-#Second, if previous not available, use "Zone.Good.spl"
-  #monthly
-Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
-    ifelse(SPECIES==18007 & Prop.San.Zone.Good.spl>0,LIVEWT.reap*Prop.San.Zone.Good.spl,LIVEWT.reap.san))
-
-  #daily
-if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,
-    ifelse(SPECIES==18007 & Prop.San.Zone.Good.spl>0,LIVEWT.reap*Prop.San.Zone.Good.spl,LIVEWT.reap.san))
-
-
-#third, if previous are not available, use "YrMonth.Good.spl"
-  #monthly
-Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
-    ifelse(SPECIES==18007,LIVEWT.reap*Prop.San.Mon.Good.spl,LIVEWT.reap.san))
-
-  #daily
-if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,
-    ifelse(SPECIES==18007,LIVEWT.reap*Prop.San.Mon.Good.spl,LIVEWT.reap.san))
-
-
-# #fourth, if previous are not available, use "YrZn.Good.spl"
-
-#  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
-#    ifelse(SPECIES==18007 & Prop.San.YrZn.Good.spl>0,LIVEWT.reap*Prop.San.YrZn.Good.spl,LIVEWT.reap.san))
-# 
-# #finally, use just zone if no other available
-#  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
-#     ifelse(SPECIES==18007,LIVEWT.reap*Prop.San.zone.Good.spl ,LIVEWT.reap.san))
-
-#put remainder in "shark other'
-#monthly 
-InDx=1:(nrow(Sanbar.dat.bad)-1)
-Sanbar.dat.bad$Remainder= with(Sanbar.dat.bad,c(NA,LIVEWT.reap[InDx]-LIVEWT.reap.san[InDx]))
-Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,ifelse(SPECIES==22999,Remainder,LIVEWT.reap.san))
-Sanbar.dat.bad=Sanbar.dat.bad[,-match("Remainder",names(Sanbar.dat.bad))]
-
-#daily
-if(Reapportion.daily=="YES")
-{
-  InDx=1:(nrow(Sanbar.dat.bad.daily)-1)
-  Sanbar.dat.bad.daily$Remainder= with(Sanbar.dat.bad.daily,c(NA,LIVEWT.reap[InDx]-LIVEWT.reap.san[InDx]))
-  Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,ifelse(SPECIES==22999,Remainder,LIVEWT.reap.san))
-  Sanbar.dat.bad.daily=Sanbar.dat.bad.daily[,-match("Remainder",names(Sanbar.dat.bad.daily))]
+  Sanbar.dat=subset(Data.monthly,SanBar.rep=="bad" & SPECIES== 22999)
+  Data.monthly=subset(Data.monthly,!(SanBar.rep=="bad" & SPECIES== 22999))
+  Data.monthly$SanBar.rep="good"
   
-}
-
-
-#rescale to equal to total catch or less              
-  #monthly
-Sanbar.dat.bad=Sanbar.dat.bad%>%left_join(Agg.Sp.Ktch,by=c("Same.return"))
-#Sanbar.dat.bad=merge(Sanbar.dat.bad,Agg.Sp.Ktch,by="Same.return",all.x=T)
-Agg.reap.KtcH=aggregate(LIVEWT.reap.san~Same.return,Sanbar.dat.bad,sum,na.rm=T)
-names(Agg.reap.KtcH)[2]="LIVEWT.reap.scaler"
-Sanbar.dat.bad=Sanbar.dat.bad%>%left_join(Agg.reap.KtcH,by=c("Same.return"))
-#Sanbar.dat.bad=merge(Sanbar.dat.bad,Agg.reap.KtcH,by="Same.return",all.x=T)
-
-Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,ifelse(LIVEWT.reap.scaler>0,
-                        LIVEWT.reap.san*Total.LIVEWT.reap/LIVEWT.reap.scaler,LIVEWT.reap.san))
-
   #daily
-if(Reapportion.daily=="YES")
-{
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Agg.Sp.Ktch.daily,by="Same.return",all.x=T)
-  Agg.reap.KtcH=aggregate(LIVEWT.reap.san~Same.return,Sanbar.dat.bad.daily,sum,na.rm=T)
+  if(Reapportion.daily=="YES")
+  {
+    Sanbar.dat.daily=subset(Data.daily,SanBar.rep=="bad" & SPECIES== 22999)
+    Data.daily=subset(Data.daily,!(SanBar.rep=="bad" & SPECIES== 22999))
+    Data.daily$SanBar.rep="good"  
+  }
+  
+  
+  #find first month-year with sandbar reporting for each vessel
+  fn.sandbar.vessels=function(dat)
+  {
+    SB.ves=unique(as.character(dat$VESSEL))
+    DUMMY=vector('list',length(SB.ves))
+    
+    for(i in 1:length(SB.ves))
+    {
+      dummy=subset(dat,VESSEL==SB.ves[i])
+      dummy=dummy[order(dummy$YEAR.c,dummy$MONTH),]
+      id=which(dummy$SPECIES==18007)[1]
+      dummy$SanBar.rep="bad"
+      if(!is.na(id)) dummy$SanBar.rep[id:nrow(dummy)]="good"
+      DUMMY[[i]]=dummy
+    }
+    
+    return(do.call(rbind,DUMMY))
+    
+  }
+  
+  #monthly
+  Sanbar.dat.c=fn.sandbar.vessels(Sanbar.dat)
+  Sanbar.dat.good=subset(Sanbar.dat.c,SanBar.rep=="good")
+  Sanbar.dat.bad=subset(Sanbar.dat.c,SanBar.rep=="bad")
+  
+  Agg.Sp.Ktch=aggregate(LIVEWT.reap~Same.return,Sanbar.dat.bad,sum)
+  names(Agg.Sp.Ktch)[2]="Total.LIVEWT.reap"
+  
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Sanbar.dat.c.daily=fn.sandbar.vessels(Sanbar.dat.daily)
+    Sanbar.dat.good.daily=subset(Sanbar.dat.c.daily,SanBar.rep=="good")
+    Sanbar.dat.bad.daily=subset(Sanbar.dat.c.daily,SanBar.rep=="bad")
+  }
+  
+  
+  
+  #merge good sandbar records back
+  if(nrow(Sanbar.dat.good)>0)Data.monthly=rbind(Data.monthly,Sanbar.dat.good)
+  if(Reapportion.daily=="YES") if(nrow(Sanbar.dat.good.daily)>0)Data.daily=rbind(Data.daily,Sanbar.dat.good.daily)
+  
+  
+  # re-calculate sandbar proportions for good reporters
+  Catch.prop.sandbar=fun.prop(subset(Data.monthly,SanBar.rep=="good" & METHOD=='LL'&
+                                       LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2]),18007)
+  
+  if(Reapportion.daily=="YES") Catch.prop.sandbar.daily=fun.prop(subset(Data.daily,SanBar.rep=="good" & METHOD=='LL'&
+                                                                          LAT<=Sandbar.range[1] & LONG<=Sandbar.range[2]),18007)
+  
+  
+  #good split table: Yr-Mn-Block 
+  #monthly
+  Good.split.san=data.frame(GoodsplitID=as.character(unique(Data.monthly$GoodsplitID)))
+  Good.split.san=Good.split.san%>%left_join(Catch.prop.sandbar$Prop.GoodsplitID,by=c("GoodsplitID"))
+  names(Good.split.san)[match("Proportion",names(Good.split.san))]="Prop.San.Good.spl"
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Good.split.san.daily=data.frame(GoodsplitID=as.character(unique(Data.daily$GoodsplitID)))
+    Good.split.san.daily=merge(Good.split.san.daily,Catch.prop.sandbar.daily$Prop.GoodsplitID,by="GoodsplitID",all.x=T)
+    names(Good.split.san.daily)[match("Proportion",names(Good.split.san.daily))]="Prop.San.Good.spl"
+    
+  }
+  
+  
+  #good split table: Yr-Mn-Zone                            
+  #monthly
+  Zone.good.split.san=data.frame(ZoneID=as.character(unique(Data.monthly$ZoneID)))
+  Zone.good.split.san=Zone.good.split.san%>%left_join(Catch.prop.sandbar$Prop.FinYrZone,by=c("ZoneID"))
+  names(Zone.good.split.san)[match("Proportion",names(Zone.good.split.san))]="Prop.San.Zone.Good.spl"
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Zone.good.split.san.daily=data.frame(ZoneID=as.character(unique(Data.daily$ZoneID)))
+    Zone.good.split.san.daily=merge(Zone.good.split.san.daily,Catch.prop.sandbar.daily$Prop.FinYrZone,by="ZoneID",all.x=T)
+    names(Zone.good.split.san.daily)[match("Proportion",names(Zone.good.split.san.daily))]="Prop.San.Zone.Good.spl"
+    
+  }
+  
+  
+  # good split table: Yr-Mn                          
+  #monthly
+  Monthly.good.split.san=data.frame(MonthlyID=as.character(unique(Data.monthly$MonthlyID)))
+  Monthly.good.split.san=Monthly.good.split.san%>%left_join(Catch.prop.sandbar$Prop.FinYrMon,by=c("MonthlyID"))
+  names(Monthly.good.split.san)[match("Proportion",names(Monthly.good.split.san))]="Prop.San.Mon.Good.spl"
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Monthly.good.split.san.daily=data.frame(MonthlyID=as.character(unique(Data.daily$MonthlyID)))
+    Monthly.good.split.san.daily=merge(Monthly.good.split.san.daily,Catch.prop.sandbar.daily$Prop.FinYrMon,by="MonthlyID",all.x=T)
+    names(Monthly.good.split.san.daily)[match("Proportion",names(Monthly.good.split.san.daily))]="Prop.San.Mon.Good.spl"
+    
+  }
+  
+  
+  #good split table: Yr-Zone                            
+  #monthly
+  YrZn.good.split.san=data.frame(ZnID=as.character(unique(Data.monthly$ZnID)))
+  YrZn.good.split.san=YrZn.good.split.san%>%left_join(Catch.prop.sandbar$Prop.YrZone,by=c("ZnID"))
+  names(YrZn.good.split.san)[match("Proportion",names(YrZn.good.split.san))]="Prop.San.YrZn.Good.spl"
+  YrZn.good.split.san$Prop.San.YrZn.Good.spl=with(YrZn.good.split.san,ifelse(is.na(Prop.San.YrZn.Good.spl),
+                                                                             0,Prop.San.YrZn.Good.spl))
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    YrZn.good.split.san.daily=data.frame(ZnID=as.character(unique(Data.daily$ZnID)))
+    YrZn.good.split.san.daily=merge(YrZn.good.split.san.daily,Catch.prop.sandbar.daily$Prop.YrZone,by="ZnID",all.x=T)
+    names(YrZn.good.split.san.daily)[match("Proportion",names(YrZn.good.split.san.daily))]="Prop.San.YrZn.Good.spl"
+    YrZn.good.split.san.daily$Prop.San.YrZn.Good.spl=with(YrZn.good.split.san.daily,ifelse(is.na(Prop.San.YrZn.Good.spl),
+                                                                                           0,Prop.San.YrZn.Good.spl))
+    
+  }
+  
+  
+  #good split table: Zone
+  #monthly
+  Zn.good.split.san=data.frame(zone=as.character(unique(Data.monthly$zone)))
+  Zn.good.split.san=Zn.good.split.san%>%left_join(Catch.prop.sandbar$Prop.Zone,by=c("zone"))
+  names(Zn.good.split.san)[match("Proportion",names(Zn.good.split.san))]="Prop.San.zone.Good.spl"
+  Zn.good.split.san$Prop.San.zone.Good.spl=with(Zn.good.split.san,ifelse(is.na(Prop.San.zone.Good.spl),
+                                                                         0,Prop.San.zone.Good.spl))
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Zn.good.split.san.daily=data.frame(zone=as.character(unique(Data.daily$zone)))
+    Zn.good.split.san.daily=merge(Zn.good.split.san.daily,Catch.prop.sandbar.daily$Prop.Zone,by="zone",all.x=T)
+    names(Zn.good.split.san.daily)[match("Proportion",names(Zn.good.split.san.daily))]="Prop.San.zone.Good.spl"
+    Zn.good.split.san.daily$Prop.San.zone.Good.spl=with(Zn.good.split.san.daily,ifelse(is.na(Prop.San.zone.Good.spl),
+                                                                                       0,Prop.San.zone.Good.spl))
+    
+  }
+  
+  #monthly 
+  Sanbar.dat.bad=Sanbar.dat.bad%>% left_join(Good.split.san,by="GoodsplitID")%>%
+    left_join(Zone.good.split.san,by="ZoneID")%>%
+    left_join(Monthly.good.split.san,by="MonthlyID")%>%
+    left_join(YrZn.good.split.san,by="ZnID")%>%
+    left_join(Zn.good.split.san,by="zone")
+  
+  
+  Sanbar.dat.bad$Prop.San.Good.spl=with(Sanbar.dat.bad,
+                                        ifelse(is.na(Prop.San.Good.spl),0,Prop.San.Good.spl))
+  Sanbar.dat.bad$Prop.San.Zone.Good.spl=with(Sanbar.dat.bad,
+                                             ifelse(is.na(Prop.San.Zone.Good.spl),0,Prop.San.Zone.Good.spl))
+  Sanbar.dat.bad$Prop.San.Mon.Good.spl=with(Sanbar.dat.bad,
+                                            ifelse(is.na(Prop.San.Mon.Good.spl),0,Prop.San.Mon.Good.spl))
+  
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Good.split.san.daily,by="GoodsplitID",all.x=T)
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Zone.good.split.san.daily,by="ZoneID",all.x=T)
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Monthly.good.split.san.daily,by="MonthlyID",all.x=T)
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,YrZn.good.split.san.daily,by="ZnID",all.x=T)
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Zn.good.split.san.daily,by="zone",all.x=T)
+    Sanbar.dat.bad.daily$Prop.San.Good.spl=with(Sanbar.dat.bad.daily,
+                                                ifelse(is.na(Prop.San.Good.spl),0,Prop.San.Good.spl))
+    Sanbar.dat.bad.daily$Prop.San.Zone.Good.spl=with(Sanbar.dat.bad.daily,
+                                                     ifelse(is.na(Prop.San.Zone.Good.spl),0,Prop.San.Zone.Good.spl))
+    Sanbar.dat.bad.daily$Prop.San.Mon.Good.spl=with(Sanbar.dat.bad.daily,
+                                                    ifelse(is.na(Prop.San.Mon.Good.spl),0,Prop.San.Mon.Good.spl))
+    
+  }
+  
+  
+  # replicate Sanbar.dat.bad twice to have sandbar and shark others as a record
+  #monthly
+  NroW.san=nrow(Sanbar.dat.bad)
+  Sanbar.dat.bad=rbind(Sanbar.dat.bad,Sanbar.dat.bad)
+  Sanbar.dat.bad=Sanbar.dat.bad[order(Sanbar.dat.bad$Same.return),]
+  
+  Sanbar.dat.bad$Spec.old=Sanbar.dat.bad$SPECIES
+  Sanbar.dat.bad$Sname.old=Sanbar.dat.bad$SNAME
+  Sanbar.dat.bad$SPECIES=rep(c(18007,22999),NroW.san)
+  Sanbar.dat.bad$SNAME=rep(c("Sandbar Shark","shark, other"),NroW.san)
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {  
+    NroW.san.d=nrow(Sanbar.dat.bad.daily)
+    Sanbar.dat.bad.daily=rbind(Sanbar.dat.bad.daily,Sanbar.dat.bad.daily)
+    Sanbar.dat.bad.daily$Spec.old=Sanbar.dat.bad.daily$SPECIES
+    Sanbar.dat.bad.daily$Sname.old=Sanbar.dat.bad.daily$SNAME
+    Sanbar.dat.bad.daily$SPECIES=rep(c(18007,22999),NroW.san.d)
+    Sanbar.dat.bad.daily$SNAME=rep(c("Sandbar Shark","shark, other"),NroW.san.d)  
+  }
+  
+  
+  #C.8.6.1 Reapportion "sharks, other' in "bad" sandbar      #Rory's rules 4i-4o                     
+  Sanbar.dat.bad$LIVEWT.reap.san=NA
+  if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=NA
+  
+  
+  #first use "Good.spl" 
+  #monthly
+  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
+                                      ifelse(SPECIES==18007 & Prop.San.Good.spl>0,LIVEWT.reap*Prop.San.Good.spl,LIVEWT.reap.san))
+  
+  #daily
+  if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,
+                                                                         ifelse(SPECIES==18007 & Prop.San.Good.spl>0,LIVEWT.reap*Prop.San.Good.spl,LIVEWT.reap.san))
+  
+  
+  #Second, if previous not available, use "Zone.Good.spl"
+  #monthly
+  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
+                                      ifelse(SPECIES==18007 & Prop.San.Zone.Good.spl>0,LIVEWT.reap*Prop.San.Zone.Good.spl,LIVEWT.reap.san))
+  
+  #daily
+  if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,
+                                                                         ifelse(SPECIES==18007 & Prop.San.Zone.Good.spl>0,LIVEWT.reap*Prop.San.Zone.Good.spl,LIVEWT.reap.san))
+  
+  
+  #third, if previous are not available, use "YrMonth.Good.spl"
+  #monthly
+  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
+                                      ifelse(SPECIES==18007,LIVEWT.reap*Prop.San.Mon.Good.spl,LIVEWT.reap.san))
+  
+  #daily
+  if(Reapportion.daily=="YES") Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,
+                                                                         ifelse(SPECIES==18007,LIVEWT.reap*Prop.San.Mon.Good.spl,LIVEWT.reap.san))
+  
+  
+  # #fourth, if previous are not available, use "YrZn.Good.spl"
+  
+  #  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
+  #    ifelse(SPECIES==18007 & Prop.San.YrZn.Good.spl>0,LIVEWT.reap*Prop.San.YrZn.Good.spl,LIVEWT.reap.san))
+  # 
+  # #finally, use just zone if no other available
+  #  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,
+  #     ifelse(SPECIES==18007,LIVEWT.reap*Prop.San.zone.Good.spl ,LIVEWT.reap.san))
+  
+  #put remainder in "shark other'
+  #monthly 
+  InDx=1:(nrow(Sanbar.dat.bad)-1)
+  Sanbar.dat.bad$Remainder= with(Sanbar.dat.bad,c(NA,LIVEWT.reap[InDx]-LIVEWT.reap.san[InDx]))
+  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,ifelse(SPECIES==22999,Remainder,LIVEWT.reap.san))
+  Sanbar.dat.bad=Sanbar.dat.bad[,-match("Remainder",names(Sanbar.dat.bad))]
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    InDx=1:(nrow(Sanbar.dat.bad.daily)-1)
+    Sanbar.dat.bad.daily$Remainder= with(Sanbar.dat.bad.daily,c(NA,LIVEWT.reap[InDx]-LIVEWT.reap.san[InDx]))
+    Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,ifelse(SPECIES==22999,Remainder,LIVEWT.reap.san))
+    Sanbar.dat.bad.daily=Sanbar.dat.bad.daily[,-match("Remainder",names(Sanbar.dat.bad.daily))]
+    
+  }
+  
+  
+  #rescale to equal to total catch or less              
+  #monthly
+  Sanbar.dat.bad=Sanbar.dat.bad%>%left_join(Agg.Sp.Ktch,by=c("Same.return"))
+  Agg.reap.KtcH=aggregate(LIVEWT.reap.san~Same.return,Sanbar.dat.bad,sum,na.rm=T)
   names(Agg.reap.KtcH)[2]="LIVEWT.reap.scaler"
-  Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Agg.reap.KtcH,by="Same.return",all.x=T)
+  Sanbar.dat.bad=Sanbar.dat.bad%>%left_join(Agg.reap.KtcH,by=c("Same.return"))
   
-  Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,ifelse(LIVEWT.reap.scaler>0,
-                                                                        LIVEWT.reap.san*Total.LIVEWT.reap/LIVEWT.reap.scaler,LIVEWT.reap.san))
+  Sanbar.dat.bad$LIVEWT.reap.san=with(Sanbar.dat.bad,ifelse(LIVEWT.reap.scaler>0,
+                                                            LIVEWT.reap.san*Total.LIVEWT.reap/LIVEWT.reap.scaler,LIVEWT.reap.san))
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Agg.Sp.Ktch.daily,by="Same.return",all.x=T)
+    Agg.reap.KtcH=aggregate(LIVEWT.reap.san~Same.return,Sanbar.dat.bad.daily,sum,na.rm=T)
+    names(Agg.reap.KtcH)[2]="LIVEWT.reap.scaler"
+    Sanbar.dat.bad.daily=merge(Sanbar.dat.bad.daily,Agg.reap.KtcH,by="Same.return",all.x=T)
+    
+    Sanbar.dat.bad.daily$LIVEWT.reap.san=with(Sanbar.dat.bad.daily,ifelse(LIVEWT.reap.scaler>0,
+                                                                          LIVEWT.reap.san*Total.LIVEWT.reap/LIVEWT.reap.scaler,LIVEWT.reap.san))
+  }
+  
+  
+  #monthly
+  Sanbar.dat.bad$LIVEWT.reap=Sanbar.dat.bad$LIVEWT.reap.san
+  
+  Sanbar.dat.bad=Sanbar.dat.bad[,-match(c("Prop.San.Good.spl","Prop.San.Zone.Good.spl","Prop.San.Mon.Good.spl",
+                                          "Prop.San.YrZn.Good.spl","Prop.San.zone.Good.spl","LIVEWT.reap.san",
+                                          "Total.LIVEWT.reap" , "LIVEWT.reap.scaler"),names(Sanbar.dat.bad))]
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Sanbar.dat.bad.daily$LIVEWT.reap=Sanbar.dat.bad.daily$LIVEWT.reap.san
+    Sanbar.dat.bad.daily=Sanbar.dat.bad.daily[,-match(c("Prop.San.Good.spl","Prop.San.Zone.Good.spl","Prop.San.Mon.Good.spl",
+                                                        "Prop.San.YrZn.Good.spl","Prop.San.zone.Good.spl","LIVEWT.reap.san"),names(Sanbar.dat.bad.daily))]
+    
+  }
+  
+  
+  
+  #create file for flagging bad reporters
+  Sanbar.dat.bad$Reporter='bad'
+  if(Reapportion.daily=="YES")Sanbar.dat.bad.daily$Reporter='bad'
+  
+  #remove reportioned catch equal to 0
+  Sanbar.dat.bad=subset(Sanbar.dat.bad,!LIVEWT.reap==0)
+  
+  
+  #merge corrected sandbar records
+  #monthly
+  Sanbar.dat.bad$Reporter.old=Sanbar.dat.bad$Reporter
+  Sanbar.dat.bad$Reporter='good'
+  Data.monthly=rbind(Data.monthly,Sanbar.dat.bad)
+  
+  #daily
+  if(Reapportion.daily=="YES")
+  {
+    Sanbar.dat.bad.daily$Reporter.old=Sanbar.dat.bad.daily$Reporter
+    Sanbar.dat.bad.daily$Reporter='good'
+    Data.daily=rbind(Data.daily,Sanbar.dat.bad.daily)
+    
+  }
+  
+  #Check catch
+  d2=subset(Data.monthly,LAT<=(-26) & !is.na(LIVEWT.reap) &TYPE.DATA=="monthly")
+  fn.chk.ktch(d1=subset(Data.monthly.original,Same.return
+                        %in%unique(d2$Same.return)),d2=d2,
+              VAR1="LIVEWT",VAR2="LIVEWT.reap")
 }
 
 
-#monthly
-Sanbar.dat.bad$LIVEWT.reap=Sanbar.dat.bad$LIVEWT.reap.san
-
-Sanbar.dat.bad=Sanbar.dat.bad[,-match(c("Prop.San.Good.spl","Prop.San.Zone.Good.spl","Prop.San.Mon.Good.spl",
-            "Prop.San.YrZn.Good.spl","Prop.San.zone.Good.spl","LIVEWT.reap.san",
-            "Total.LIVEWT.reap" , "LIVEWT.reap.scaler"),names(Sanbar.dat.bad))]
-
-#daily
-if(Reapportion.daily=="YES")
-{
-  Sanbar.dat.bad.daily$LIVEWT.reap=Sanbar.dat.bad.daily$LIVEWT.reap.san
-  Sanbar.dat.bad.daily=Sanbar.dat.bad.daily[,-match(c("Prop.San.Good.spl","Prop.San.Zone.Good.spl","Prop.San.Mon.Good.spl",
-              "Prop.San.YrZn.Good.spl","Prop.San.zone.Good.spl","LIVEWT.reap.san"),names(Sanbar.dat.bad.daily))]
-  
-}
-
-
-
-#create file for flagging bad reporters
-Sanbar.dat.bad$Reporter='bad'
-if(Reapportion.daily=="YES")Sanbar.dat.bad.daily$Reporter='bad'
-
-#remove reportioned catch equal to 0
-Sanbar.dat.bad=subset(Sanbar.dat.bad,!LIVEWT.reap==0)
-
-
-#merge corrected sandbar records
-    #monthly
-Sanbar.dat.bad$Reporter.old=Sanbar.dat.bad$Reporter
-Sanbar.dat.bad$Reporter='good'
-Data.monthly=rbind(Data.monthly,Sanbar.dat.bad)
-
-    #daily
-if(Reapportion.daily=="YES")
-{
-  Sanbar.dat.bad.daily$Reporter.old=Sanbar.dat.bad.daily$Reporter
-  Sanbar.dat.bad.daily$Reporter='good'
-  Data.daily=rbind(Data.daily,Sanbar.dat.bad.daily)
-  
-}
-
-#Check catch
-d2=subset(Data.monthly,LAT<=(-26) & !is.na(LIVEWT.reap) &TYPE.DATA=="monthly")
-fn.chk.ktch(d1=subset(Data.monthly.original,Same.return
-                      %in%unique(d2$Same.return)),d2=d2,
-            VAR1="LIVEWT",VAR2="LIVEWT.reap")
-
-
-
-# C.7.19 Reclass catches as estuary of combined mullet, whiting and herring if catch is >10%
+# C.8.6 Reclass catches as estuary of combined mullet, whiting and herring if catch is >10%
     #monthly
 whiting.herring.mullet=subset(Data.monthly,METHOD=="GN"& SPECIES%in%c(344001,330001))
 whiting.herring.mullet=subset(Data.monthly,Same.return%in%whiting.herring.mullet$Same.return)
 whit.her.mul=aggregate(LIVEWT.reap~Same.return,subset(whiting.herring.mullet,SPECIES%in%c(344001,330001)),sum)
 All.whit.her.mul=aggregate(LIVEWT.reap~Same.return,whiting.herring.mullet,sum)
 whit.her.mul=whit.her.mul%>%left_join(All.whit.her.mul,by=c("Same.return"))
-#whit.her.mul=merge(whit.her.mul,All.whit.her.mul,by="Same.return")
 whit.her.mul$Prop.mul.her.whi=with(whit.her.mul,LIVEWT.reap.x/LIVEWT.reap.y)
 whit.her.mul=whit.her.mul[,c(1,4)]
 Data.monthly=Data.monthly%>%left_join(whit.her.mul,by=c("Same.return"))
-#Data.monthly=merge(Data.monthly,whit.her.mul,by="Same.return",all.x=T)
 Data.monthly$Prop.mul.her.whi=with(Data.monthly,ifelse(is.na(Prop.mul.her.whi),0,Prop.mul.her.whi))
 Data.monthly$Estuary=with(Data.monthly,ifelse(Prop.mul.her.whi>0.1,"YES",Estuary))
 Data.monthly=Data.monthly[,-match("Prop.mul.her.whi",names(Data.monthly))]
@@ -5453,9 +5453,9 @@ if(Reapportion.daily=="YES")
 
 
 
-# C.7.20 REAPPORTION CATCH FROM NON-TDGDLF CATCHES
+# C.8.7 REAPPORTION CATCH FROM NON-TDGDLF CATCHES
 #note: this deals with species==22999 for non TDGDFL
-if(reapportion.ktch.other.method=="YES")
+if(Monthly.log=='monthlyrawlog'& reapportion.ktch.other.method=="YES")
 {
   #monthly
   Data.monthly.other=subset(Data.monthly,SPECIES==22999 & !METHOD%in%c("GN","LL")& Bioregion%in%c("SC","WC"))
@@ -5547,64 +5547,67 @@ if(reapportion.ktch.other.method=="YES")
 }
 
 
-# C.7.21 REAPPORTION CATCH FROM SHARK BAY
-#note: this deals with speciess==22999 from Shark Bay
-Data.monthly.other=subset(Data.monthly,SPECIES==22999 & 
-                  METHOD%in%c("GN","LL","HL")& LAT>(-26) &
-                    LAT<=(-25))
-Data.monthly=subset(Data.monthly,!(SPECIES==22999 & 
-                METHOD%in%c("GN","LL","HL")& LAT>(-26) & 
-                  LAT<=(-25)))
-
-Prop.bioregion.yr=function(dat)
+# C.8.8 REAPPORTION CATCH FROM SHARK BAY
+#note: this deals with species==22999 from Shark Bay
+if(Monthly.log=='monthlyrawlog')
 {
-  All.yrs=sort(unique(Data.monthly.other$FINYEAR))
-  dat1=aggregate(LIVEWT~FINYEAR+SPECIES,subset(dat,SPECIES%in%c(18003,18007)),sum)
-  wide=reshape(dat1,v.names="LIVEWT",timevar="SPECIES",idvar=c("FINYEAR"),direction="wide")
-  colnames(wide)[2:3]=c("Dusky","Sandbar")
+  Data.monthly.other=subset(Data.monthly,SPECIES==22999 & 
+                              METHOD%in%c("GN","LL","HL")& LAT>(-26) &
+                              LAT<=(-25))
+  Data.monthly=subset(Data.monthly,!(SPECIES==22999 & 
+                                       METHOD%in%c("GN","LL","HL")& LAT>(-26) & 
+                                       LAT<=(-25)))
   
-  msn.yrs=All.yrs[which(!All.yrs%in%wide$FINYEAR)]
-  if(length(msn.yrs)>0)
+  Prop.bioregion.yr=function(dat)
   {
-    add.wide=wide[1:length(msn.yrs),]
-    add.wide[,2:3]=NA
-    add.wide$FINYEAR=msn.yrs
-    wide=rbind(wide,add.wide)
-    wide=wide[order(wide$FINYEAR),]
+    All.yrs=sort(unique(Data.monthly.other$FINYEAR))
+    dat1=aggregate(LIVEWT~FINYEAR+SPECIES,subset(dat,SPECIES%in%c(18003,18007)),sum)
+    wide=reshape(dat1,v.names="LIVEWT",timevar="SPECIES",idvar=c("FINYEAR"),direction="wide")
+    colnames(wide)[2:3]=c("Dusky","Sandbar")
+    
+    msn.yrs=All.yrs[which(!All.yrs%in%wide$FINYEAR)]
+    if(length(msn.yrs)>0)
+    {
+      add.wide=wide[1:length(msn.yrs),]
+      add.wide[,2:3]=NA
+      add.wide$FINYEAR=msn.yrs
+      wide=rbind(wide,add.wide)
+      wide=wide[order(wide$FINYEAR),]
+    }
+    dat2=aggregate(LIVEWT~FINYEAR,subset(dat,SPECIES%in%Elasmo.species),sum)
+    wide=wide%>%left_join(dat2,by=c("FINYEAR"))
+    #wide=merge(wide,dat2,by=c("FINYEAR"),all.x=T)
+    
+    wide$Dus.prop=wide$Dusky/wide$LIVEWT
+    wide$San.prop=wide$Sandbar/wide$LIVEWT
+    wide[is.na(wide)]=0
+    wide=wide[,c(1,5:6)]
+    Mean.san.prop=mean(wide$San.prop[wide$San.prop>0])
+    Mean.dus.prop=mean(wide$Dus.prop[wide$Dus.prop>0])
+    wide$San.prop=with(wide,ifelse(San.prop==0,Mean.san.prop,San.prop))
+    wide$Dus.prop=with(wide,ifelse(Dus.prop==0,Mean.dus.prop,Dus.prop))
+    TT=rowSums(wide[,2:3])
+    wide$Dus.prop=wide$Dus.prop/TT
+    wide$San.prop=wide$San.prop/TT
+    return(wide)
   }
-  dat2=aggregate(LIVEWT~FINYEAR,subset(dat,SPECIES%in%Elasmo.species),sum)
-  wide=wide%>%left_join(dat2,by=c("FINYEAR"))
-  #wide=merge(wide,dat2,by=c("FINYEAR"),all.x=T)
+  Prop.bio.yr=Prop.bioregion.yr(subset(Data.monthly,LAT>(-26) & LAT<=(-25)))
+  Data.monthly.other=Data.monthly.other%>%left_join(Prop.bio.yr,by=c("FINYEAR"))
+  Data.monthly.other.dus=Data.monthly.other.san=Data.monthly.other
+  Data.monthly.other.dus$SPECIES=18003
+  Data.monthly.other.dus$SNAME="Bronze Whaler"
   
-  wide$Dus.prop=wide$Dusky/wide$LIVEWT
-  wide$San.prop=wide$Sandbar/wide$LIVEWT
-  wide[is.na(wide)]=0
-  wide=wide[,c(1,5:6)]
-  Mean.san.prop=mean(wide$San.prop[wide$San.prop>0])
-  Mean.dus.prop=mean(wide$Dus.prop[wide$Dus.prop>0])
-  wide$San.prop=with(wide,ifelse(San.prop==0,Mean.san.prop,San.prop))
-  wide$Dus.prop=with(wide,ifelse(Dus.prop==0,Mean.dus.prop,Dus.prop))
-  TT=rowSums(wide[,2:3])
-  wide$Dus.prop=wide$Dus.prop/TT
-  wide$San.prop=wide$San.prop/TT
-  return(wide)
+  Data.monthly.other.san$SPECIES=18007
+  Data.monthly.other.san$SNAME="Sandbar Shark"
+  
+  Data.monthly.other.dus$LIVEWT.reap=with(Data.monthly.other.dus,LIVEWT*Dus.prop)
+  Data.monthly.other.san$LIVEWT.reap=with(Data.monthly.other.san,LIVEWT*San.prop)
+  
+  Data.monthly.other=rbind(Data.monthly.other.dus,Data.monthly.other.san)
+  Data.monthly.other=Data.monthly.other[,-match(c("Dus.prop","San.prop"),names(Data.monthly.other))]
+  Data.monthly=rbind(Data.monthly,Data.monthly.other)
+  
 }
-Prop.bio.yr=Prop.bioregion.yr(subset(Data.monthly,LAT>(-26) & LAT<=(-25)))
-Data.monthly.other=Data.monthly.other%>%left_join(Prop.bio.yr,by=c("FINYEAR"))
-#Data.monthly.other=merge(Data.monthly.other,Prop.bio.yr,by=c("FINYEAR"),all.x=T)
-Data.monthly.other.dus=Data.monthly.other.san=Data.monthly.other
-Data.monthly.other.dus$SPECIES=18003
-Data.monthly.other.dus$SNAME="Bronze Whaler"
-
-Data.monthly.other.san$SPECIES=18007
-Data.monthly.other.san$SNAME="Sandbar Shark"
-
-Data.monthly.other.dus$LIVEWT.reap=with(Data.monthly.other.dus,LIVEWT*Dus.prop)
-Data.monthly.other.san$LIVEWT.reap=with(Data.monthly.other.san,LIVEWT*San.prop)
-
-Data.monthly.other=rbind(Data.monthly.other.dus,Data.monthly.other.san)
-Data.monthly.other=Data.monthly.other[,-match(c("Dus.prop","San.prop"),names(Data.monthly.other))]
-Data.monthly=rbind(Data.monthly,Data.monthly.other)
 
 
 #Compare amended weights, loosing or gaining catch?
@@ -5617,58 +5620,69 @@ fn.chk.ktch(d1=subset(Data.monthly.original,Same.return
 
 
 #Remove records with reported catch set at 0 or NA
-Data.monthly=subset(Data.monthly,!LIVEWT.reap==0)
-Data.daily=subset(Data.daily,!LIVEWT.reap==0)
-
-Data.monthly=subset(Data.monthly,!is.na(LIVEWT.reap))
-Data.daily=subset(Data.daily,!is.na(LIVEWT.reap))
-
-#by zone
-Hndl=handl_OneDrive("Analyses/Catch and effort/Compare_to_previous_approach/")
-if(First.run=="YES")
+if(Monthly.log=='monthlyrawlog')
 {
-  fun.compare.weight=function(SPEC)
-  {
-    dat=subset(Data.monthly,SPECIES==SPEC & zone%in%c("West","Zone1","Zone2"))
-    dat1=subset(dat,Spec.old==SPEC)
-    spe=unique(dat$SNAME)[1]
-    tab1=aggregate(LIVEWT~FINYEAR+zone,dat1,sum,na.rm=T)
-    tab2=aggregate(LIVEWT.reap~FINYEAR+zone,dat,sum,na.rm=T)
-    wide1 <- reshape(tab1, v.names ="LIVEWT" , idvar = "FINYEAR",timevar = "zone", direction = "wide")
-    wide2 <- reshape(tab2, v.names ="LIVEWT.reap" , idvar = "FINYEAR",timevar = "zone", direction = "wide")
-    Yer=1:length(wide1$FINYEAR)
-    Yer2=1:length(wide2$FINYEAR)
-    if(length(Yer)<length(Yer2))wide2=wide2[match(wide1$FINYEAR,wide2$FINYEAR),]
-    Yer2=1:length(wide2$FINYEAR)
-    plot(Yer,wide1$LIVEWT.West/1000,col=2,ylim=c(0,max(c(tab1$LIVEWT/1000,tab2$LIVEWT.reap/1000))),
-         ylab="",xlab="",xaxt='n',main=spe,pch=19,cex.axis=1.25)
-    lines(Yer2,wide2$LIVEWT.reap.West/1000,col=2,pch=19)
-    #points(Yer2,wide2$LIVEWT.reap.West,col=2,pch=21)
-    points(Yer,wide1$LIVEWT.Zone1/1000,col=3,pch=19)
-    lines(Yer2,wide2$LIVEWT.reap.Zone1/1000,col=3)
-    #points(Yer2,wide2$LIVEWT.reap.Zone1,col=3,pch=21)
-    points(Yer,wide1$LIVEWT.Zone2/1000,col=4,pch=19)
-    lines(Yer2,wide2$LIVEWT.reap.Zone2/1000,col=4)
-    #points(Yer2,wide2$LIVEWT.reap.Zone2,col=4,pch=21)
-    axis(1,Yer,labels=F,tck=-0.015)
-    axis(1,seq(1,length(Yer),by=5),labels=wide1$FINYEAR[seq(1,length(Yer),by=5)],tck=-0.03,cex.axis=1.25)
-  }
-  tiff(file=paste(Hndl,"Compare.reapKtch_zone.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
-  par(mfcol=c(2,2),mar=c(3,4,1,4),oma=c(2.5,.6,.1,.1),las=1)
-  fun.compare.weight(17001)
-  legend("topleft",c("LiveWT","LiveWt.reap"),bty='n',pch=c(21,NA),lty=c(0,1),pt.bg=c("black","white"))
-  fun.compare.weight(17003)
-  legend("topright",c("West","Zn1","Zn2"),bty='n',lty=1,col=c(2,3,4))
-  fun.compare.weight(18003)
-  fun.compare.weight(18007)
-  mtext("Tonnes",2,outer=T,cex=1.75,line=-1.5,las=3)
-  mtext("Financial year",1,outer=T,cex=1.75)
-  dev.off()
+  Data.monthly=subset(Data.monthly,!LIVEWT.reap==0)
+  Data.daily=subset(Data.daily,!LIVEWT.reap==0)
+  
+  Data.monthly=subset(Data.monthly,!is.na(LIVEWT.reap))
+  Data.daily=subset(Data.daily,!is.na(LIVEWT.reap))
 }
 
 
-  #C.8 Add 5% to catch records prior to 1990  as per instructed by Rory                                              
-Data.monthly$LIVEWT.c=with(Data.monthly,ifelse(YEAR.c<1990 & LAT<=(-26),LIVEWT.reap*Inc.per,LIVEWT.reap))
+#by zone
+Hndl=handl_OneDrive("Analyses/Catch and effort/Compare_to_previous_approach/")
+if(Monthly.log=='monthlyrawlog')
+{
+  if(First.run=="YES")
+  {
+    fun.compare.weight=function(SPEC)
+    {
+      dat=subset(Data.monthly,SPECIES==SPEC & zone%in%c("West","Zone1","Zone2"))
+      dat1=subset(dat,Spec.old==SPEC)
+      spe=unique(dat$SNAME)[1]
+      tab1=aggregate(LIVEWT~FINYEAR+zone,dat1,sum,na.rm=T)
+      tab2=aggregate(LIVEWT.reap~FINYEAR+zone,dat,sum,na.rm=T)
+      wide1 <- reshape(tab1, v.names ="LIVEWT" , idvar = "FINYEAR",timevar = "zone", direction = "wide")
+      wide2 <- reshape(tab2, v.names ="LIVEWT.reap" , idvar = "FINYEAR",timevar = "zone", direction = "wide")
+      Yer=1:length(wide1$FINYEAR)
+      Yer2=1:length(wide2$FINYEAR)
+      if(length(Yer)<length(Yer2))wide2=wide2[match(wide1$FINYEAR,wide2$FINYEAR),]
+      Yer2=1:length(wide2$FINYEAR)
+      plot(Yer,wide1$LIVEWT.West/1000,col=2,ylim=c(0,max(c(tab1$LIVEWT/1000,tab2$LIVEWT.reap/1000))),
+           ylab="",xlab="",xaxt='n',main=spe,pch=19,cex.axis=1.25)
+      lines(Yer2,wide2$LIVEWT.reap.West/1000,col=2,pch=19)
+      #points(Yer2,wide2$LIVEWT.reap.West,col=2,pch=21)
+      points(Yer,wide1$LIVEWT.Zone1/1000,col=3,pch=19)
+      lines(Yer2,wide2$LIVEWT.reap.Zone1/1000,col=3)
+      #points(Yer2,wide2$LIVEWT.reap.Zone1,col=3,pch=21)
+      points(Yer,wide1$LIVEWT.Zone2/1000,col=4,pch=19)
+      lines(Yer2,wide2$LIVEWT.reap.Zone2/1000,col=4)
+      #points(Yer2,wide2$LIVEWT.reap.Zone2,col=4,pch=21)
+      axis(1,Yer,labels=F,tck=-0.015)
+      axis(1,seq(1,length(Yer),by=5),labels=wide1$FINYEAR[seq(1,length(Yer),by=5)],tck=-0.03,cex.axis=1.25)
+    }
+    tiff(file=paste(Hndl,"Compare.reapKtch_zone.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+    par(mfcol=c(2,2),mar=c(3,4,1,4),oma=c(2.5,.6,.1,.1),las=1)
+    fun.compare.weight(17001)
+    legend("topleft",c("LiveWT","LiveWt.reap"),bty='n',pch=c(21,NA),lty=c(0,1),pt.bg=c("black","white"))
+    fun.compare.weight(17003)
+    legend("topright",c("West","Zn1","Zn2"),bty='n',lty=1,col=c(2,3,4))
+    fun.compare.weight(18003)
+    fun.compare.weight(18007)
+    mtext("Tonnes",2,outer=T,cex=1.75,line=-1.5,las=3)
+    mtext("Financial year",1,outer=T,cex=1.75)
+    dev.off()
+  }
+}
+
+
+
+  #C.9 Add 5% to catch records prior to 1990  as per instructed by Rory                                              
+Data.monthly=Data.monthly%>%
+              mutate(LIVEWT.c=case_when(!is.na(LIVEWT.reap) & YEAR.c<1990 & LAT<=(-26)~LIVEWT.reap*Inc.per,
+                                        !is.na(LIVEWT.reap) & YEAR.c>=1990 & LAT<=(-26)~LIVEWT.reap,
+                                        is.na(LIVEWT.reap) ~LIVEWT))
 Data.daily$LIVEWT.c=Data.daily$LIVEWT.reap
 
 
@@ -5731,24 +5745,37 @@ if(do.this)
   
 }
 
-  #C.9 Separate fisheries  into North and South                                                                   
+  #C.10 Separate fisheries  into North and South                                                                   
 #note: no catch reapportioning of effort corrections done on northern data file
   #monthly
-Data.monthly=Data.monthly%>%
-              mutate(LAT=ifelse(is.na(LAT)& Landing.Port=="ALBANY" & Estuary=='YES',-35.1,LAT),
-                     LONG=ifelse(is.na(LONG)& Landing.Port=="ALBANY" & Estuary=='YES',117.8,LONG))
+n.row.Data.monthly=nrow(Data.monthly)
 Data.monthly.north=subset(Data.monthly,LAT>(-26))   
 Data.monthly=subset(Data.monthly,LAT<=(-26))
-
+if(!n.row.Data.monthly==(nrow(Data.monthly.north)+nrow(Data.monthly)))
+{
+  par(bg=2)
+  plot.new()
+  mtext('Split of Data.monthly into North ',3,cex=2,col="white")
+  mtext(' and South did not work.',3,-2,cex=2,col="white")
+  mtext("See if NA's in Latitude",3,-4,cex=2,col="white")
+  par(bg="white")
+}
+  
   #daily
-Data.daily=Data.daily%>%
-  mutate(LAT=ifelse(is.na(LAT) & fishery=="PFT",-19.5,LAT),
-         LONG=ifelse(is.na(LONG) & fishery=="PFT",118,LONG))
-
+n.row.Data.daily=nrow(Data.daily)
 Data.daily.north=subset(Data.daily,LAT>(-26))   
 Data.daily=subset(Data.daily,LAT<=(-26))
+if(!n.row.Data.daily==(nrow(Data.daily.north)+nrow(Data.daily)))
+{
+  par(bg=2)
+  plot.new()
+  mtext('Split of Data.daily into North ',3,cex=2,col="white")
+  mtext(' and South did not work.',3,-2,cex=2,col="white")
+  mtext("See if NA's in Latitude",3,-4,cex=2,col="white")
+  par(bg="white")
+}
 
-
+#ACA
 #Some Fishery code fixes
 Data.monthly=Data.monthly%>%
               mutate(FisheryCode=ifelse(zone=='West' & FisheryCode=='JASDGDL','WCDGDL',FisheryCode))
