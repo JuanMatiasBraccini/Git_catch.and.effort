@@ -914,6 +914,9 @@ TDGDLF.lat.range=c(-26,-40)
 #Fin to total weight ratio
 Percent.fin.of.livewt=0.03
 
+#Shark fisheries
+FishCubeCode_Shark.fisheries=c('C070','JASDGDL','WCDGDL','OANCGCWC','WANCS','JANS','NCS','OASC')
+
 #Species definition    
 Shark.species=5001:24900
 Ray.species=c(25000:31000,39001,90030)
@@ -1308,8 +1311,7 @@ Data.monthly$LAT=with(Data.monthly,
                 ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85130),-34.9278,LAT
                 ))))))))))))))))))))))
 Data.monthly=Data.monthly%>%
-                mutate(LAT=ifelse(is.na(LAT)& PORT=="ALBANY" & Estuary=='YES',-35.1,LAT),
-                       LONG=ifelse(is.na(LONG)& PORT=="ALBANY" & Estuary=='YES',117.8,LONG))
+                mutate(LAT=ifelse(is.na(LAT)& PORT=="ALBANY" & Estuary=='YES',-35.1,LAT))
 Data.monthly$LAT=ceiling(Data.monthly$LAT)
 
 if(min(Data.monthly$LAT,na.rm=T)<(-40))
@@ -1343,24 +1345,28 @@ Data.monthly$LONG=with(Data.monthly,
                   ifelse(!is.na(BLOCKX) & BLOCKX==85010,115.1438 ,
                   ifelse(!is.na(BLOCKX) & BLOCKX%in%c(85130),116.4489,LONG
                   ))))))))))))))))))))))
+Data.monthly=Data.monthly%>%
+        mutate(LONG=ifelse(is.na(LONG)& PORT=="ALBANY" & Estuary=='YES',117.8,LONG))
 
 Data.monthly$LONG=floor(Data.monthly$LONG)
 
 #add Fishery code if missing
 Data.monthly=Data.monthly%>%
-  mutate(fishery=case_when(fishery=='*'~NA_character_,
-                           fishery=='WCDGDL'~'WCGL',
-                           fishery=='JASDGDL' & LONG>=116.5~'SGL2',
-                           fishery=='JASDGDL' & LONG<116.5~'SGL1',
-                           fishery=='SGL' & LONG>=116.5~'SGL2',
-                           fishery=='SGL' & LONG<116.5~'SGL1',
-                           TRUE~fishery),
-         fishery=ifelse(is.na(fishery) & METHOD%in%c("GN","LL")& LAT <(-26) & 
-                          LAT >=(-33) & LONG<116.5,'WCGL',
+  mutate(fishery=ifelse(is.na(fishery) & METHOD%in%c("GN","LL")& LAT <(-26) & 
+                                   LAT >=(-33) & LONG<116.5,'WCGL',
                  ifelse(is.na(fishery) & METHOD%in%c("GN","LL")& LAT <(-33) &
-                          LONG<116.5,'SGL1',
+                                          LONG<116.5,'SGL1',
                  ifelse(is.na(fishery) & METHOD%in%c("GN","LL")& LAT <(-26) &
-                          LONG>=116.5,'SGL2',fishery))))
+                                                 LONG>=116.5,'SGL2',fishery))),
+         fishery=case_when(fishery=='*'~NA_character_,
+                           fishery=='WCGL'~'WCDGDL',
+                           fishery%in%c('C070','OANCGCWC') & LAT <=(-26) & LAT>=(-32)~'WCDGDL',
+                           fishery%in%c('WCDGDL','OANCGCWC') & LAT <=(-33)~'JASDGDL',
+                           fishery%in%c('WCDGDL') & LAT <=(-31) & LONG>118~'JASDGDL',
+                           fishery=='CL02'~'JANS',
+                           fishery=='C051'~'NCS',
+                           fishery%in%c('SGL2','SGL1','SGL')~'JASDGDL',
+                           TRUE~fishery))
 
 # A.7. Fix condition
 Data.monthly$CONDITN=as.character(Data.monthly$CONDITN)
@@ -1376,12 +1382,24 @@ Data.monthly$Bioregion=as.character(with(Data.monthly,ifelse(LONG>=115.5 & LONG<
 Data.monthly$Bioregion=with(Data.monthly,
             ifelse(Bioregion=="SC"& LAT>(-34) & LONG <115.91 ,"WC",Bioregion))
 
-Data.monthly$zone=as.character(with(Data.monthly,ifelse(LONG>=116.5 & LAT<=(-26),"Zone2",
-                  ifelse(LONG<116.5 & LAT<=(-33),"Zone1",
-                  ifelse(LAT>(-33) & LAT<=(-26) & LONG<116.5,"West",
-                  ifelse(LAT>(-26) & LONG<114,"Closed",
-                  ifelse(LAT>(-23) & LONG>=114 & LONG<123.75,"North",
-                  ifelse(LAT>(-23) & LONG>=123.75,"Joint",NA))))))))
+Data.monthly=Data.monthly%>%
+                mutate(zone=NA,
+                       zone=case_when(
+                         fishery%in%(FishCubeCode_Shark.fisheries) & LONG>=116.5 & LAT<=(-26)~"Zone2",
+                         fishery%in%(FishCubeCode_Shark.fisheries) & LONG<116.5 & LAT<=(-33)~"Zone1",
+                         fishery%in%(FishCubeCode_Shark.fisheries) & LAT>(-33) & LAT<=(-26) & LONG<116.5~"West",
+                         fishery%in%(FishCubeCode_Shark.fisheries) & LAT>(-26) & LONG<114~"Closed",
+                         fishery%in%(FishCubeCode_Shark.fisheries) & LAT>(-23) & LONG>=114 & LONG<123.75~"North",
+                         fishery%in%(FishCubeCode_Shark.fisheries) & LAT>(-23) & LONG>=123.75~"Joint",
+                                      TRUE~zone))
+Data.monthly$zone=as.character(with(Data.monthly,
+                  ifelse(fishery%in%(FishCubeCode_Shark.fisheries) & LONG>=116.5 & LAT<=(-26),"Zone2",
+                  ifelse(fishery%in%(FishCubeCode_Shark.fisheries) & LONG<116.5 & LAT<=(-33),"Zone1",
+                  ifelse(fishery%in%(FishCubeCode_Shark.fisheries) & LAT>(-33) & LAT<=(-26) & LONG<116.5,"West",
+                  ifelse(fishery%in%(FishCubeCode_Shark.fisheries) & LAT>(-26) & LONG<114,"Closed",
+                  ifelse(fishery%in%(FishCubeCode_Shark.fisheries) & LAT>(-23) & LONG>=114 & LONG<123.75,"North",
+                  ifelse(fishery%in%(FishCubeCode_Shark.fisheries) & LAT>(-23) & LONG>=123.75,"Joint",
+                         NA))))))))
 
 #Check spatial blocks and catch assigned to right zone
 world <- ne_countries(scale = "medium", returnclass = "sf")
@@ -1405,25 +1423,30 @@ fn.ck.spatial=function(d,BLK.data,Depth.data,BLK.size,add.yr=FALSE,pt.size=3,pt.
   print(p)
   
 }
-fn.ck.spatial(d=Data.monthly%>%
-                filter(fishery%in%c('SGL','WCGL','SGL1','SGL2'))%>%
-                mutate(yr=FINYEAR,
-                       zn=zone,
-                       ln=LONG,
-                       la=LAT,
-                       blk=BLOCKX,
-                       Unik=Same.return)%>%
-                distinct(Unik,.keep_all = T),
-              BLK.data=BLOCK_60%>%
-                mutate(dumi=as.numeric(BlockCode))%>%
-                filter(dumi<85010)%>%
-                rowwise()%>% 
-                mutate(x = mean(c(NorthWestPointGPSLongitude, SouthEastPointGPSLongitude)),
-                       y = mean(c(NorthWestPointGPSLatitude, SouthEastPointGPSLatitude))),
-              Depth.data=Bathymetry,
-              BLK.size=5)
- ggsave(handl_OneDrive("Data/Catch and Effort/Check_these_vars/Monthly/Map_blocks_monthly.tiff"),
-        width = 14,height = 10,compression = "lzw")
+do.this=FALSE
+if(do.this)
+{
+  fn.ck.spatial(d=Data.monthly%>%
+                  filter(fishery%in%c('SGL','WCGL','SGL1','SGL2','JASDGDL','WCDGDL'))%>%
+                  mutate(yr=FINYEAR,
+                         zn=zone,
+                         ln=LONG,
+                         la=LAT,
+                         blk=BLOCKX,
+                         Unik=Same.return)%>%
+                  distinct(Unik,.keep_all = T),
+                BLK.data=BLOCK_60%>%
+                  mutate(dumi=as.numeric(BlockCode))%>%
+                  filter(dumi<85010)%>%
+                  rowwise()%>% 
+                  mutate(x = mean(c(NorthWestPointGPSLongitude, SouthEastPointGPSLongitude)),
+                         y = mean(c(NorthWestPointGPSLatitude, SouthEastPointGPSLatitude))),
+                Depth.data=Bathymetry,
+                BLK.size=5)
+  ggsave(handl_OneDrive("Data/Catch and Effort/Check_these_vars/Monthly/Map_blocks_monthly.tiff"),
+         width = 14,height = 10,compression = "lzw")
+  
+}
 
 # A.9. Create Monthly effort dataset   
 Data.monthly$NETLEN=with(Data.monthly,ifelse(METHOD%in%c("LL","HL","DL")&NETLEN>0,NA,NETLEN))
@@ -1450,7 +1473,6 @@ Data.monthly$LongFC=NA
 
     #add var for merging with daily
 Data.monthly$nfish=NA
-#Data.monthly=Data.monthly[,-match("fishery",names(Data.monthly))]
 
 #Remove rows will all NA records
 Data.monthly=Data.monthly%>%filter(!(is.na(YEAR) & is.na(MONTH) & FINYEAR=='' & is.na(BLOCKX)))
@@ -2106,24 +2128,33 @@ Data.daily$LongMin=with(Data.daily,ifelse(is.na(LongMin) & is.na(block10),NA,Lon
 Data.daily$blockx=Data.daily$blockxFC   #reset blockx to original
 Data.daily$LatDeg=-abs(Data.daily$LatDeg)
 
+  #fix some fishery codes
+Data.daily=Data.daily%>%
+            mutate(fishery=case_when(fishery=='JASDGDL' & LatDeg>(-33) & LongDeg<118~'WCDGDL',
+                                     TRUE~fishery))
   #Fix zones                                                                           
-Data.daily$zone=as.character(Data.daily$zone)
-Data.daily$zone=as.character(with(Data.daily,
-                ifelse(is.na(LatDeg) | is.na(LatMin) | is.na(LongDeg) | is.na(LongMin),zone,
-                ifelse((LongDeg+LongMin/60)>=116.5 & (LatDeg+LatMin/60)>=(26),"Zone2",
-                ifelse((LongDeg+LongMin/60)<116.5 & (LatDeg+LatMin/60)>=(33),"Zone1",
-                ifelse((LatDeg+LatMin/60)<(33) & (LatDeg+LatMin/60)>=(26) & (LongDeg+LongMin/60)<116.5,"West",
-                ifelse((LatDeg+LatMin/60)<(26) & (LongDeg+LongMin/60)<114,"Closed",
-                ifelse((LatDeg+LatMin/60)<(26) & (LongDeg+LongMin/60)>=114 & (LongDeg+LongMin/60)<123.75,"North",
-                ifelse((LatDeg+LatMin/60)<(26) & (LongDeg+LongMin/60)>=123.75,"Joint",
-                NA)))))))))
+Data.daily=Data.daily%>%
+  mutate(LatDeg=abs(LatDeg),
+         zone=as.character(zone),
+         zone=ifelse(is.na(LatDeg) | is.na(LatMin) | is.na(LongDeg) | is.na(LongMin),zone,
+             ifelse((LatDeg+LatMin/60)<(33) & (LatDeg+LatMin/60)>=(26) & (LongDeg+LongMin/60)<116.5,"West",
+              ifelse((LongDeg+LongMin/60)>=116.5 & (LatDeg+LatMin/60)>=(26),"Zone2",
+              ifelse((LongDeg+LongMin/60)<116.5 & (LatDeg+LatMin/60)>=(33),"Zone1",
+              ifelse((LatDeg+LatMin/60)<(26) & (LongDeg+LongMin/60)<114,"Closed",
+              ifelse((LatDeg+LatMin/60)<(26) & (LongDeg+LongMin/60)>=114 & (LongDeg+LongMin/60)<123.75,"North",
+              ifelse((LatDeg+LatMin/60)<(26) & (LongDeg+LongMin/60)>=123.75,"Joint",
+              NA))))))),
+         LatDeg=-abs(LatDeg))
 Data.daily$zone=with(Data.daily,
                 ifelse(zone=='2',"Zone2",
                 ifelse(zone=='1',"Zone1",
                 ifelse(zone=='*' & as.numeric(LatFC)>(-33),"West",
                 ifelse(zone=='*' & as.numeric(LatFC)<=(-33),"Zone1",
-                zone)))))
-
+                ifelse(zone=='*' & as.numeric(LatFC)<=(-33) & as.numeric(LongFC)>=116.5,"Zone2",
+                zone))))))
+Data.daily=Data.daily%>%
+              mutate(zone=ifelse(!fishery%in%FishCubeCode_Shark.fisheries,NA,zone))
+                     
   #Realocate zone 3 to 1 or 2 depending on shot proximity (requested by fishers at AMM 2019)
 Zn3.lim.eas=116+55.4/60
 Zn3.lim.wes=116+30/60
@@ -2785,8 +2816,8 @@ Data.daily=Data.daily[order(Data.daily$year,Data.daily$month,Data.daily$vessel),
 
 
 #Combine degrees and minutes
-Data.daily$LatDeg=abs(Data.daily$LatDeg)
-Data.daily$LatDeg=Data.daily$LatDeg+(Data.daily$LatMin/60)
+Data.daily$LatDeg=as.numeric(substr(abs(Data.daily$LatDeg),1,2))
+Data.daily$LatDeg=as.numeric(substr(Data.daily$LatDeg,1,3))+(Data.daily$LatMin/60)
 Data.daily$LongDeg=Data.daily$LongDeg+(Data.daily$LongMin/60)
 Data.daily$LatDeg=-abs(Data.daily$LatDeg)
 
@@ -5775,12 +5806,21 @@ if(!n.row.Data.daily==(nrow(Data.daily.north)+nrow(Data.daily)))
   par(bg="white")
 }
 
-#ACA
+
 #Some Fishery code fixes
 Data.monthly=Data.monthly%>%
-              mutate(FisheryCode=ifelse(zone=='West' & FisheryCode=='JASDGDL','WCDGDL',FisheryCode))
+              mutate(FisheryCode=case_when(FisheryCode%in%c('CL02')~'JANS',
+                                           FisheryCode%in%c('SGL','SGL1','SGL2')~'JASDGDL',
+                                           FisheryCode%in%c('WL')~'OASC',
+                                           FisheryCode%in%c('C127')~'WANCS',
+                                           FisheryCode%in%c('WCGL')~'WCDGDL',
+                                           FisheryCode%in%c('WCDGDL') & LAT<=(-33)~'JASDGDL',
+                                           TRUE~FisheryCode),
+                     FisheryCode=case_when(zone=='West' & FisheryCode=='JASDGDL'~'WCDGDL',
+                                           TRUE~FisheryCode))
 Data.daily=Data.daily%>%
-              mutate(FisheryCode=ifelse(zone=='West' & FisheryCode=='JASDGDL','WCDGDL',FisheryCode))
+              mutate(FisheryCode=case_when(zone=='West' & FisheryCode=='JASDGDL'~'WCDGDL',
+                                           TRUE~FisheryCode))
 
 # C.9.1 Northern and Southern catches
 if(First.run=="YES")
@@ -6879,41 +6919,6 @@ fn.Ves.by.zone=function(YEARS)
 Prop.Ves.Zon.All.yrs=fn.Ves.by.zone(unique(Data.monthly$YEAR.c))
 #Prop.Ves.Zon.All.2006.2012=fn.Ves.by.zone(2006:2012)
 
-#Check if FDAYS match BDAYS for same monthly return
-# fun.match.Fdays=function(DATA)
-# {
-#   DATA=subset(DATA,FINYEAR%in%FINYEAR.monthly[1:30])
-#   DATA=DATA[!duplicated(DATA$Same.return),]
-#   DATA$Same.rec=with(DATA,paste(FINYEAR,MONTH,VESSEL,BLOCKX))
-#   SAME=unique(DATA$Same.rec)
-#   test=aggregate(DATA$BDAYS, by=list(DATA$Same.rec),sum)
-#   names(test)=c("Same.rec","Sum of BDAYS")
-#   test=test[order(test$Same.rec),]
-#   id=match(test$Same.rec,DATA$Same.rec)
-#   test$FDAYS=DATA$FDAYS[id]
-#   test$SAME=ifelse(test$FDAYS==test$"Sum of BDAYS",1,0)
-#   id=which(test$SAME==0)
-#   a=test[id,]
-#   plot(test$FDAYS,test$"Sum of BDAYS",ylab="",xlab="")
-#   lines(0:30,0:30,lwd=2,col=2)
-#   return(a)
-# }
-# 
-# tiff(file="C:/Matias/Analyses/Catch and effort/Outputs/Figure 1.FDAYS vs SUM BDAYS.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
-# par(mfcol=c(2,1),mar=c(3,4,1,4),oma=c(2.5,.1,.1,.1),las=1)
-# 
-# No.match.data.monthly=fun.match.Fdays(Ref.Table.data)
-# legend("topleft",paste("TDGDLF, No matches =",nrow(No.match.data.monthly)),bty='n')
-# 
-# No.match.data.monthly.north=fun.match.Fdays(Data.monthly.north)
-# legend("topleft",paste("NSF, No matches =",nrow(No.match.data.monthly.north)),bty='n')
-# 
-# mtext("Sum of BDAYS",side=2,line=-1.25,font=1,las=0,cex=1.7,outer=T)
-# mtext("FDAYS",side=1,line=1,font=1,las=0,cex=1.7,outer=T)
-# dev.off()
-#rm(Ref.Table.data)
-
-
 
 #E.2. Adjust invalid effort measures                 
 #note: this includes 0 values, NAs, and too large values
@@ -7540,12 +7545,16 @@ fix.this=unique(subset(chk,Changed=="YES" & Shots.net>19000))$VESSEL
 
 a=subset(Effort.monthly,VESSEL%in%fix.this & METHOD=="GN")
 Mode <- function(x)
-  {
+{
     ux <- unique(x)
     ux[which.max(tabulate(match(x, ux)))]
   }
-aggregate(SHOTS~VESSEL, a, Mode)
-aggregate(NETLEN~VESSEL, a, Mode)
+if(nrow(a)>0)
+{
+  aggregate(SHOTS~VESSEL, a, Mode)
+  aggregate(NETLEN~VESSEL, a, Mode)
+}
+
 
 Effort.monthly$Eff.Reporter=with(Effort.monthly,
               ifelse(VESSEL=="F 428" & SHOTS.c==40 & Shots.net>19000,"bad",
@@ -7603,8 +7612,6 @@ Check.effort.changes=fn.check.eff.vars.c("Daily returns",Effort.daily,unique(Eff
                       "bdays.c","hours.c","shots.c","netlen.c")
 
 
-
-
 #E.2.8 Output percentage of corrected effort variables
 fn.compare.eff=function(var1,var2,var3,var4)
 {
@@ -7650,9 +7657,6 @@ if(!do.sql.extraction)
   
 }
 
-#some fishery code fixes
-Effort.daily=Effort.daily%>%
-  mutate(FisheryCode=ifelse(zone=='West' & FisheryCode=='JASDGDL','WCDGDL',FisheryCode))
 
 #SECTION F.1. ---- EXTRACT QUANTITIES ---- 
 
@@ -7767,8 +7771,10 @@ Effort.monthly=Effort.monthly%>%
                                       is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
                                       zone=='Zone1' & FisheryCode=='WCGL'~'JASDGDL',
                                       FisheryCode%in%c("SGL1","SGL2","SGL",'JASDGDL')~'JASDGDL',
+                                      zone%in%c('Zone1','Zone2') & METHOD%in%c('GN','LL') & FisheryCode=='OASC'~'OASC',
                                       zone%in%c('Zone1','Zone2') & FisheryCode=='*'~'OASC',
                                       zone%in%c('Zone1','Zone2') & FisheryCode=="WL"~'OASC',
+                                      zone%in%c('Closed','Joint','North') & METHOD%in%c('GN','LL') & FisheryCode=='OANCGCWC'~'OANCGCWC',
                                       zone%in%c('West') & FisheryCode=='*'~'OANCGCWC',
                                       zone%in%c('West','Zone1') & FisheryCode=='OT'~'OANCGCWC',
                                       TRUE~"non.shark.fishery"))
@@ -7780,8 +7786,10 @@ Effort.daily=Effort.daily%>%
                                  is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
                                  zone=='Zone1' & FisheryCode%in%c('WCDGDL','WCGL')~'JASDGDL',
                                  FisheryCode%in%c("SGL1","SGL2","SGL",'JASDGDL')~'JASDGDL',
+                                 zone%in%c('Zone1','Zone2') & method%in%c('GN','LL') & FisheryCode=='OASC'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=='*'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=="WL"~'OASC',
+                                 zone%in%c('Closed','Joint','North') & method%in%c('GN','LL') & FisheryCode=='OANCGCWC'~'OANCGCWC',
                                  zone%in%c('West') & FisheryCode=='*'~'OANCGCWC',
                                  zone%in%c('West','Zone1') & FisheryCode=='OT'~'OANCGCWC',
                                  TRUE~"non.shark.fishery"))
@@ -7794,8 +7802,10 @@ Data.monthly=Data.monthly%>%
                                  is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
                                  zone=='Zone1' & FisheryCode%in%c('WCDGDL','WCGL')~'JASDGDL',
                                  FisheryCode%in%c("SGL1","SGL2","SGL",'JASDGDL')~'JASDGDL',
+                                 zone%in%c('Zone1','Zone2') & METHOD%in%c('GN','LL') & FisheryCode=='OASC'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=='*'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=="WL"~'OASC',
+                                 zone%in%c('Closed','Joint','North') & METHOD%in%c('GN','LL') & FisheryCode=='OANCGCWC'~'OANCGCWC',
                                  zone%in%c('West') & FisheryCode=='*'~'OANCGCWC',
                                  zone%in%c('West','Zone1') & FisheryCode=='OT'~'OANCGCWC',
                                  TRUE~"non.shark.fishery"))
@@ -7808,8 +7818,10 @@ Data.monthly.north=Data.monthly.north%>%
                                  is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
                                  zone=='Zone1' & FisheryCode%in%c('WCDGDL','WCGL')~'JASDGDL',
                                  FisheryCode%in%c("SGL1","SGL2","SGL",'JASDGDL')~'JASDGDL',
+                                 zone%in%c('Zone1','Zone2') & METHOD%in%c('GN','LL') & FisheryCode=='OASC'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=='*'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=="WL"~'OASC',
+                                 zone%in%c('Closed','Joint','North') & METHOD%in%c('GN','LL') & FisheryCode=='OANCGCWC'~'OANCGCWC',
                                  zone%in%c('West') & FisheryCode=='*'~'OANCGCWC',
                                  zone%in%c('West','Zone1') & FisheryCode=='OT'~'OANCGCWC',
                                  TRUE~"non.shark.fishery"))
@@ -7822,8 +7834,10 @@ Data.daily=Data.daily%>%
                                  is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
                                  zone=='Zone1' & FisheryCode%in%c('WCDGDL','WCGL')~'JASDGDL',
                                  FisheryCode%in%c("SGL1","SGL2","SGL",'JASDGDL')~'JASDGDL',
+                                 zone%in%c('Zone1','Zone2') & METHOD%in%c('GN','LL') & FisheryCode=='OASC'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=='*'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=="WL"~'OASC',
+                                 zone%in%c('Closed','Joint','North') & METHOD%in%c('GN','LL') & FisheryCode=='OANCGCWC'~'OANCGCWC',
                                  zone%in%c('West') & FisheryCode=='*'~'OANCGCWC',
                                  zone%in%c('West','Zone1') & FisheryCode=='OT'~'OANCGCWC',
                                  TRUE~"non.shark.fishery"))
@@ -7836,8 +7850,10 @@ Data.daily.north=Data.daily.north%>%
                                  is.na(zone) & FisheryCode=='WCGL'~'WCDGDL',
                                  zone=='Zone1' & FisheryCode%in%c('WCDGDL','WCGL')~'JASDGDL',
                                  FisheryCode%in%c("SGL1","SGL2","SGL",'JASDGDL')~'JASDGDL',
+                                 zone%in%c('Zone1','Zone2') & METHOD%in%c('GN','LL') & FisheryCode=='OASC'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=='*'~'OASC',
                                  zone%in%c('Zone1','Zone2') & FisheryCode=="WL"~'OASC',
+                                 zone%in%c('Closed','Joint','North') & METHOD%in%c('GN','LL') & FisheryCode=='OANCGCWC'~'OANCGCWC',
                                  zone%in%c('West') & FisheryCode=='*'~'OANCGCWC',
                                  zone%in%c('West','Zone1') & FisheryCode=='OT'~'OANCGCWC',
                                  TRUE~"non.shark.fishery"))
@@ -7848,7 +7864,9 @@ Exprt.shark.fisheries.code=rbind(Data.daily.north%>%distinct(zone,FisheryCode,Sh
                                  Data.monthly%>%distinct(zone,FisheryCode,Shark.fishery)%>%mutate(DATA='monthly'))%>%
                             distinct(zone,FisheryCode,Shark.fishery)
 
-write.csv(Exprt.shark.fisheries.code%>%left_join(FisheryCodeTable%>%dplyr::select(-SASCode, CurrentAt2017),
+write.csv(Exprt.shark.fisheries.code%>%left_join(FisheryCodeTable%>%
+                                                   distinct(FishCubeCode,.keep_all = T)%>%
+                                                   dplyr::select(-SASCode, CurrentAt2017),
                                                  by=c("FisheryCode"="FishCubeCode")),
           "Shark.fisheries_and_non.shark_fisheries.csv",row.names = F)
 
