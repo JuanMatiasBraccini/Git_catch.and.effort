@@ -1364,7 +1364,8 @@ Data.monthly=Data.monthly%>%
                            fishery%in%c('WCDGDL','OANCGCWC') & LAT <=(-33)~'JASDGDL',
                            fishery%in%c('WCDGDL') & LAT <=(-31) & LONG>118~'JASDGDL',
                            fishery=='CL02'~'JANS',
-                           fishery=='C051'~'NCS',
+                           fishery=='C127'~'WANCS', 
+                           fishery=='C051'~'JANS',  
                            fishery%in%c('SGL2','SGL1','SGL')~'JASDGDL',
                            TRUE~fishery))
 
@@ -7762,7 +7763,7 @@ N.blocks=length(N.blocks)
 # }
 # 
 
-#1. Define shark fisheries in the north and south       
+#1. Define shark fisheries in the north and south       (see FishCubeCode_Shark.fisheries)
 Effort.monthly=Effort.monthly%>%
        mutate(Shark.fishery=case_when(zone=='Joint' & FisheryCode%in%c('CL02','OT','C051','JANS','NCS','WANCS')~'JANS',
                                       zone=='North' & FisheryCode%in%c('C127','OT','WANCS','NCS','C051','JANS')~'WANCS',
@@ -8679,7 +8680,7 @@ Attach.Effort.daily.c_NSF=aggregate(cbind(hook.days,hook.hours)~finyear,
                                     data=Attach.Effort.daily.c_NSF,sum,na.rm=T)
 names(Attach.Effort.monthly.c_NSF)=names(Attach.Effort.daily.c_NSF)
 
-#issue: check daily 2007-08, too high effrot
+#issue: check daily 2007-08, too high effort
 Total.effort_NFS=rbind(Attach.Effort.monthly.c_NSF,Attach.Effort.daily.c_NSF)%>% 
       group_by(finyear)%>%
       summarise(hook.days=sum(hook.days),
@@ -8962,13 +8963,18 @@ crap.ef=c("AnnualVesselAveID_BDAYS.m","AnnualVesselAveID_HOURS.m","AnnualVesselA
 #Export all these objects
 #note: Total.effort... : annual effort reported in SOFAR (GN plus LL equivalent)
 #      Data.monthly has catch from all gears
-
+fn.crap=function(Krap,neim)
+{
+  neim.id=match(Krap,neim)
+  neim.id=subset(neim.id,!is.na(neim.id))
+  return(neim.id)
+}
 Exprt.list=list(
       Annual.total.eff.days=Total.effort.days.monthly,
       Annual.total.eff.hours=Total.effort.hours.monthly,
       Annual.zone.eff.hours=Total.effort.zone.hours.monthly,
       Annual.zone.eff.days=Total.effort.zone.days.monthly,
-      Annual.total.eff_NSF=Total.effort_NFS,
+      Annual.total.eff_NSF=Total.effort_NFS,  
       Effort.monthly=Effort.monthly%>%
                         filter(!zone%in%c("Closed","Joint","North"))%>%
                         dplyr::select(-crap.ef[1:length(crap.ef)]),
@@ -8987,18 +8993,18 @@ Exprt.list=list(
       Equivalent.LL_to_GN_South=LL.to.GN.South,
       Equivalent.LL_to_GN_North=LL.to.GN.North,
       # Results.pre.2013=Results.pre.2013,
-      Data.monthly=Data.monthly[,-match(crap,names(Data.monthly))],
-      Data.monthly.north=Data.monthly.north[,-match(crap,names(Data.monthly.north))],
-      Data.monthly.GN=Data.monthly.GN[,-match(crap,names(Data.monthly.GN))],
-      Data.monthly.LL=Data.monthly.LL[,-match(crap,names(Data.monthly.LL))],
+      Data.monthly=Data.monthly[,-fn.crap(crap,names(Data.monthly))],
+      Data.monthly.north=Data.monthly.north[,-fn.crap(crap,names(Data.monthly.north))],
+      Data.monthly.GN=Data.monthly.GN[,-fn.crap(crap,names(Data.monthly.GN))],
+      Data.monthly.LL=Data.monthly.LL[,-fn.crap(crap,names(Data.monthly.LL))],
       # Data.monthly.other=Data.monthly.other,
-      Data.daily=Data.daily[,-match(crap.daily,names(Data.daily))],
-      Data.daily.north=Data.daily.north[,-match(crap.daily,names(Data.daily.north))],
+      Data.daily=Data.daily[,-fn.crap(crap.daily,names(Data.daily))],
+      Data.daily.north=Data.daily.north[,-fn.crap(crap.daily,names(Data.daily.north))],
       Data.daily.original=Data.daily.original,
       # Data.daily.other.fisheries=Data.daily.other.fisheries,
-      Data.daily.GN=Data.daily.GN[,-match(crap.daily,names(Data.daily.GN))],
+      Data.daily.GN=Data.daily.GN[,-fn.crap(crap.daily,names(Data.daily.GN))],
       # Data.daily.other=Data.daily.other[,-match(crap.daily,names(Data.daily.other))],
-      Data.daily.LL=Data.daily.LL[,-match(crap.daily,names(Data.daily.LL))])
+      Data.daily.LL=Data.daily.LL[,-fn.crap(crap.daily,names(Data.daily.LL))])
 
 if(exists('TEPS.current'))Exprt.list$TEPS.current=TEPS.current
 if(exists('PRICES'))Exprt.list$PRICES=PRICES
