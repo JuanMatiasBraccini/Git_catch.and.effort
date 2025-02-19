@@ -725,8 +725,10 @@ if(!do.sql.extraction)
 if(do.sql.extraction)
 {
   PRICES <- sqlQuery(conn1, "select * from dbo.rsSpeciesPrice") 
+  Current.yr.price=Current.yr
+  if(!Current.yr.price%in%unique(PRICES$FinancialYear)) Current.yr.price=max(unique(PRICES$FinancialYear))
   PRICES=PRICES%>%
-          filter(FinancialYear==Current.yr)%>%
+          filter(FinancialYear==Current.yr.price)%>%
           rename(RSSpeciesId=SpeciesId,
                  CommonName=SpeciesCommonName,
                  'Beach Price (Adjusted)'=UnitValue)%>%
