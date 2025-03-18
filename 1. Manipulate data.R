@@ -6641,7 +6641,7 @@ if(Inspect.New.dat=="YES")
       var1=var
       if(var1=="HOURS")  var1=c(var,'SHOTS')
       out.dodgy=d%>%filter(!!rlang::sym(var)>2*!!rlang::sym('valid.max'))%>%
-        dplyr::select(c("VESSEL","BoatName","TSNo","SNo","DSNo",'valid.max',all_of(var1)))%>%
+        dplyr::select(c("VESSEL","BoatName","date","TSNo","SNo","DSNo",'valid.max',all_of(var1)))%>%
         rename(TripSheetNumber=TSNo,
                DailySheetNumber=DSNo,
                SessionIndex=SNo)%>%
