@@ -134,7 +134,7 @@ setwd(handl_OneDrive("Data/Catch and Effort"))  # working directory
 First.run="NO"    
 #First.run="YES"
 
-Current.yr="2023-24"    #Set current financial year 
+Current.yr="2024-25"    #Set current financial year 
 Current.yr.dat=paste(substr(Current.yr,1,4),substr(Current.yr,6,7),sep="_")
 xx=paste(getwd(),Current.yr.dat,sep="/")
 if(!file.exists(xx)) dir.create(xx) 
@@ -1532,7 +1532,7 @@ if(nrow(a)>0)
 {
   par(bg=2)
   plot.new()
-  mtext(paste("there are records",nrow(a)),3,cex=3,col="white")
+  mtext(paste("there are ",nrow(a),"records"),3,cex=3,col="white")
   mtext("with no weight",3,-2,cex=3,col="white")
   par(bg="white")
   
@@ -2756,6 +2756,7 @@ if(Inspect.New.dat=="YES")
   }
   dev.off()
   Outer=do.call(rbind,Outer)
+  Outer=Outer%>%filter(!grepl('Hammerhead',RSSpeciesCommonName)) #don't consider hammerheads due to reapportioning
   if(nrow(Outer)>0)
   {
     write.csv(Outer,file=paste(handle,"/Check.lat.and.long.csv",sep=""),row.names=F)
@@ -5826,7 +5827,8 @@ Data.daily=Data.daily%>%
                                            TRUE~FisheryCode))
 
 # C.9.1 Northern and Southern catches
-if(First.run=="YES")
+compare.monthly.northern.southern=FALSE
+if(compare.monthly.northern.southern)
 {
   fun.compare.weight.NORTH.tot=function(DAT,SPEC)
   {
@@ -5931,138 +5933,138 @@ if(!do.sql.extraction)
     fn.check.zn(subset(Data.monthly,SPECIES%in%Elasmo.species & METHOD%in%c("GN","LL") & LAT<=(-26)),"LIVEWT.reap")
     dev.off()
   }
-}
-
-
-#by zone and species
-if(First.run=="YES")
-{
-  Read=read.csv(handl_OneDrive("Data/Catch and Effort/Historic/Spec.catch.zone.csv"))
-  fn.by.species=function(dat,WHAT)
+  
+  #by zone and species
+  if(First.run=="YES")
   {
-    FInYEAR=unique(Read$Fin.yr)
-    NN=length(FInYEAR)
-    
-    #dusky
-    d1=subset(dat,SPECIES%in%c(18001,18003))
-    if(WHAT=="LIVEWT")
+    Read=read.csv(handl_OneDrive("Data/Catch and Effort/Historic/Spec.catch.zone.csv"))
+    fn.by.species=function(dat,WHAT)
     {
-      annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
-      wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
+      FInYEAR=unique(Read$Fin.yr)
+      NN=length(FInYEAR)
+      
+      #dusky
+      d1=subset(dat,SPECIES%in%c(18001,18003))
+      if(WHAT=="LIVEWT")
+      {
+        annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
+        wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
+      }
+      if(WHAT=="LIVEWT.reap")
+      {
+        annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
+        wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
+      }
+      
+      if(WHAT=="LIVEWT.c")
+      {
+        annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
+        wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
+      }  
+      plot(Read$Dusky.catch.WC,type='l',ylim=c(0,350),ylab="Total catch",xaxt='n',main=paste("Dusky",WHAT))
+      lines(Read$Dusky.catch.Zn1,lty=2)
+      lines(Read$Dusky.catch.Zn2,lty=3)
+      LTY=1:3;COL=2:4
+      for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
+      axis(1,at=1:NN,labels=F,tck=-0.01)
+      axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
+      legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
+      legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
+      
+      #sandbar
+      d1=subset(dat,SPECIES%in%c(18007))
+      if(WHAT=="LIVEWT")
+      {
+        annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
+        wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
+      }
+      if(WHAT=="LIVEWT.reap")
+      {
+        annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
+        wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
+      }
+      
+      if(WHAT=="LIVEWT.c")
+      {
+        annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
+        wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
+        #wide=wide[-1,]
+      }  
+      Ns=nrow(Read)
+      plot(Read$Sandbar.catch.WC[11:Ns],type='l',ylim=c(0,350),ylab="Total catch",xaxt='n',main=paste("Sandbar",WHAT))
+      lines(Read$Sandbar.catch.Zn1[11:Ns],lty=2)
+      lines(Read$Sandbar.catch.Zn2[11:Ns],lty=3)
+      LTY=1:3;COL=2:4
+      for (i in 1:(ncol(wide)-1)) lines(wide[(match("1985-86",wide$FINYEAR)):nrow(wide),i+1]/1000,lty=LTY[i],col=COL[i])
+      id=match("1985-86",FInYEAR)
+      axis(1,at=1:nrow(wide),labels=F,tck=-0.01)
+      axis(1,at=seq(1,nrow(wide),5),labels=FInYEAR[id:Ns][seq(1,nrow(wide),5)],tck=-0.02,cex.axis=1.1)
+      legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
+      legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
+      
+      
+      #gummy
+      d1=subset(dat,SPECIES%in%c(17001))
+      if(WHAT=="LIVEWT")
+      {
+        annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
+        wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
+      }
+      if(WHAT=="LIVEWT.reap")
+      {
+        annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
+        wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
+      }
+      if(WHAT=="LIVEWT.c")
+      {
+        annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
+        wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
+      }  
+      plot(Read$Gummy.catch.WC,type='l',ylim=c(0,700),ylab="Total catch",xaxt='n',main=paste("Gummy",WHAT))
+      lines(Read$Gummy.catch.Zn1,lty=2)
+      lines(Read$Gummy.catch.Zn2,lty=3)
+      LTY=1:3;COL=2:4
+      for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
+      axis(1,at=1:NN,labels=F,tck=-0.01)
+      axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
+      legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
+      legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
+      
+      
+      #Whiskery
+      d1=subset(dat,SPECIES%in%c(17003))
+      if(WHAT=="LIVEWT")
+      {
+        annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
+        wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
+      }
+      if(WHAT=="LIVEWT.reap")
+      {
+        annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
+        wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
+      }
+      if(WHAT=="LIVEWT.c")
+      {
+        annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
+        wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
+      }  
+      plot(Read$Whiskery.catch.WC,type='l',ylim=c(0,350),ylab="Total catch",xaxt='n',main=paste("Whiskery",WHAT))
+      lines(Read$Whiskery.catch.Zn1,lty=2)
+      lines(Read$Whiskery.catch.Zn2,lty=3)
+      LTY=1:3;COL=2:4
+      for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
+      axis(1,at=1:NN,labels=F,tck=-0.01)
+      axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
+      legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
+      legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
     }
-    if(WHAT=="LIVEWT.reap")
-    {
-      annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
-      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
-    }
-    
-    if(WHAT=="LIVEWT.c")
-    {
-      annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
-      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
-    }  
-    plot(Read$Dusky.catch.WC,type='l',ylim=c(0,350),ylab="Total catch",xaxt='n',main=paste("Dusky",WHAT))
-    lines(Read$Dusky.catch.Zn1,lty=2)
-    lines(Read$Dusky.catch.Zn2,lty=3)
-    LTY=1:3;COL=2:4
-    for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
-    axis(1,at=1:NN,labels=F,tck=-0.01)
-    axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
-    legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
-    legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
-    
-    #sandbar
-    d1=subset(dat,SPECIES%in%c(18007))
-    if(WHAT=="LIVEWT")
-    {
-      annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
-      wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
-    }
-    if(WHAT=="LIVEWT.reap")
-    {
-      annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
-      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
-    }
-    
-    if(WHAT=="LIVEWT.c")
-    {
-      annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
-      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
-      #wide=wide[-1,]
-    }  
-    Ns=nrow(Read)
-    plot(Read$Sandbar.catch.WC[11:Ns],type='l',ylim=c(0,350),ylab="Total catch",xaxt='n',main=paste("Sandbar",WHAT))
-    lines(Read$Sandbar.catch.Zn1[11:Ns],lty=2)
-    lines(Read$Sandbar.catch.Zn2[11:Ns],lty=3)
-    LTY=1:3;COL=2:4
-    for (i in 1:(ncol(wide)-1)) lines(wide[(match("1985-86",wide$FINYEAR)):nrow(wide),i+1]/1000,lty=LTY[i],col=COL[i])
-    id=match("1985-86",FInYEAR)
-    axis(1,at=1:nrow(wide),labels=F,tck=-0.01)
-    axis(1,at=seq(1,nrow(wide),5),labels=FInYEAR[id:Ns][seq(1,nrow(wide),5)],tck=-0.02,cex.axis=1.1)
-    legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
-    legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
-    
-    
-    #gummy
-    d1=subset(dat,SPECIES%in%c(17001))
-    if(WHAT=="LIVEWT")
-    {
-      annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
-      wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
-    }
-    if(WHAT=="LIVEWT.reap")
-    {
-      annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
-      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
-    }
-    if(WHAT=="LIVEWT.c")
-    {
-      annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
-      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
-    }  
-    plot(Read$Gummy.catch.WC,type='l',ylim=c(0,700),ylab="Total catch",xaxt='n',main=paste("Gummy",WHAT))
-    lines(Read$Gummy.catch.Zn1,lty=2)
-    lines(Read$Gummy.catch.Zn2,lty=3)
-    LTY=1:3;COL=2:4
-    for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
-    axis(1,at=1:NN,labels=F,tck=-0.01)
-    axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
-    legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
-    legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
-    
-    
-    #Whiskery
-    d1=subset(dat,SPECIES%in%c(17003))
-    if(WHAT=="LIVEWT")
-    {
-      annual.catch.by.zone=aggregate(LIVEWT~FINYEAR+zone,data=d1,sum,na.rm=T)  
-      wide=reshape(annual.catch.by.zone,v.names="LIVEWT",timevar="zone",idvar="FINYEAR",direction="wide")    
-    }
-    if(WHAT=="LIVEWT.reap")
-    {
-      annual.catch.by.zone=aggregate(LIVEWT.reap~FINYEAR+zone,data=d1,sum,na.rm=T)  
-      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.reap",timevar="zone",idvar="FINYEAR",direction="wide")    
-    }
-    if(WHAT=="LIVEWT.c")
-    {
-      annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone,data=d1,sum,na.rm=T)  
-      wide=reshape(annual.catch.by.zone,v.names="LIVEWT.c",timevar="zone",idvar="FINYEAR",direction="wide")    
-    }  
-    plot(Read$Whiskery.catch.WC,type='l',ylim=c(0,350),ylab="Total catch",xaxt='n',main=paste("Whiskery",WHAT))
-    lines(Read$Whiskery.catch.Zn1,lty=2)
-    lines(Read$Whiskery.catch.Zn2,lty=3)
-    LTY=1:3;COL=2:4
-    for (i in 1:(ncol(wide)-1)) lines(wide[,i+1]/1000,lty=LTY[i],col=COL[i])
-    axis(1,at=1:NN,labels=F,tck=-0.01)
-    axis(1,at=seq(1,NN,5),labels=FInYEAR[seq(1,NN,5)],tck=-0.02,cex.axis=1.1)
-    legend("topleft",c("Rory's","new"),bty='n',lty=1,col=1:2)
-    legend("topright",c("WC","Zn1","Zn2"),bty='n',lty=1:3)
+    tiff(file=paste(Hndl,"Compare.Rory.current.ktch.Zone.and.species.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+    par(mfcol=c(2,2),las=1)
+    fn.by.species(subset(Data.monthly,SPECIES%in%Elasmo.species & METHOD%in%c("GN","LL") & LAT<=(-26)),"LIVEWT.c")
+    dev.off()
   }
-  tiff(file=paste(Hndl,"Compare.Rory.current.ktch.Zone.and.species.tiff",sep=""),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
-  par(mfcol=c(2,2),las=1)
-  fn.by.species(subset(Data.monthly,SPECIES%in%Elasmo.species & METHOD%in%c("GN","LL") & LAT<=(-26)),"LIVEWT.c")
-  dev.off()
 }
+
 
 
 
@@ -6808,7 +6810,7 @@ if(Inspect.New.dat=="YES")
 }
 
 #inspect overall daily effort
-if(First.run=='YES')
+if(Inspect.New.dat=='YES')
 {
   dodgy.effort=Inspect.vars.combo
   fn.inspect.dodgy.daily=function(d,var,valid.max)
