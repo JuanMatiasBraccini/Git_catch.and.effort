@@ -147,7 +147,6 @@ Email.data.checks2="sarah.vanRyssen@dpird.wa.gov.au"
 
 #1. Extract catch and effort data
 do.sql.extraction=TRUE
-
   #1.1 SQL Server database
 if(do.sql.extraction)
 {
@@ -156,8 +155,8 @@ if(do.sql.extraction)
   #use.new.server=FALSE
   
   if(use.new.server) Server <-"reports.dpird.wa.gov.au"  
-  if(!use.new.server) Server <-"CP-SDBS0001P-19\\RESP01"  #original 
-  conn=odbcDriverConnect(connection=paste("Driver={SQL Server};server=",Server,";database=ResearchShared;trusted_connection=yes;",sep=""))
+  if(!use.new.server) Server <-"CP-SDBS0001P-19\\RESP01"  #original, retired 
+  #conn=odbcDriverConnect(connection=paste("Driver={SQL Server};server=",Server,";database=ResearchShared;trusted_connection=yes;",sep=""))  #original, retired
   conn1=odbcDriverConnect(connection=paste("Driver={SQL Server};server=",Server,";database=ResearchDataWarehouseQuery;trusted_connection=yes;",sep=""))
 
   if(use.new.server) Monthly.log <- 'ceMonthlyLog'  #Use ceMonthlyLog if mismatch with monthlyrawlog is resolved. See Mark/Vero
@@ -194,10 +193,12 @@ if(do.sql.extraction)
   close(channel)
   
   #Extract fish conditions
-  fish.conditions <- sqlQuery(conn, query="SELECT * FROM Research.[vwSpeciesCondition]")
+  fish.conditions <- sqlQuery(conn1, query="SELECT * FROM [dbo].[rsSpeciesCondition]")
+  #fish.conditions <- sqlQuery(conn, query="SELECT * FROM Research.[vwSpeciesCondition]")
   
   #Extract fish conversion factors
-  fish.conversion <- sqlQuery(conn, query="SELECT * FROM Research.[vwSpeciesConditionFactor]")
+  fish.conversion <- sqlQuery(conn1, query="SELECT * FROM [dbo].[rsSpeciesConditionFactor]")
+  #fish.conversion <- sqlQuery(conn, query="SELECT * FROM Research.[vwSpeciesConditionFactor]")
   
   #Extract species mapping
   Species.mapping <- sqlQuery(conn1, query="SELECT * FROM [dbo].[rsSASSpecies]")
@@ -292,13 +293,16 @@ if(do.sql.extraction)
                              "block10","blockx","species","LatDeg","LongDeg","method","fishery","zone",
                              "sname1","vessel","port","BoatName","MastersName","crew","Block",
                              "Lat","Long","hooks","netlen","hours","mslow","mshigh","shots",
-                             "nlines","depthMin","depthMax","NilCatch","HookSize",
+                             "nlines","nNets","depthMin","depthMax","NilCatch","HookSize",        #NEW check nNets
                              "HookType","nfish","LatMin","LongMin","conditn",
                              "flagtype","factor","livewt","b10days",
                              "bdays","fdays","type","RSCommonName","RSSpeciesCode",
                              "RSSpeciesId","RSBioregionName",
                              "TripLandedWeight")
-  Data.daily=Data.daily[,Keep.these.columns_daily]
+  Data.daily=Data.daily[,Keep.these.columns_daily]%>%
+                mutate(nlines=case_when(method=='GN' & is.na(nlines) ~nNets,
+                                        TRUE~nlines))%>%
+                dplyr::select(-nNets)
 
     #re-map vessel codes to previous codes
   Data.daily=Data.daily%>%
@@ -557,7 +561,6 @@ if(do.sql.extraction)
   
   rm(Data.monthly_other,Data.daily_other)
 }
-
   #1.2 Extract catch and effort data from Excel and Access databases (superseded by SQL)
 if(!do.sql.extraction)
 {
@@ -662,7 +665,7 @@ if(do.sql.extraction)
                           by=c('DailySheetNumber'='DSNo'))
   
   #2019 onwards   
-   TEPS.current <- sqlQuery(conn, query="SELECT  etp.*, s.StartBlock AS SessionStartBlock
+   TEPS.current <- sqlQuery(conn1, query="SELECT  etp.*, s.StartBlock AS SessionStartBlock
                                      FROM [ResearchDataWarehouseQuery].[dbo].[flTripEtp] etp
                                      LEFT JOIN [ResearchDataWarehouseQuery].[dbo].[flTripSession] s ON etp.TripSessionId = s.TripSessionId
                                      WHERE etp.[FisheryCode] in ('WCDGDL','OASC,OT','JASDGDL','SDGDL')")
@@ -749,6 +752,7 @@ PRICES=PRICES%>%
 # Rottnest.Is=subset(PerthIs,ID%in%c("ROTT1"))
 # Garden.Is=subset(PerthIs,ID%in%c("ROTT3"))
 
+
 #5. bathymetry data
 #    bathymetry data downloaded from http://topex.ucsd.edu/cgi-bin/get_data.cgi (Topography option)
 Bathymetry_120=read.table(handl_OneDrive("Data/Mapping/get_data112_120.cgi"))
@@ -770,7 +774,7 @@ Wei.range.names=read.csv(handl_OneDrive("Data/Length_Weights/Species.names.csv")
 
 
 #9. Conditions
-Conditions=read.csv(handl_OneDrive("Data/Catch and Effort/Conditions.csv"))
+#Conditions=read.csv(handl_OneDrive("Data/Catch and Effort/Conditions.csv"))  #superseeded by fish.conversion
 
 
 #10. Rory's manual changes to netlen and nlines
@@ -3138,7 +3142,7 @@ Data.daily$Factor.c=with(Data.daily,ifelse(is.na(CONDITN) & is.na(Factor.c),Fact
 
 
     #use specific factors for teleosts
-Conditions=subset(Conditions,spgroup=="scalefish")
+#Conditions=subset(Conditions,spgroup=="scalefish")
 
       #monthly
 Data.monthly$Factor.c=with(Data.monthly,ifelse(SPECIES>31000 &!(CONDITN=="WH"),NA,Factor.c))
