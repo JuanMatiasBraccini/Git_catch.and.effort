@@ -1,10 +1,5 @@
 # ---------- SHARK GILLNET AND LONGLINE FISHERY CATCH AND EFFORT MANIPULATIONS ------------------------------------------------------
 
-#MISSING: I need Vero to identify the records where catch of 'shark' was reapportioned so I can flag as 'bad' reported. 
-                # Fix it here 'Data.monthly$Reporter=Data.monthly$SCRref' and 
-#                        here '#Rectify Reporter variable defined in SQL'
-#         Sort out the issue of the new server, See 'use.new.server=TRUE'
-
 #NOTES:
   #NEW YEAR OF DATA:
 #                     Set First.run to 'YES' and update Current.yr
@@ -151,7 +146,7 @@ do.sql.extraction=TRUE
 if(do.sql.extraction)
 {
   #SQL connections
-  use.new.server=TRUE #new. Use this one once all IS issues sorted
+  use.new.server=TRUE #new server. To access previous Monthly data see '#Access Monthly previous version' 
   #use.new.server=FALSE
   
   if(use.new.server) Server <-"reports.dpird.wa.gov.au"  
@@ -372,17 +367,10 @@ if(do.sql.extraction)
                                              SPECIES== 351000 ~ 351910,
                                              TRUE~SPECIES))
   Mesh.monthly=subset(Data.monthly,METHOD=="GN",select=c(VESSEL,FINYEAR,MONTH,BLOCKX,METHOD,MeshSizeHigh,MeshSizeLow))
-  #set to bad reporters if catch reapportioned by FishCube 
-  if('SCRref'%in%names(Data.monthly))
-  {
-    Data.monthly$Reporter=Data.monthly$SCRref
-  }else
-  {
-    Data.monthly$Reporter=NA
-  }
+ 
   Keep.these.columns_monthly=c("FINYEAR","YEAR","MONTH","VESSEL","FDAYS","METHOD","BLOCKX","BDAYS","HOURS","HOOKS","SHOTS",
                                "NETLEN","SPECIES","SNAME","LIVEWT","CONDITN","LANDWT","Factor","fishery","PORT",
-                               "RSSpeciesCode","type","Reporter")
+                               "RSSpeciesCode","type")
   if('lat'%in%names(Data.monthly))
   {
     Keep.these.columns_monthly=c(Keep.these.columns_monthly,"lat","long")
@@ -403,6 +391,95 @@ if(do.sql.extraction)
                 rename(VESSEL=CAES)%>%
                 dplyr::select(-FLAMS)
   
+  #set to bad reporters if catch reapportioned by FishCube 
+  Bad.monthly.reporters=read.csv('Bad.monthly.reporters_catch_more_80per_22999.csv')
+  Data.monthly=Data.monthly%>%
+    mutate(Same.return=paste(FINYEAR,MONTH,VESSEL,METHOD,BLOCKX),
+           Reporter=ifelse(Same.return%in%Bad.monthly.reporters$Same.return,'bad','good'))%>%
+    dplyr::select(-Same.return)
+  
+  
+  #Access Monthly previous version
+  Acces.Monthly.previous.version=FALSE  #March 2025
+  if(Acces.Monthly.previous.version)
+  {
+    library(stringr)
+    Server.monthly.dummy='reports.dpird.wa.gov.au'
+    Database.monthly.dummy='ResearchDataWarehouseCE'
+    
+    conn.dummy <- odbcDriverConnect(connection=paste("Driver={SQL Server};server=",Server.monthly.dummy,
+                                                     ";database=",Database.monthly.dummy,
+                                                     ";trusted_connection=yes;",sep=""))
+    Monthly.log.dummy= 'monthlyrawlog'
+    
+    Query.dummy=paste("SELECT * FROM",Monthly.log.dummy,
+                      "WHERE RSSpeciesEcologicalSuite = 'elasmobranchs' or RSInitiallyReportedFisheryCode in ('SGL','WCGL','C127','WANCS','CL02','JANS')")
+    
+    
+    Data.monthly.old <- sqlQuery(channel=conn.dummy, query=Query.dummy)
+    
+    Data.monthly.old=Data.monthly.old%>%
+      mutate(FDAYS=NA,BDAYS=NA,Reporter=NA,
+             RSSpeciesCode=substr(RSSpeciesCode,4,10),
+             SPECIES=RSSpeciesCode,)%>%
+      rename(FINYEAR=FinancialYear,
+             YEAR=Year,
+             MONTH=Month,
+             METHOD=FishingMethod,
+             BLOCKX=CAESBlock,
+             HOURS=nHoursFishing,
+             HOOKS=nHooks,
+             SHOTS=nShots,
+             NETLEN=NetLength,
+             SNAME=RSSpeciesCommonName,
+             LIVEWT=LiveWeight,
+             CONDITN=LandedCondition,
+             LANDWT=LandedWeight,
+             RSSpeciesCode=RSSpeciesCode,
+             Factor=ConversionFactor,
+             fishery=RSInitiallyReportedFisheryCode,
+             PORT=DepartPort,
+             type=RSSpeciesEcologicalSuite,
+             VESSEL=VesselRegistration)
+    Data.monthly.old=Data.monthly.old[,match(names(Data.monthly),names(Data.monthly.old))]
+    Data.monthly.old=Data.monthly.old%>%
+      mutate(SPECIES=ifelse(SNAME=='Sharks',22999,SPECIES))
+
+    Data.monthly.old=Data.monthly.old%>%
+      mutate(VESSEL=case_when(VESSEL=="A100A"~"A 100A",      
+                              VESSEL=="A197A"~"A 197A",
+                              VESSEL=="A238A"~"A 238A",
+                              VESSEL=="F188A"~"F 188A",
+                              VESSEL=="F200A"~"F 200A",
+                              nchar(VESSEL)==2~gsub("(\\d*)(\\D*)\\s*(\\d*)","\\2 00\\3",VESSEL),
+                              nchar(VESSEL)==3~gsub("(\\d*)(\\D*)\\s*(\\d*)","\\2 0\\3",VESSEL),
+                              nchar(VESSEL)==4~gsub("(\\d*)(\\D*)\\s*(\\d*)","\\2 \\3",VESSEL),
+                              TRUE~VESSEL),
+             VESSEL=case_when(VESSEL=="A 07A 0"~"A 007A", 
+                              VESSEL%in%paste0("BR 0",1:7)~str_replace(VESSEL," ","0"),
+                              VESSEL%in%paste0("BR ",10:20)~str_replace(VESSEL," ","0"),
+                              VESSEL%in%paste0("DY 0",1:9)~str_replace(VESSEL," ","0"),
+                              VESSEL%in%paste0("DY ",10:20)~str_replace(VESSEL," ","0"),
+                              VESSEL=="DY 08"~"DY008",
+                              VESSEL=="DY 09"~"DY009",
+                              VESSEL=="F 010"~"F10",
+                              VESSEL=="F 105"~"F105",
+                              VESSEL=="F 221"~"F221",
+                              VESSEL=="F 248"~"F248",
+                              VESSEL=="F 540"~"F540",
+                              VESSEL=="F 550"~"F550",
+                              VESSEL=="F 600"~"F600",
+                              VESSEL=="F 711"~"F711",
+                              VESSEL=="G 296"~"G296",
+                              VESSEL=="PH 5A "~"PH005A",
+                              VESSEL%in%paste0("PH 0",1:7)~str_replace(VESSEL," ","0"),
+                              VESSEL%in%paste0("PS 0",1:9)~str_replace(VESSEL," ","0"),
+                              VESSEL%in%paste0("PS ",10:28)~str_replace(VESSEL," ","0"),
+                              VESSEL=="SB 1A "~"SB001A",
+                              VESSEL%in%paste0("SB 0",1:9)~str_replace(VESSEL," ","0"),
+                              VESSEL%in%paste0("SB ",10:74)~str_replace(VESSEL," ","0"),
+                              TRUE~VESSEL))
+  }
   
   #3. Daily returns from other fisheries that have reported shark
   Data.mart.Logs=tolower(c('ceGDSLog','ceMACLog','ceNDSLog','cePFTLog','ceCWCDSLog'))
@@ -556,6 +633,7 @@ if(do.sql.extraction)
              long=ifelse(is.na(long),as.numeric(substr(BLOCKX,3,5)),long))
   }
   #add other' to 'main databases
+  Data.monthly_other$Reporter=NA
   Data.daily=rbind(Data.daily,Data.daily_other[,match(names(Data.daily),names(Data.daily_other))]) 
   Data.monthly=rbind(Data.monthly,Data.monthly_other[,match(names(Data.monthly),names(Data.monthly_other))])
   
@@ -1254,7 +1332,12 @@ Table.Estuary=aggregate(LIVEWT~FINYEAR+SPECIES,test.Estuaries,sum)
 
 #get lat and long from block but first dummy the bays                                                                      
 Data.monthly=Data.monthly%>%
-  mutate(BLOCKX=as.numeric(BLOCKX),
+  mutate(BLOCKX=case_when(BLOCKX=='3518s'~'35181',
+                          BLOCKX=='2613s'~'26131 ',
+                          BLOCKX=='2513s'~'96021',
+                          BLOCKX=='2413s'~'24131',
+                          TRUE~BLOCKX),
+         BLOCKX=as.numeric(BLOCKX),
          blockxFC=BLOCKX,
          BLOCKX=case_when(BLOCKX%in% Shark.Bay ~ 25120,
                           BLOCKX%in% c(96022,96023) ~ 26131,
@@ -1455,7 +1538,7 @@ if(do.this)
   
 }
 
-# A.9. Create Monthly effort dataset   
+# A.9. Create Monthly effort data set   
 Data.monthly$NETLEN=with(Data.monthly,ifelse(METHOD%in%c("LL","HL","DL")&NETLEN>0,NA,NETLEN))
 Effort.vars=c("FDAYS","BDAYS","HOURS","HOOKS","SHOTS","NETLEN")
 Effort.monthly=Data.monthly[,match(c("FINYEAR","YEAR","MONTH","zone","VESSEL","METHOD","BLOCKX",Effort.vars,
@@ -2015,6 +2098,15 @@ Data.daily$ID=with(Data.daily,paste(DSNo,SNo,"_",sep=""))
   #Create data set identifier
 Data.daily$TYPE.DATA="daily"
 
+  #Fix NA lat and long degrees but availabe FC
+Data.daily=Data.daily%>%
+            mutate(LatFC=as.numeric(LatFC),
+                   LongFC=as.numeric(LongFC),
+                   LatDeg=ifelse(is.na(LatDeg) & !is.na(LatFC),-floor(abs(LatFC)),LatDeg),
+                   LatMin=ifelse(is.na(LatMin) & !is.na(LatFC),(LatFC%%1)*60,LatMin),
+                   LongDeg=ifelse(is.na(LongDeg) & !is.na(LongFC),floor(LongFC),LongDeg),
+                   LongMin=ifelse(is.na(LongMin) & !is.na(LongFC),(LongFC%%1)*60,LongMin))
+
   #Fix estuaries lats and longs 
 Data.daily$LongDeg=with(Data.daily,
                         ifelse(!is.na(blockx) & blockx%in%c(96021) & LatDeg>60,113,
@@ -2062,9 +2154,9 @@ Data.daily$LatDeg=with(Data.daily,
                   ifelse(!is.na(blockx) & blockx==85010 & LatDeg>60,34.06976,
                   ifelse(!is.na(blockx) & blockx%in%c(85130) & LatDeg>60,34.9278,
                          LatDeg)))))))))))))))))))))
-Data.daily$LatDeg=floor(Data.daily$LatDeg)
+Data.daily$LatDeg=-floor(abs(Data.daily$LatDeg))
 
-  #Idenfity estuaries
+  #Identify estuaries
 Data.daily$Estuary=with(Data.daily,ifelse(blockx%in%Estuaries,"YES","NO"))
 
 # fix blocks 
@@ -2110,7 +2202,7 @@ if(do.ray.ktch.estuary)
 Data.daily$LatDeg=with(Data.daily,ifelse(blockx<35600 & LatDeg==0,as.numeric(substr(blockx,1,2)),LatDeg))  
 Data.daily$LongDeg=with(Data.daily,ifelse(blockx<35600 & LongDeg==0,100+as.numeric(substr(blockx,3,4)),LongDeg))
 
-Data.daily$LatDeg=with(Data.daily,ifelse(vessel=="B 067" & blockx%in%c(35610,35630,35640,35650) & LatDeg==0,35,LatDeg))  
+Data.daily$LatDeg=with(Data.daily,ifelse(vessel=="B 067" & blockx%in%c(35610,35630,35640,35650) & LatDeg==0,-35,LatDeg))  
 Data.daily$LongDeg=with(Data.daily,ifelse(vessel=="B 067" & blockx%in%c(35610,35630,35640,35650) & LongDeg==0,116,LongDeg))
 
 Data.daily=Data.daily%>%
@@ -2135,7 +2227,7 @@ Data.daily$LongMin=with(Data.daily,ifelse(is.na(LongMin) & is.na(block10),NA,Lon
 Data.daily$blockx=Data.daily$blockxFC   #reset blockx to original
 Data.daily$LatDeg=-abs(Data.daily$LatDeg)
 
-  #fix some fishery codes
+  #fix some fishery codes 
 Data.daily=Data.daily%>%
             mutate(fishery=case_when(fishery=='JASDGDL' & LatDeg>(-33) & LongDeg<118~'WCDGDL',
                                      TRUE~fishery))
@@ -2159,6 +2251,8 @@ Data.daily$zone=with(Data.daily,
                 ifelse(zone=='*' & as.numeric(LatFC)<=(-33),"Zone1",
                 ifelse(zone=='*' & as.numeric(LatFC)<=(-33) & as.numeric(LongFC)>=116.5,"Zone2",
                 zone))))))
+
+#only allocate zone to shark fishery codes
 Data.daily=Data.daily%>%
               mutate(zone=ifelse(!fishery%in%FishCubeCode_Shark.fisheries,NA,zone))
                      
@@ -2908,6 +3002,18 @@ Data.daily=Data.daily %>%
                                  landwt,livewt))%>%
             dplyr::select(-c(avrg_livewt_sp_blk10,avrg_livewt_sp))
 
+#self consumption and no weight
+Average.self.con=Data.daily%>%
+                  filter(conditn%in%c("OT","SC"))%>%
+                  group_by(species)%>%
+                  summarise(Average.weight.self.consumed=sum(livewt,na.rm=T)/sum(nfish,na.rm=T))
+Data.daily=Data.daily %>% 
+            left_join(Average.self.con,by=c('species')) %>%
+  mutate(Reporter= ifelse((is.na(livewt)|livewt==0) & is.na(nfish) & conditn%in%c("OT","SC"),"bad",Reporter),    
+         livewt= ifelse((is.na(livewt)|livewt==0) & is.na(nfish) & conditn%in%c("OT","SC"), 
+                        Average.weight.self.consumed, livewt)) %>%
+  dplyr::select(-Average.weight.self.consumed)
+  
 
 #Aggregate daily nfish 
 Daily.nfish.agg=aggregate(nfish~finyear+year+month+vessel+method+blockx+blockxFC+species+
@@ -2992,12 +3098,12 @@ if(nrow(a)>0)
   
 }
 
-#check one off spatial dist (don't repeat, only do it in Inspections of new year's data)
-do.this=FALSE
-if(do.this)
+#check one off spatial dist (don't repeat, only do it in Inspections of new year's data) 
+if(Inspect.New.dat)
 {
   handle1=handl_OneDrive("Data/Catch and Effort/Check_these_vars/Daily/")
-  yrs=sort(unique(Data.daily.original$FINYEAR))
+  #yrs=sort(unique(Data.daily.original$FINYEAR))
+  yrs=Current.yr
   for(i in 1:length(yrs))
   {
     fn.ck.spatial(d=Data.daily.original%>%
@@ -3410,21 +3516,6 @@ if(Reapportion.daily=="YES")
 Catch.prop.school.daily=fun.prop(Data.daily,17008) 
 Catch.prop.dogfish.daily=fun.prop(Data.daily,20000)
 
-#Rectify Reporter variable defined in SQL 
-Tab.rep1=table(Data.monthly$YEAR.c,Data.monthly$Reporter,useNA = 'ifany')
-Data.monthly=Data.monthly%>%
-  mutate(Reporter=case_when(Reporter%in%c('SCR20230823 Part1|','SCR20230823|',
-                                          "SCR20230823|SCR20240807|",
-                                          "SCR20220211|SCR20230823 Part1|",
-                                          "SCR20220211|SCR20230823|",
-                                          "SCR20220211|SCR20230823|SCR20240807|") & SPECIES==19000 ~ NA_character_,
-                            Reporter=="SCR20230227|" & SPECIES==25000 ~ NA_character_,
-                            Reporter=="SCR20220211|SCR20240810|" & SPECIES==18023 ~ NA_character_,
-                            Reporter=="|SCR20200602|" & SPECIES%in%c(26000,26999) ~ NA_character_,
-                            Reporter=="SCR20220211|"  ~ NA_character_,
-                            Reporter=="SCR20220211|SCR20240328|"  ~ NA_character_,
-                            TRUE~Reporter))
-Tab.rep2=table(Data.monthly$YEAR.c,Data.monthly$Reporter,useNA = 'ifany')
 
   # Define vessel reporting category
 
