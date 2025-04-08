@@ -5,6 +5,7 @@
   do.bubble.plots=TRUE
   if(do.bubble.plots)
   {
+    Indicator.ranges=list(Gummy.range,Whiskery.range,Dusky.range,Dusky.range,Sandbar.range)
     Effect.area=function(SPEC,RANGO)
     {
       a=subset(Data.monthly,SPECIES%in%SPEC)
@@ -36,68 +37,49 @@
         polygon(c(X1,X2,X2,X1),c(Y2,Y2,Y1,Y1),col=rgb(0.1, .1, .1, 0.1),border="transparent")
       }
     }
-    
-    tiff("Bubble.plot.catch_Whiskery.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-    n.graph=length(unique(subset(Data.monthly,SPECIES==Whiskery)$FINYEAR))+1
-    smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-    Effect.area(Whiskery,Whiskery.range)
-    plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
-    text(5,7,"Whiskery",cex=1.25)
-    text(5,4,"shark",cex=1.25)
-    dev.off()
-    
-    tiff("Bubble.plot.catch_gummy.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-    n.graph=length(unique(subset(Data.monthly,SPECIES==Gummy)$FINYEAR))+1
-    smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-    Effect.area(Gummy,Gummy.range)
-    plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
-    text(5,7,"Gummy",cex=1.25)
-    text(5,4,"shark",cex=1.25)
-    dev.off()
-    
-    tiff("Bubble.plot.catch_dusky.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-    n.graph=length(unique(subset(Data.monthly,SPECIES%in%Dusky_whaler)$FINYEAR))+1
-    smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-    Effect.area(Dusky_whaler,Dusky.range)
-    plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
-    text(5,7,"Dusky",cex=1.25)
-    text(5,4,"shark",cex=1.25)
-    dev.off()
-    
-    tiff("Bubble.plot.catch_sandbar.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
-    n.graph=length(unique(subset(Data.monthly,SPECIES==Sandbar)$FINYEAR))+1
-    smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
-    Effect.area(Sandbar,Sandbar.range)
-    plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
-    text(5,7,"Sandbar",cex=1.25)
-    text(5,4,"shark",cex=1.25)
-    dev.off()
-    
+    for(i in 1:length(Indicator.species))
+    {
+      print(paste('Catch bubble plots for ----',names(Indicator.species)[i]))
+      NM=names(Indicator.species)[i]
+      tiff(paste0("Bubble.plot.catch_",NM,".tiff"),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")    
+      n.graph=length(unique(subset(Data.monthly,SPECIES==Indicator.species[i])$FINYEAR))+1
+      smart.par(n.plots=n.graph,MAR=c(1,1.5,1.5,1.5),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
+      Effect.area(Indicator.species[i],Indicator.ranges[[i]])
+      plot(1:10,col="transparent",xaxt='n',ann=F,yaxt='n',fg="white")
+      text(5,7,NM,cex=1.25)
+      text(5,4,"shark",cex=1.25)
+      dev.off()
+    }
   }
   
   #Catch densities
   do.density=FALSE
   if(do.density)
   {
-    tiff("Catch.density.whiskery.tiff",width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
-    fn1=function(x) as.numeric(as.character(cut((x-trunc(x)),breaks=seq(0,60,10)/60,labels=seq(0,50,10)/60)))
-    a1=Data.daily%>%filter(SPECIES==17003 )%>%
-      mutate(LAT=abs(LAT),
-             LAT10=-round(trunc(LAT)+fn1(LAT),2),
-             LONG10=round(trunc(LONG)+fn1(LAT),2))%>%
-      filter(!is.na(LONG10)&!is.na(LAT10))%>%
-      group_by(LAT10,LONG10)%>%
-      summarise(LIVEWT.c=sum(LIVEWT.c))%>%
-      spread(LAT10,LIVEWT.c,fill=0)
+    for(i in 1:length(Indicator.species))
+    {
+      print(paste('Catch density plots for ----',names(Indicator.species)[i]))
+      tiff(paste0("Catch.density_",names(Indicator.species)[i],".tiff"),width = 2400, height = 2400,units = "px", res = 300, compression = "lzw")
+      fn1=function(x) as.numeric(as.character(cut((x-trunc(x)),breaks=seq(0,60,10)/60,labels=seq(0,50,10)/60)))
+      a1=Data.daily%>%filter(SPECIES==Indicator.species[i])%>%
+        mutate(LAT=abs(LAT),
+               LAT10=-round(trunc(LAT)+fn1(LAT+(LatMin/60)),2),
+               LONG10=round(trunc(LONG)+fn1(LONG+(LongMin/60)),2))%>%
+        filter(!is.na(LONG10)&!is.na(LAT10))%>%
+        group_by(LAT10,LONG10)%>%
+        summarise(LIVEWT.c=sum(LIVEWT.c))%>%
+        spread(LAT10,LIVEWT.c,fill=0)
+      
+      a2=as.matrix(a1[,-1])
+      x=a1$LONG10
+      y=as.numeric(colnames(a1)[-1])
+      filled.contour(x,y,a2,
+                     plot.axes = { axis(1,seq(trunc(min(x)),trunc(max(x)),by=1) )
+                       axis(2, seq(trunc(min(y)),trunc(max(y)),by=1))},
+                     key.axes = axis(4, seq(round(min(a2)), round(max(a2)), by = 5)))
+      dev.off()
+    }
     
-    a2=as.matrix(a1[,-1])
-    x=a1$LONG10
-    y=as.numeric(colnames(a1)[-1])
-    filled.contour(x,y,a2,
-                   plot.axes = { axis(1,seq(trunc(min(x)),trunc(max(x)),by=1) )
-                     axis(2, seq(trunc(min(y)),trunc(max(y)),by=1))},
-                   key.axes = axis(4, seq(round(min(a2)), round(max(a2)), by = 5)))
-    dev.off()
   }
   
   #define what effort to plot
@@ -345,6 +327,7 @@
   #1.1 by indicator species
   for (ss in 1:length(Tar))
   {
+    print(paste('Heat_map_5.yr.group. for ----',Tar[ss]))
     fn.fig(paste(hndl.sptl.ktch,"Heat_map_5.yr.group.",sp[ss],sep=""),2400, 2400)
     opar <- smart.par(n.plots=length(DATA.lista),MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(.1, 0.15, 0))
     Breaks=fn.catch.breaks(Tar[ss])
@@ -545,6 +528,8 @@
   #2.1 by indicator species
   for(i in 1:length(Tar))
   {
+    print(paste('Heat_map for ----',Tar[i]))
+    
     ddd=subset(Data.monthly,Estuary=="NO" & !is.na(LIVEWT.c) &
                  METHOD%in%c("GN","LL")& LAT<=(-26) & SPECIES%in%Tar[[i]])
     FINYrS=unique(ddd$FINYEAR)
@@ -848,6 +833,7 @@
   EffortBreaks=quantile(s1$Km.Gillnet.Days.c,probs=seq(0,1,1/numInt),na.rm=T)
   for (i in 1:length(Mn.yrs))
   {
+    print(paste('Gillnets_all.yrs_monthly for ----',Mn.yrs[i]))
     fn.eff.plot.all.yrs(DATA=subset(s1,FINYEAR== Mn.yrs[i]),WHAT="monthly")
     mtext(Mn.yrs[i],side=3,line=0,cex=.95)
     axis(side = 1, at =Long.seq, labels = F, tcl = .35,las=1,cex.axis=1,padj=-0.9)
@@ -875,6 +861,8 @@
   smart.par(n.plots=length(Dy.yrs)+1,MAR=c(1,1,1,1),OMA=c(2,2,.1,.1),MGP=c(1, 0.5, 0))
   for (i in 1:length(Dy.yrs))
   {
+    print(paste('Gillnets_all.yrs_daily for ----',Dy.yrs[i]))
+    
     EffortBreaks=quantile(s2$Km.Gillnet.Days.c,probs=seq(0,1,1/numInt),na.rm=T)
     fn.eff.plot.all.yrs(DATA=subset(s2,finyear== Dy.yrs[i]),WHAT="daily")
     axis(side = 1, at =Long.seq, labels =F, tcl = .35,las=1,cex.axis=1,padj=-0.9)

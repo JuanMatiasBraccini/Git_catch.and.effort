@@ -323,7 +323,8 @@ if(do.sql.extraction)
     rm(id)
   }
   Data.monthly=Data.monthly%>%
-                    rename(SNAME=RSSpeciesCommonName,
+                    rename(zone=FisheryZone,
+                           SNAME=RSSpeciesCommonName,
                            VESSEL=VesselRegistration,
                            type=RSSpeciesEcologicalSuite)%>%            
                     mutate(SPECIES=case_when(type=='elasmobranchs'~substr(RSSpeciesCode,4,10),
@@ -370,7 +371,7 @@ if(do.sql.extraction)
  
   Keep.these.columns_monthly=c("FINYEAR","YEAR","MONTH","VESSEL","FDAYS","METHOD","BLOCKX","BDAYS","HOURS","HOOKS","SHOTS",
                                "NETLEN","SPECIES","SNAME","LIVEWT","CONDITN","LANDWT","Factor","fishery","PORT",
-                               "RSSpeciesCode","type")
+                               "RSSpeciesCode","type","zone")
   if('lat'%in%names(Data.monthly))
   {
     Keep.these.columns_monthly=c(Keep.these.columns_monthly,"lat","long")
@@ -911,7 +912,7 @@ if(First.run=="NO")Inspect.New.dat="NO"
 if(First.run=="YES")Inspect.New.dat="YES"
 
 #control if plotting spatio-temporal trends in catch and effort for TDGDLF
-do.spatio.temporal.ktch.effort="YES"
+do.spatio.temporal.ktch.effort=First.run
 do.tdgdlf.effort.density="NO"
 
 #control how to aggregate effort
@@ -1439,6 +1440,10 @@ Data.monthly=Data.monthly%>%
 
 Data.monthly$LONG=floor(Data.monthly$LONG)
 
+#Reset Same.return after fixing blockx
+Data.monthly$Same.return=with(Data.monthly,paste(FINYEAR,MONTH,VESSEL,METHOD,BLOCKX))
+Data.monthly$Same.return.SNo=Data.monthly$Same.return
+
 #add Fishery code if missing
 Data.monthly=Data.monthly%>%
   mutate(fishery=ifelse(is.na(fishery) & METHOD%in%c("GN","LL")& LAT <(-26) & 
@@ -1462,6 +1467,11 @@ Data.monthly=Data.monthly%>%
 Data.monthly$CONDITN=as.character(Data.monthly$CONDITN)
 Data.monthly$CONDITN=with(Data.monthly,ifelse(is.na(SPECIES),"NIL",CONDITN))
 
+#fix some shark records with no fishery
+Data.monthly=Data.monthly%>%
+              mutate(fishery=case_when(is.na(fishery) & type=='elasmobranchs'& METHOD%in%c('GN','LL') & 
+                                         zone%in%c('Closed','Joint','North','West') ~'OANCGCWC',
+                                       TRUE~fishery))
 
 # A.8. Add bioregion and zone                                                               
 Data.monthly$Bioregion=as.character(with(Data.monthly,ifelse(LONG>=115.5 & LONG<=129 & LAT<=(-26),"SC", 
@@ -1473,8 +1483,7 @@ Data.monthly$Bioregion=with(Data.monthly,
             ifelse(Bioregion=="SC"& LAT>(-34) & LONG <115.91 ,"WC",Bioregion))
 
 Data.monthly=Data.monthly%>%
-                mutate(zone=NA,
-                       zone=case_when(
+                mutate(zone=case_when(
                          fishery%in%(FishCubeCode_Shark.fisheries) & LONG>=116.5 & LAT<=(-26)~"Zone2",
                          fishery%in%(FishCubeCode_Shark.fisheries) & LONG<116.5 & LAT<=(-33)~"Zone1",
                          fishery%in%(FishCubeCode_Shark.fisheries) & LAT>(-33) & LAT<=(-26) & LONG<116.5~"West",
@@ -2227,6 +2236,9 @@ Data.daily$LongMin=with(Data.daily,ifelse(is.na(LongMin) & is.na(block10),NA,Lon
 Data.daily$blockx=Data.daily$blockxFC   #reset blockx to original
 Data.daily$LatDeg=-abs(Data.daily$LatDeg)
 
+#Reset same return after fixing blocks                                                                          
+Data.daily$Same.return=with(Data.daily,paste(finyear,month,vessel,method,blockx)) 
+
   #fix some fishery codes 
 Data.daily=Data.daily%>%
             mutate(fishery=case_when(fishery=='JASDGDL' & LatDeg>(-33) & LongDeg<118~'WCDGDL',
@@ -2256,7 +2268,7 @@ Data.daily$zone=with(Data.daily,
 Data.daily=Data.daily%>%
               mutate(zone=ifelse(!fishery%in%FishCubeCode_Shark.fisheries,NA,zone))
                      
-  #Realocate zone 3 to 1 or 2 depending on shot proximity (requested by fishers at AMM 2019)
+  #Reallocate zone 3 to 1 or 2 depending on shot proximity (requested by fishers at AMM 2019)
 Zn3.lim.eas=116+55.4/60
 Zn3.lim.wes=116+30/60
 Zn3.mid=(Zn3.lim.wes+Zn3.lim.eas)/2
@@ -3094,12 +3106,14 @@ if(nrow(a)>0)
                      TSNo=substr(Same.return.SNo,16,27))%>%
               dplyr::select(VESSEL,FINYEAR,SNo,DSNo,TSNo,block10,fishery,Landing.Port,LANDWT,LIVEWT,nfish,
                             RSCommonName,RSSpeciesCode,SPECIES,CONDITN)%>%
-              arrange(VESSEL,TSNo,FINYEAR),"C:/Users/myb/OneDrive - Department of Primary Industries And Regional Development/Desktop/catch with no nfish, landwt or livewt but species is not nil catch.csv",row.names = F)
+              arrange(VESSEL,TSNo,FINYEAR),
+            paste0(handl_OneDrive("Data/Catch and Effort/Check_these_vars/Daily/"),Current.yr,
+                   '/catch with no nfish, landwt or livewt but species is not nil catch.csv'),row.names = F)
   
 }
 
 #check one off spatial dist (don't repeat, only do it in Inspections of new year's data) 
-if(Inspect.New.dat)
+if(Inspect.New.dat=="YES")
 {
   handle1=handl_OneDrive("Data/Catch and Effort/Check_these_vars/Daily/")
   #yrs=sort(unique(Data.daily.original$FINYEAR))
@@ -8949,12 +8963,12 @@ fn.check.method.contrib=function(D,SPEC)
   Rcrds.yr.mthd=Rcrds.yr.mthd/rowSums(Rcrds.yr.mthd)
   Rcrds.yr.mthd=t(Rcrds.yr.mthd)
   
-  
+  COLS=c("darkolivegreen4","black","brown","grey60")  
   fn.fig(paste(hndl.gear,"TDGDLF_gear_by_year.",a$SNAME[1],sep=""),2400, 2400)
   par(mfcol=c(1,1),mai=c(1.1,.85,.2,.1),oma=c(.1,.1,1,.1),xpd=TRUE,las=1)
   
   #Zones combined
-  barplot(Rcrds.yr.mthd,legend.text=rownames(Rcrds.yr.mthd),
+  barplot(Rcrds.yr.mthd,legend.text=rownames(Rcrds.yr.mthd),col=COLS,
           args.legend=list(c(0,1),cex=1.15,bty='n',horiz=T,
                            border='black',yjust=0))
   mtext("Financial year",1,-2,outer=T,cex=1.5)
@@ -8971,7 +8985,7 @@ fn.check.method.contrib=function(D,SPEC)
   #West
   x=Rcrds.GN.LL[,,1]/rowSums(Rcrds.GN.LL[,,1])
   x=t(x)
-  barplot(x,legend.text=rownames(x),
+  barplot(x,legend.text=rownames(x),col=COLS,
           args.legend=list(x=ncol(x)*1.2,
                            y=max(x)*.975,cex=1.15,bty='n',horiz=T,
                            border='black',yjust=0))
@@ -8980,13 +8994,13 @@ fn.check.method.contrib=function(D,SPEC)
   #Zn1
   x=Rcrds.GN.LL[,,2]/rowSums(Rcrds.GN.LL[,,2])
   x=t(x)
-  barplot(x)
+  barplot(x,col=COLS)
   mtext(dimnames(Rcrds.GN.LL)$zone[2],3)
   
   #Zn2
   x=Rcrds.GN.LL[,,3]/rowSums(Rcrds.GN.LL[,,3])
   x=t(x)
-  barplot(x)
+  barplot(x,col=COLS)
   mtext(dimnames(Rcrds.GN.LL)$zone[3],3)
   
   mtext("Financial year",1,0.5,outer=T,cex=1.5)
@@ -8995,13 +9009,13 @@ fn.check.method.contrib=function(D,SPEC)
   dev.off()
   
 }
-fn.check.method.contrib(D=Data.monthly,SPEC=17001)
-fn.check.method.contrib(D=Data.monthly,SPEC=17003)
-fn.check.method.contrib(D=Data.monthly,SPEC=18003)
-fn.check.method.contrib(D=Data.monthly,SPEC=18007)
+fn.check.method.contrib(D=Data.monthly%>%filter(!(is.na(zone)|zone=='')),SPEC=17001)
+fn.check.method.contrib(D=Data.monthly%>%filter(!(is.na(zone)|zone=='')),SPEC=17003)
+fn.check.method.contrib(D=Data.monthly%>%filter(!(is.na(zone)|zone=='')),SPEC=18003)
+fn.check.method.contrib(D=Data.monthly%>%filter(!(is.na(zone)|zone=='')),SPEC=18007)
 
 
-#Data for Hammerhead Listing
+#Data for Hammerhead Listing 
 if(do.Hammerheads=="YES")
 {
   HHEads=c(19000,HammerheadSpecies)
@@ -9021,8 +9035,11 @@ Data.monthly.GN=Data.monthly.GN%>%left_join(Daily.nfish.agg,by=c("Same.return",
 # Data.monthly.GN=merge(Data.monthly.GN,Daily.nfish.agg,by=c("Same.return",
 #   "FINYEAR","YEAR","YEAR.c","MONTH","zone","BLOCKX","VESSEL","METHOD","SPECIES","Estuary"),all.x=T)
 
-if (do.Jeffs=="YES") Jeff.Norris=merge(Jeff.Norris,Daily.nfish.agg,by=c("Same.return",
-        "FINYEAR","YEAR","YEAR.c","MONTH","zone","BLOCKX","VESSEL","METHOD","SPECIES","Estuary"),all.x=T)
+if (do.Jeffs=="YES")
+{
+  Jeff.Norris=merge(Jeff.Norris,Daily.nfish.agg,by=c("Same.return","FINYEAR","YEAR","YEAR.c","MONTH","zone",
+                                                     "BLOCKX","VESSEL","METHOD","SPECIES","Estuary"),all.x=T)
+}
 
 
   #4.3. check spatial expansion
@@ -9143,22 +9160,19 @@ if(do.tdgdlf.effort.density=="YES")
   p=list(Gillnet=Data.daily%>%
            filter(zone %in%c('West','Zone1','Zone2') & 
                     fishery%in%c('JASDGDL','WCDGDL','*') & 
-                    method%in%c('GN'))%>%
-           mutate(METHOD=method,
-                  LAT=as.numeric(LatFC),
+                    METHOD%in%c('GN'))%>%
+           mutate(LAT=as.numeric(LatFC),
                   LONG=as.numeric(LongFC))%>%
-           distinct(Same.return.SNo,finyear,LAT,LONG,METHOD)%>%
+           distinct(Same.return.SNo,FINYEAR,LAT,LONG,METHOD)%>%
            filter(!is.na(LAT)),
          Longline=Data.daily%>%
            filter(zone %in%c('West','Zone1','Zone2') & 
                     fishery%in%c('JASDGDL','WCDGDL','*') & 
-                    method%in%c('LL'))%>%
-           mutate(METHOD=method,
-                  LAT=as.numeric(LatFC),
+                    METHOD%in%c('LL'))%>%
+           mutate(LAT=as.numeric(LatFC),
                   LONG=as.numeric(LongFC))%>%
-           distinct(Same.return.SNo,finyear,LAT,LONG,METHOD)%>%
-           filter(!is.na(LAT))
-  )
+           distinct(Same.return.SNo,FINYEAR,LAT,LONG,METHOD)%>%
+           filter(!is.na(LAT)))
   
   fun.mup=function(d,LAB)
   {
@@ -9212,7 +9226,7 @@ if(do.Ref.Points=="YES")
     paste(handl_OneDrive("Analyses/Reference Points/Tot.c."),sp[i],".csv",sep=""),row.names=F)  
 }
 
-#SECTION I. ---- EXPLORATORY ANALYSES ------
+#SECTION I. ---- DROPPED CODE ------
 if(do.exploratory=="YES")
 {
   setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/Exploratory"))
@@ -9256,7 +9270,9 @@ if(do.exploratory=="YES")
   
   
   #5.3 Spatial and temporal expansion
-  
+  data(worldLLhigh)
+  OZ.long=c(112,155)
+  OZ.lat=c(-46,-10)
   tiff(file="Figure 3.Effort_map.tiff",width = 2400, height = 2400,units = "px", res = 300,compression = "lzw")
   
   par(mfrow=c(3,3),mai = c(0, 0, 0, 0),mgp=c(.1, 0.15, 0))
@@ -9278,7 +9294,7 @@ if(do.exploratory=="YES")
   }
   dev.off()
   
- 
+  
   #5.5 Species distribution 
   fn.dist=function(SPEC,YR)
   {
@@ -9473,7 +9489,7 @@ if(do.exploratory=="YES")
     
   }
   
- 
+  
   
   ####Effort and Catch and fine scale (10 by 10 nm blocks)
   
@@ -9723,9 +9739,4 @@ if(do.exploratory=="YES")
   }
   
 }
-
-
-
-
-########### SECTION J. ----  DROPPED CODE --- ###########
 #source(handl_OneDrive("Analyses/Catch and effort/Git_catch.and.effort/do.dropped.code.R"))
