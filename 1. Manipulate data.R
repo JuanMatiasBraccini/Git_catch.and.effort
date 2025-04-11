@@ -1846,6 +1846,9 @@ Data.daily=Data.daily%>%
 #export list of boats and skippers
 write.csv(Data.daily%>%distinct(vessel,BoatName,MastersName)%>%arrange(MastersName),
           'List_boats_skippers.csv',row.names = F)
+List.of.daily.vessel.boat=Data.daily%>%
+  mutate(Same.return.SNo=paste(SNo,DSNo,TSNo))%>%
+  distinct(vessel,BoatName,MastersName,Same.return.SNo) 
 
 #Fishers operating in recent years  
 recent.yrs=as.numeric(substr(Current.yr,1,4))
@@ -9103,24 +9106,24 @@ Exprt.list=list(
       Mesh.monthly=Mesh.monthly,
       Mesh.size=Mesh.size,
       Data.current.Sofar=Data.current.Sofar,
-      # TEPS.pre.current=TEPS.pre.current,
       Suite=data.frame(Suite=Suite),
       LL.equiv.Eff.days.zone=LL.equiv.Eff.days.zone,
       Equivalent.LL_to_GN_South=LL.to.GN.South,
       Equivalent.LL_to_GN_North=LL.to.GN.North,
-      # Results.pre.2013=Results.pre.2013,
       Data.monthly=Data.monthly[,-fn.crap(crap,names(Data.monthly))],
       Data.monthly.north=Data.monthly.north[,-fn.crap(crap,names(Data.monthly.north))],
       Data.monthly.GN=Data.monthly.GN[,-fn.crap(crap,names(Data.monthly.GN))],
       Data.monthly.LL=Data.monthly.LL[,-fn.crap(crap,names(Data.monthly.LL))],
-      # Data.monthly.other=Data.monthly.other,
-      Data.daily=Data.daily[,-fn.crap(crap.daily,names(Data.daily))],
-      Data.daily.north=Data.daily.north[,-fn.crap(crap.daily,names(Data.daily.north))],
+      Data.daily=Data.daily[,-fn.crap(crap.daily,names(Data.daily))]%>%
+                  left_join(List.of.daily.vessel.boat,by=c('VESSEL'='vessel','Same.return.SNo')),
+      Data.daily.north=Data.daily.north[,-fn.crap(crap.daily,names(Data.daily.north))]%>%
+                  left_join(List.of.daily.vessel.boat,by=c('VESSEL'='vessel','Same.return.SNo')),
       Data.daily.original=Data.daily.original,
-      # Data.daily.other.fisheries=Data.daily.other.fisheries,
-      Data.daily.GN=Data.daily.GN[,-fn.crap(crap.daily,names(Data.daily.GN))],
-      # Data.daily.other=Data.daily.other[,-match(crap.daily,names(Data.daily.other))],
-      Data.daily.LL=Data.daily.LL[,-fn.crap(crap.daily,names(Data.daily.LL))])
+      Data.daily.GN=Data.daily.GN[,-fn.crap(crap.daily,names(Data.daily.GN))]%>%
+                  left_join(List.of.daily.vessel.boat,by=c('VESSEL'='vessel','Same.return.SNo')),
+      Data.daily.LL=Data.daily.LL[,-fn.crap(crap.daily,names(Data.daily.LL))]%>%
+                  left_join(List.of.daily.vessel.boat,by=c('VESSEL'='vessel','Same.return.SNo'))
+      )
 
 if(exists('TEPS.current'))Exprt.list$TEPS.current=TEPS.current
 if(exists('PRICES'))Exprt.list$PRICES=PRICES
