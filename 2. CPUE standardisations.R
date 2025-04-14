@@ -1093,6 +1093,7 @@ Eff.daily=Eff.daily%>%
 
 
 # CREATE SKIPPER EXPERIENCE VARIABLE ----------------------------------------------
+#note: for daily, the combo 'VESSEL & MastersName' is used but for monthly, only 'VESSEL' is available
 Data.daily.GN=Data.daily.GN%>%
   mutate(MastersName=case_when(MastersName=="1st trip - j. smythe - 2nd trip - n. triantaryllou"~"triantafyllou, neoclis",
                                MastersName=="andrew francis joy & m. tonkin"~'tonkin, michael',
@@ -1103,17 +1104,32 @@ Data.daily.GN=Data.daily.GN%>%
                                MastersName=='peter hughes & william ronald reay'~'reay, william ronald',
                                TRUE~MastersName))
 
-Table.experience=Data.daily.GN%>%
+Table.experience_daily=Data.daily.GN%>%
                     distinct(VESSEL,MastersName,Same.return.SNo,YEAR.c)%>%
                     group_by(VESSEL,MastersName,YEAR.c)%>%
-                    tally()
-Table.experience%>%
-  rename(n.shots=n)%>%
-  ggplot(aes(YEAR.c,MastersName))+
-  geom_point(aes(size=n.shots))
-ggsave(handl_OneDrive('Analyses/Catch and effort/Outputs/Skipper experience.tiff'),
-       width = 12,height = 10, dpi = 300, compression = "lzw")
-#ACA
+                    tally()%>%
+                    rename(n.shots=n)%>%
+                    mutate(dummy=1)%>%
+                    group_by(VESSEL,MastersName)%>%
+                    mutate(Years.of.exp=cumsum(dummy))
+
+Table.experience_monthly=Data.monthly.GN%>%
+                  distinct(VESSEL,Same.return,YEAR.c)%>%
+                  group_by(VESSEL,YEAR.c)%>%
+                  tally()%>%
+                  rename(n.shots=n)%>%
+                  mutate(dummy=1)%>%
+                  group_by(VESSEL)%>%
+                  mutate(Years.of.exp=cumsum(dummy))
+
+Data.daily.GN=Data.daily.GN%>%
+  left_join(Table.experience_daily%>%dplyr::select(-c(n.shots,dummy)),
+            by=c('VESSEL','MastersName','YEAR.c'))
+
+Data.monthly.GN=Data.monthly.GN%>%
+  left_join(Table.experience_monthly%>%dplyr::select(-c(n.shots,dummy)),
+            by=c('VESSEL','YEAR.c'))
+
 
 # CREATE SPECIES DATA SETS FOR STANDARDISATIONS ----------------------------------------------
 fn.cpue.data=function(Dat,EffrrT,sp)
@@ -1170,7 +1186,8 @@ fn.cpue.data.daily=function(Dat,EffrrT,sp)
     Dat=Dat%>%group_by(date,Same.return.SNo,TSNo,Same.return,FINYEAR,MONTH,
                        VESSEL,METHOD,BLOCKX,block10,SPECIES,SNAME,YEAR.c,LAT,LONG,
                        TYPE.DATA,zone,Reporter,Sch.or.DogS,ZnID,
-                       Temperature,Temp.res,SOI,Freo,Freo_lag6,Freo_lag12,Lunar)%>%
+                       Temperature,Temp.res,SOI,Freo,Freo_lag6,Freo_lag12,Lunar,
+                       BoatName,MastersName)%>%
       summarise(LIVEWT = sum(LIVEWT),
                 LIVEWT.c = sum(LIVEWT.c),
                 nfish = sum(nfish))%>%
@@ -1201,7 +1218,7 @@ fn.cpue.data.daily=function(Dat,EffrrT,sp)
 #      #remove Bronze Whaler due to few records and uncertain species ID prior to Daily logbooks
 cl <- makeCluster(detectCores()-1)
 registerDoParallel(cl)   # takes 1 sec per species
-clusterEvalQ(cl, .libPaths("C:/Users/myb/AppData/Local/R/win-library/4.4"))  #location of used libraries 
+clusterEvalQ(cl, .libPaths(.libPaths()[1]))  #location of used libraries "C:/Users/myb/AppData/Local/R/win-library/4.4"
 system.time({Species.list=foreach(s=nnn,.packages=c('dplyr','doParallel')) %dopar%
   {
     if(!SP.list[[s]]==18001) return(fn.cpue.data(Dat=Data.monthly.GN %>% filter(LAT>=Core[[s]]$Lat[1] & LAT<=Core[[s]]$Lat[2] &
@@ -1210,7 +1227,7 @@ system.time({Species.list=foreach(s=nnn,.packages=c('dplyr','doParallel')) %dopa
                                                 LONG>=Core[[s]]$Long[1]& LONG<=Core[[s]]$Long[2]),
                                                 sp=SP.list[[s]]))
   }
-})    #takes 2.6 secs per species
+})    #takes 3 secs per species
 names(Species.list)=names(SP.list) 
 
   #Daily 
@@ -1224,7 +1241,7 @@ system.time({Species.list.daily=foreach(s=nnn,.packages=c('dplyr','doParallel'))
                                                            LONG>=Core[[s]]$Long[1]& LONG<=Core[[s]]$Long[2]),
                               sp=SP.list[[s]]))
   }
-})    #takes 16 secs per species
+})    #takes 18 secs per species
 names(Species.list.daily)=names(SP.list) 
 
 #Unbalanced raw data
@@ -1277,13 +1294,12 @@ for(s in nnn)
                        Km.Gillnet.Hours.inv,Km.Gillnet.Hours_shot.c,netlen.c,
                        bdays.c,TYPE.DATA,LIVEWT,nfish,Freo_lag6,Freo_lag12))
   }
-
 }
 
 
 # VESSELS & BLOCKS----------------------------------------------
 # Keep vessel characteristics from vessel survey for vessels that have fished      
-if(exists("TDGDLF.survey"))  TDGDLF.survey=subset(TDGDLF.survey, BOATREGO%in%
+if(exists("Vessel.charac"))  Vessel.charac=subset(Vessel.charac, BOATREGO%in%
                                     unique(c(Data.monthly.GN$VESSEL,Data.daily.GN$VESSEL)))   
 
 Table.species.by.vessel=Data.daily.GN%>%
@@ -1693,7 +1709,7 @@ if(Remove.blk.by=="blk_only")
                                 length(vsl.used),length(vsl.not.used)),ncol=2,nrow=2),2),
             col=c("grey80","grey40"),names.arg=NMS.arg)
   }
-  fn.fig(handl_OneDrive("Analyses/Catch and effort/Outputs/Kept_blocks_vessels/Used_not.used_blocks_vessels"),1400,2400)
+  fn.fig(handl_OneDrive("Analyses/Catch and effort/Outputs/Kept_blocks_vessels/block_vessels_used_not.used"),1400,2400)
   par(mfrow=c(length(nnn),2),mar=c(1,1,.1,.3),oma=c(2,2,1,.1),las=1,mgp=c(1,.5,0),xpd=T)
   for(i in nnn)
   {
@@ -1935,7 +1951,7 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
     {
       #max effort by Sno, DsNo & TSNo
       Effort.data=Effort.data1%>%      
-        group_by(zone,FINYEAR,Same.return.SNo,MONTH,BLOCKX,block10,shots.c)%>%
+        group_by(zone,FINYEAR,Same.return.SNo,MONTH,BLOCKX,block10,shots.c,BoatName,MastersName)%>%
         summarise(Km.Gillnet.Days.c = max(Km.Gillnet.Days.c),
                   Km.Gillnet.Hours.c = max(Km.Gillnet.Hours.c))%>%
         data.frame()
@@ -1945,7 +1961,7 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
       {
         Effort.data$TSNo=word(Effort.data$Same.return.SNo,3)
         Effort.data=aggregate(cbind(Km.Gillnet.Days.c,Km.Gillnet.Hours.c)~zone+
-                                FINYEAR+TSNo+MONTH+BLOCKX,Effort.data,sum)
+                                FINYEAR+TSNo+MONTH+BLOCKX+BoatName+MastersName,Effort.data,sum)
       }
     }
     
@@ -1962,8 +1978,6 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
         Catch.Blue_mor=ifelse(SPECIES%in%c(377004),!!sym(ktch),0),
         Catch.Total=ifelse(SPECIES%in%c(5001:24900,25000:31000,188000:599001),!!sym(ktch),0))
     
-    
-
     #reshape catch data
     if(Use.Date=="NO")
     {
@@ -2050,7 +2064,7 @@ for(i in nnn)
 These.efforts.daily=c("FINYEAR","date","TSNo","Km.Gillnet.Hours.c","Km.Gillnet.Days.c",
                       "zone","MONTH","BLOCKX","block10","VESSEL","mesh",
                       "Same.return.SNo","nlines.c","shots.c",
-                      "hours.c")
+                      "hours.c","BoatName","MastersName")
 for(i in nnn)
 {
   if(!is.null(Species.list.daily[[i]]))
@@ -2073,6 +2087,153 @@ for(i in nnn)
 # EXPORT PROPORTIONS WITH CATCH ----------------------------------------------
 write.csv(Prop.Catch,paste(hndl,"Prop.records.with.catch.monthly.csv",sep=""),row.names=T)
 write.csv(Prop.Catch.daily,paste(hndl,"Prop.records.with.catch.daily.csv",sep=""),row.names=T)
+
+# GET NUMBER OF SPECIES BY DAILY RECORD ----------------------------------------------
+if(Model.run=="First")  
+{
+  fn.species.per.session=function(d,target)
+  {
+    d=d%>%
+      group_by(Same.return.SNo,SNAME)%>%
+      summarise(LIVEWT.c=sum(LIVEWT.c))
+    a=d%>%
+      group_by(Same.return.SNo)%>%
+      tally()
+    p1=a%>%
+      ggplot(aes(n))+
+      geom_bar()+xlab('Number of species')+ggtitle(target)+ylab('Number of sessions')
+    
+    x=a%>%filter(n==1)%>%pull(Same.return.SNo)
+    p_one.species=d%>%
+      filter(Same.return.SNo%in%x)%>%
+      group_by(SNAME)%>%
+      tally()%>%
+      arrange(n)
+    p_one.species=p_one.species%>%
+      mutate(SNAME=factor(SNAME,levels=unique(p_one.species$SNAME)))%>%
+      ggplot(aes(x=SNAME,y=n))+
+      geom_bar(stat = 'identity')+
+      ylab('Number of sessions')+xlab('')+
+      coord_flip()+
+      labs(subtitle='records with only 1 species reported')
+    
+    return(ggarrange(p1,p_one.species,ncol=1))  
+  }
+  
+  for(i in nnn)
+  {
+    TRGT=names(Species.list.daily)[i]
+    fn.species.per.session(d=Species.list.daily[[i]],target=TRGT)
+    ggsave(handl_OneDrive(paste0("Analyses/Catch and effort/Outputs/Number of species caught by Daily sessions/",TRGT,".tiff")),
+           width = 6,height = 8,compression = "lzw")
+  }
+}
+
+# PROPORTION NO CATCH THRU TIME BY FISHER ----------------------------------------------
+if(Model.run=="First")  
+{
+  fn.prop.0.catch.by.fisher=function(d,explained.ktch,NM,series)
+  {
+    CUM.ktch=d%>%
+      filter(!SP=="Other")%>%
+      group_by(Ves.var)%>%
+      summarise(Ktch=sum(LIVEWT.c))%>%
+      ungroup()%>%
+      arrange(-Ktch)%>%
+      mutate(CumKtch=cumsum(Ktch),
+             Percent=CumKtch/sum(Ktch))%>%
+      filter(Percent<=explained.ktch)
+    
+    
+    d1=d%>%
+      filter(Ves.var%in%CUM.ktch$Ves.var)%>%
+      group_by(Ves.var,time.var,SP)%>%
+      summarise(cpue=mean(cpue))%>%
+      spread(SP,cpue,fill=0)%>%
+      mutate(yr=floor(time.var))
+    
+    d1.bin=d1%>%mutate(Target=ifelse(Target>0,1,0))
+    N.row=ceiling(length(unique(d1$Ves.var))/10)
+    p=d1%>%
+      group_by(Ves.var,yr)%>%
+      summarise(Target=mean(Target))%>%
+      ggplot(aes(yr,Target, group = Ves.var, color = Ves.var))+ 
+      geom_point() + 
+      geom_line() +
+      ylab('Mean kg/km gn h') +
+      theme(legend.title = element_blank(),
+            legend.position = 'top')+
+      guides(color=guide_legend(nrow=N.row,byrow=TRUE))
+    
+    p.bin=d1.bin%>%
+      group_by(Ves.var,yr)%>%
+      summarise(Target=mean(Target))%>%
+      ggplot(aes(yr,Target, group = Ves.var, color = Ves.var))+ 
+      geom_point() + 
+      geom_line() +
+      ylab('Proportion positive catch') +
+      theme(legend.title = element_blank(),
+            legend.position = 'top')+
+      guides(color=guide_legend(nrow=N.row,byrow=TRUE))
+    
+    print(ggarrange(p,p.bin, ncol=1,common.legend = T))
+    Out.name=handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Proportion No catch thru time by fisher/',series,'_',NM))
+    ggsave(paste0(Out.name,'.tiff'), width = 12,height = 10, dpi = 300, compression = "lzw")
+    
+    print(d1%>%
+            group_by(Ves.var,yr)%>%
+            summarise(Target=mean(Target))%>%
+            ggplot(aes(yr,Target))+ 
+            geom_point() + 
+            geom_line() +facet_wrap(~Ves.var)+
+            ylab('Mean kg/km gn h') )
+    ggsave(paste0(Out.name,'_cpue only.tiff'), width = 8,height = 8, dpi = 300, compression = "lzw")
+    
+    
+    print(d1.bin%>%
+            group_by(Ves.var,yr)%>%
+            summarise(Target=mean(Target))%>%
+            ggplot(aes(yr,Target))+ 
+            geom_point() + 
+            geom_line() +
+            facet_wrap(~Ves.var)+
+            ylab('Proportion positive catch')) 
+    ggsave(paste0(Out.name,'_prop only.tiff'), width = 8,height = 8, dpi = 300, compression = "lzw")
+    
+  }
+  for(i in nnn)
+  {
+    explained.ktch=0.90
+    if(names(Species.list)[i]%in%c("Dusky Whaler","Whiskery Shark")) explained.ktch=0.8
+    if(!is.null(Species.list[[i]]))
+    {
+      fn.prop.0.catch.by.fisher(d=Species.list[[i]]%>%
+                                  filter(Reporter=='good')%>%
+                                  mutate(Ves.var=VESSEL,
+                                         time.var=YEAR.c+MONTH/12.95,
+                                         SP=ifelse(SNAME==names(Species.list)[i],"Target","Other"),
+                                         cpue=LIVEWT.c/Km.Gillnet.Hours.c),
+                                explained.ktch=explained.ktch,
+                                NM=names(Species.list)[i],
+                                series='Monthly')
+    }
+    explained.ktch=0.90
+    if(!is.null(Species.list.daily[[i]]))
+    {
+      fn.prop.0.catch.by.fisher(d=Species.list.daily[[i]]%>%
+                                  filter(Reporter=='good')%>%
+                                  mutate(Ves.var=VESSEL,
+                                         time.var=YEAR.c+MONTH/12.95,
+                                         SP=ifelse(SNAME==names(Species.list)[i],"Target","Other"),
+                                         cpue=LIVEWT.c/Km.Gillnet.Hours.c),
+                                explained.ktch=explained.ktch,
+                                NM=names(Species.list.daily)[i],
+                                series='Daily')
+    }
+
+  }
+}
+
 
 # CALCULATE BLOCK CORNERS FOR GAM ----------------------------------------------
 for(s in nnn)
@@ -2115,7 +2276,8 @@ DATA.list.LIVEWT.c$"Tiger Shark"=subset(DATA.list.LIVEWT.c$"Tiger Shark",FINYEAR
 Nms.sp=capitalize(tolower(names(SP.list)))  
 Nms.sp[match(c("Dusky whaler"),Nms.sp)]=c("Dusky shark")
 
-# IDENTIFY FISHING ON DIFFERENT HABITATS (~TARGETING BEHAVIOUR) ----------------------------------------------
+#ACA
+# IDENTIFY FISHING ON DIFFERENT HABITATS (~TARGETING BEHAVIOUR, only applicable to Daily logbooks) ----------------------------------------------
 #note:  more code in 2.CPUE standardisations_delta.R)
 #      this uses all species accounting for 95% of catch
 HndL.Species_targeting=handl_OneDrive("Analyses/Catch and effort/Outputs/Species targeting/")

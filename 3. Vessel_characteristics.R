@@ -19,11 +19,12 @@ TDGDLF.skippers=read.csv("TDGDLF.SKIPERS.csv",stringsAsFactors=F)
 Vessel.survey=read.csv("VesselGearSurveyData/VesselGearSurveyData.csv",stringsAsFactors=F)
 Vessel.survey_meta=read_excel("VesselGearSurveyData/VesselGearSurveyData.xlsx", sheet = "MetaData")
 
-
-
 #use questionnaire to validate survey answers
 Matias.questionnaire=read_excel("Questionnaire responses/Questionaire.xlsx", sheet = "Questionaire")
 Steve.T.questionnaire=read_excel("Effort Creep.Inteviews_Steve_Taylor/Fishing Power extract for Matias.xlsx", sheet = "Fishing Power") 
+
+#Mackerel vessels
+Mackerel.vessels=read_excel("Mackerel vessels for history.xlsx", sheet = "Sheet1")
 
 
 # --------------------Manipulate questionnaire data-----------------------------
@@ -41,6 +42,10 @@ TDGDLF.Vessel.survey_meta=Vessel.survey_meta%>%
                       arrange(Type,Type2,Variable)
 relevant.variables=TDGDLF.Vessel.survey_meta$Variable
 key.vars=c("BOATREGO","LICYEAR","BOATNAME","SKIPPER","PFL","DATE")
+
+Mackerel.survey=Vessel.survey%>%
+                  filter(BOATREGO%in%Mackerel.vessels$LFB1 | 
+                           tolower(Vessel.survey$BOATNAME)%in%tolower(Mackerel.vessels$Name))
 
 TDGDLF.survey=Vessel.survey%>%
                 filter(BOATREGO%in%TDGDLF.vessels)%>%
@@ -363,3 +368,4 @@ TDGDLF.cpue.stand=TDGDLF.survey.selected%>%
   ungroup()
 setwd(handl_OneDrive("Data/Fishing power"))
 write.csv(TDGDLF.cpue.stand,'Vessel.charac.for_TDGDLF.cpue.stand.csv',row.names = F)
+write.csv(Mackerel.survey,'Vessel.charac.Mackerel.csv',row.names = F)
