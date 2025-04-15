@@ -368,6 +368,37 @@ Whiskery.range=c(-28,129)
 Gummy.range=c(116,129) 
 
 
+
+# Remove incomplete last year & aggregate weights-----------------------------------------------------------------------
+Tab.incomplit=table(Data.daily.GN$FINYEAR,Data.daily.GN$MONTH)
+Tab.incomplit[Tab.incomplit>0]=1
+Incomplete.year=names(which(rowSums(Tab.incomplit)<12))
+Data.daily.GN=subset(Data.daily.GN,!FINYEAR==Incomplete.year)
+Effort.daily=subset(Effort.daily,!finyear==Incomplete.year)
+Data.monthly.GN=subset(Data.monthly.GN,!FINYEAR==Incomplete.year)
+Effort.monthly=subset(Effort.monthly,!FINYEAR==Incomplete.year)
+
+Data.daily.GN=Data.daily.GN%>%
+                mutate(Dupli=paste(Same.return.SNo,SPECIES,CONDITN,LIVEWT.c))%>% 
+                distinct(Dupli,.keep_all = T)%>%
+                group_by(Same.return.SNo,SPECIES)%>%
+                mutate(LIVEWT=sum(LIVEWT,na.rm=T),
+                       LIVEWT.c=sum(LIVEWT.c,na.rm=T))%>%
+                mutate(Dupli=paste(Same.return.SNo,SPECIES))%>%
+                distinct(Dupli,.keep_all = T)%>%
+                dplyr::select(-c(LIVEWT.orgnl,LIVEWT.reap,Dupli))%>%
+                ungroup()
+Data.monthly.GN=Data.monthly.GN%>%
+                  mutate(Dupli=paste(Same.return,SPECIES,CONDITN,LIVEWT.c))%>%
+                  distinct(Dupli,.keep_all = T)%>%
+                  group_by(Same.return,SPECIES)%>%
+                  mutate(LIVEWT=sum(LIVEWT,na.rm=T),
+                         LIVEWT.c=sum(LIVEWT.c,na.rm=T))%>%
+                  mutate(Dupli=paste(Same.return,SPECIES))%>%
+                  distinct(Dupli,.keep_all = T)%>%
+                  dplyr::select(-c(LIVEWT.orgnl,LIVEWT.reap,Dupli))%>%
+                  ungroup()
+
 # BASIC MANIPULATIONS -----------------------------------------------------------------------
 #Reset BLOCKX to 4 digits as some have 5 digits
 Data.monthly.GN$BLOCKX=as.integer(substr(Data.monthly.GN$BLOCKX,1,4))
@@ -558,7 +589,8 @@ B=as.data.frame(A)
 Anm=A$SPECIES
 A=rowSums(A[,-1],na.rm=T)
 names(A)=Anm
-SpiSis=unique(Data.monthly.GN%>%mutate(RSCommonName=ifelse(SPECIES==8001,'Greynurse Shark',RSCommonName))%>%
+SpiSis=unique(Data.monthly.GN%>%
+                mutate(RSCommonName=ifelse(SPECIES==8001,'Greynurse Shark',RSCommonName))%>%
                          filter(SPECIES%in%as.numeric(names(A[A>=N.keep])))%>%
                          dplyr::select(SPECIES,RSCommonName) %>%
                          filter(!RSCommonName==""))
@@ -727,6 +759,7 @@ First.year.catch=First.year.catch[!is.na(names(First.year.catch))]
 First.year.catch.daily=First.year.catch.daily[!is.na(names(First.year.catch.daily))]
 
 nnn=1:length(SP.list)
+
 
 # DEFINE TARGET SPECIES INDEX ----------------------------------------------
 Tar.sp=match(TARGETS,SP.list)
@@ -1131,6 +1164,9 @@ Data.monthly.GN=Data.monthly.GN%>%
             by=c('VESSEL','YEAR.c'))
 
 
+# REMOVE DAILY RECORDS FROM MONTHLY EFFORT-----------------------------------------------------------------------
+Effort.monthly=Effort.monthly%>%
+  filter(FINYEAR%in%unique(Data.monthly.GN$FINYEAR))
 # CREATE SPECIES DATA SETS FOR STANDARDISATIONS ----------------------------------------------
 fn.cpue.data=function(Dat,EffrrT,sp)
 {
@@ -2069,11 +2105,6 @@ for(i in nnn)
 {
   if(!is.null(Species.list.daily[[i]]))
   {
-     # #set Reporter to Bad if average weight is outside species range
-    # #note: some records have dodgy nfish so class as 'bad reporters'
-    # Species.list.daily[[i]]$Avrg.w=Species.list.daily[[i]]$LIVEWT.c/Species.list.daily[[i]]$nfish
-    # Species.list.daily[[i]]$Reporter=with(Species.list.daily[[i]],
-    #                                       ifelse((Avrg.w>Max.weight[i]| Avrg.w<Min.weight[i]) & SPECIES==SPvec[i],"bad",Reporter))                    
     dummy=Effort.data.fun.daily(DATA=subset(Species.list.daily[[i]],Reporter=="good"),
                                 target=SP.list[[i]],
                                 ktch="LIVEWT.c",
@@ -2129,38 +2160,36 @@ if(Model.run=="First")
   }
 }
 
-# PROPORTION NO CATCH THRU TIME BY FISHER ----------------------------------------------
+# PROPORTION NO CATCH THRU TIME BY FISHER TO ID FISHING EFFICIENCY CREEP ----------------------------------------------
 if(Model.run=="First")  
 {
   fn.prop.0.catch.by.fisher=function(d,explained.ktch,NM,series)
   {
     CUM.ktch=d%>%
-      filter(!SP=="Other")%>%
       group_by(Ves.var)%>%
-      summarise(Ktch=sum(LIVEWT.c))%>%
+      summarise(Ktch=sum(Catch.Target))%>%
       ungroup()%>%
       arrange(-Ktch)%>%
       mutate(CumKtch=cumsum(Ktch),
              Percent=CumKtch/sum(Ktch))%>%
       filter(Percent<=explained.ktch)
     
-    
     d1=d%>%
       filter(Ves.var%in%CUM.ktch$Ves.var)%>%
-      group_by(Ves.var,time.var,SP)%>%
+      group_by(Ves.var,time.var)%>%
       summarise(cpue=mean(cpue))%>%
-      spread(SP,cpue,fill=0)%>%
       mutate(yr=floor(time.var))
     
-    d1.bin=d1%>%mutate(Target=ifelse(Target>0,1,0))
+    d1.bin=d1%>%mutate(Target=ifelse(cpue>0,1,0))
     N.row=ceiling(length(unique(d1$Ves.var))/10)
+    TitlE=paste("Vessels explaining",100*explained.ktch,"%of catch")
     p=d1%>%
       group_by(Ves.var,yr)%>%
-      summarise(Target=mean(Target))%>%
+      summarise(Target=mean(cpue))%>%
       ggplot(aes(yr,Target, group = Ves.var, color = Ves.var))+ 
       geom_point() + 
       geom_line() +
-      ylab('Mean kg/km gn h') +
+      ylab('Mean kg/km gn h') + ggtitle(TitlE)+
       theme(legend.title = element_blank(),
             legend.position = 'top')+
       guides(color=guide_legend(nrow=N.row,byrow=TRUE))
@@ -2177,15 +2206,15 @@ if(Model.run=="First")
       guides(color=guide_legend(nrow=N.row,byrow=TRUE))
     
     print(ggarrange(p,p.bin, ncol=1,common.legend = T))
-    Out.name=handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Proportion No catch thru time by fisher/',series,'_',NM))
+    Out.name=handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Proportion No catch thru time by fisher ti ID efficiency creep/',series,'_',NM))
     ggsave(paste0(Out.name,'.tiff'), width = 12,height = 10, dpi = 300, compression = "lzw")
     
     print(d1%>%
             group_by(Ves.var,yr)%>%
-            summarise(Target=mean(Target))%>%
+            summarise(Target=mean(cpue))%>%
             ggplot(aes(yr,Target))+ 
             geom_point() + 
-            geom_line() +facet_wrap(~Ves.var)+
+            geom_line() +facet_wrap(~Ves.var)+ ggtitle(TitlE)+
             ylab('Mean kg/km gn h') )
     ggsave(paste0(Out.name,'_cpue only.tiff'), width = 8,height = 8, dpi = 300, compression = "lzw")
     
@@ -2196,41 +2225,57 @@ if(Model.run=="First")
             ggplot(aes(yr,Target))+ 
             geom_point() + 
             geom_line() +
-            facet_wrap(~Ves.var)+
+            facet_wrap(~Ves.var)+ ggtitle(TitlE)+
             ylab('Proportion positive catch')) 
     ggsave(paste0(Out.name,'_prop only.tiff'), width = 8,height = 8, dpi = 300, compression = "lzw")
     
+    print(d%>%
+      mutate(yr=floor(time.var))%>%
+      group_by(yr)%>%
+      summarise(Target=mean(cpue),
+                SD=sd(cpue))%>%
+      ggplot(aes(yr,Target))+
+      geom_line(data=d1%>%
+                  group_by(Ves.var,yr)%>%
+                  summarise(Target=mean(cpue)),
+                aes(yr,Target,group = Ves.var),color='grey50')+ 
+      geom_point(color='darkred',size=5) + 
+      geom_line(color='darkred') +
+      geom_errorbar(aes(ymin=Target-SD, ymax=Target+SD), width=.2,
+                    position=position_dodge(.9),color='darkred')+
+      ylab('Mean kg/km gn h (+/- SD)') + ggtitle('All vessels'))
+    ggsave(paste0(Out.name,'_all vessels.tiff'), width = 8,height = 8, dpi = 300, compression = "lzw")
+    
+    
   }
-  for(i in nnn)
+  indis=match(c("Gummy Shark","Whiskery Shark","Dusky Whaler","Sandbar Shark"),names(DATA.list.LIVEWT.c))
+  for(i in indis)
   {
     explained.ktch=0.90
     if(names(Species.list)[i]%in%c("Dusky Whaler","Whiskery Shark")) explained.ktch=0.8
-    if(!is.null(Species.list[[i]]))
+    if(!is.null(DATA.list.LIVEWT.c[[i]]))
     {
-      fn.prop.0.catch.by.fisher(d=Species.list[[i]]%>%
-                                  filter(Reporter=='good')%>%
-                                  mutate(Ves.var=VESSEL,
-                                         time.var=YEAR.c+MONTH/12.95,
-                                         SP=ifelse(SNAME==names(Species.list)[i],"Target","Other"),
-                                         cpue=LIVEWT.c/Km.Gillnet.Hours.c),
-                                explained.ktch=explained.ktch,
-                                NM=names(Species.list)[i],
-                                series='Monthly')
+      fn.prop.0.catch.by.fisher(d=DATA.list.LIVEWT.c[[i]]%>%
+                                   mutate(Ves.var=VESSEL,
+                                          time.var=YEAR.c+MONTH/12.95,
+                                          cpue=Catch.Target/Km.Gillnet.Hours.c),
+                                 explained.ktch=explained.ktch,
+                                 NM=names(DATA.list.LIVEWT.c)[i],
+                                 series='Monthly')
     }
-    explained.ktch=0.90
-    if(!is.null(Species.list.daily[[i]]))
+    
+    explained.ktch=0.95
+    if(!is.null(DATA.list.LIVEWT.c.daily[[i]]))
     {
-      fn.prop.0.catch.by.fisher(d=Species.list.daily[[i]]%>%
-                                  filter(Reporter=='good')%>%
-                                  mutate(Ves.var=VESSEL,
-                                         time.var=YEAR.c+MONTH/12.95,
-                                         SP=ifelse(SNAME==names(Species.list)[i],"Target","Other"),
-                                         cpue=LIVEWT.c/Km.Gillnet.Hours.c),
-                                explained.ktch=explained.ktch,
-                                NM=names(Species.list.daily)[i],
-                                series='Daily')
+      fn.prop.0.catch.by.fisher(d=DATA.list.LIVEWT.c.daily[[i]]%>%
+                                   mutate(Ves.var=MastersName,
+                                          time.var=YEAR.c+MONTH/12.95,
+                                          cpue=Catch.Target/Km.Gillnet.Hours.c),
+                                 explained.ktch=explained.ktch,
+                                 NM=names(DATA.list.LIVEWT.c.daily)[i],
+                                 series='Daily')
     }
-
+    
   }
 }
 

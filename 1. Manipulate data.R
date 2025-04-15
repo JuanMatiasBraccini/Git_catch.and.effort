@@ -203,7 +203,42 @@ if(do.sql.extraction)
   
   #Extract Daily returns from TDGDLF and NSF
   system.time({Data.daily<- sqlQuery(conn1, query="SELECT * FROM ceSharkLog")})
-
+  
+    #check duplication
+  Data.daily=Data.daily%>%
+    mutate(Dupli=paste(DailySheetNumber,TripSheetNumber,SessionIndex,LiveWeight,TripLandedCondition,RSSpeciesCommonName,RSSpeciesCode))
+  Dups=table(Data.daily$Dupli)  
+  Dups=names(Dups[Dups>1])
+  if(length(Dups)>0)
+  {
+    if(First.run=='YES')
+    {
+      handle.duplis=handl_OneDrive("Data/Catch and Effort")
+      Duplis=Data.daily%>%
+        filter(Dupli%in%Dups)%>%
+        dplyr::select(VesselName,VesselRegistration,Skipper,FinancialYear,
+                      Month,DailySheetNumber,TripSheetNumber,SessionIndex,RSSpeciesCommonName,LiveWeight)
+      write.csv(Duplis,file=paste(handle.duplis,"/Duplis.csv",sep=""),row.names=F)
+      send.email(TO=Email.data.checks,
+                 CC=Email.data.checks2,
+                 BCC=Email.FishCube,
+                 Subject=paste("Duplicated records in daily logbooks",Sys.time(),sep=' _ '),
+                 Body= "Hi,
+              I've attached a spredsheet with duplicated records
+              (i.e. same DailySheetNumber, SessionIndex, LiveWeight & RSSpeciesCommonName).
+              Could you please have a look?
+              Cheers
+              Matias",  
+                 Attachment=paste(handle.duplis,"/Duplis.csv",sep="")) 
+    }
+      
+    Data.daily=Data.daily%>%
+                distinct(Dupli,.keep_all = T)
+  }
+  rm(Dups)
+  Data.daily=Data.daily%>%
+    dplyr::select(-Dupli)
+  
   rename.daily=SQL.data.mapping_daily$OLD
   names(rename.daily)=SQL.data.mapping_daily$NEW
   rename.daily=subset(rename.daily,!is.na(names(rename.daily)))
@@ -313,6 +348,42 @@ if(do.sql.extraction)
   #Extract Monthly returns from TDGDLF and NDS & shark catch in other fisheries with monthly returns 
   system.time({Data.monthly <- sqlQuery(channel=conn.monthly, query=Query.monthly)})
   odbcClose(conn.monthly)
+  
+    #check duplication
+  Data.monthly=Data.monthly%>%
+    mutate(Dupli=paste(FinancialYear, Year, Month,VesselRegistration,FishingMethod,CAESBlock,LiveWeight,LandedCondition,RSSpeciesCommonName,RSSpeciesCode)) 
+  Dups=table(Data.monthly$Dupli)  
+  Dups=names(Dups[Dups>1])
+  if(length(Dups)>0)
+  {
+    if(First.run=='YES')
+    {
+      handle.duplis=handl_OneDrive("Data/Catch and Effort")
+      Duplis=Data.monthly%>%
+        filter(Dupli%in%Dups)%>%
+        arrange(Dupli)%>%
+        dplyr::select(FinancialYear, Year, Month,VesselRegistration,FishingMethod,CAESBlock,
+                      LiveWeight,LandedCondition,RSSpeciesCommonName,RSSpeciesCode)
+      write.csv(Duplis,file=paste(handle.duplis,"/Duplis_monlthly.csv",sep=""),row.names=F)
+      send.email(TO=Email.data.checks,
+                 CC=Email.data.checks2,
+                 BCC=Email.FishCube,
+                 Subject=paste("Duplicated records in monthly returns",Sys.time(),sep=' _ '),
+                 Body= "Hi,
+              I've attached a spredsheet with duplicated records
+              (i.e. same FinancialYear, Month, VesselRegistration, FishingMethod, CAESBlock, LiveWeight, LandedCondition, RSSpeciesCommonName).
+              Could you please have a look?
+              Cheers
+              Matias",  
+                 Attachment=paste(handle.duplis,"/Duplis_monlthly.csv",sep="")) 
+    }
+    Data.monthly=Data.monthly%>%
+              distinct(Dupli,.keep_all = T)
+  }
+  rm(Dups)
+  Data.monthly=Data.monthly%>%
+        dplyr::select(-Dupli)
+  
   rename.monthly=SQL.data.mapping_monthly$OLD
   names(rename.monthly)=SQL.data.mapping_monthly$NEW
   rename.monthly=subset(rename.monthly,!is.na(names(rename.monthly)))
@@ -9105,12 +9176,12 @@ Exprt.list=list(
                           dplyr::select(-crap.ef[1:length(crap.ef)]),
       Mesh.monthly=Mesh.monthly,
       Mesh.size=Mesh.size,
-      Data.current.Sofar=Data.current.Sofar,
+      Data.current.Sofar=Data.current.Sofar, 
       Suite=data.frame(Suite=Suite),
       LL.equiv.Eff.days.zone=LL.equiv.Eff.days.zone,
       Equivalent.LL_to_GN_South=LL.to.GN.South,
       Equivalent.LL_to_GN_North=LL.to.GN.North,
-      Data.monthly=Data.monthly[,-fn.crap(crap,names(Data.monthly))],
+      Data.monthly=Data.monthly[,-fn.crap(crap,names(Data.monthly))],    
       Data.monthly.north=Data.monthly.north[,-fn.crap(crap,names(Data.monthly.north))],
       Data.monthly.GN=Data.monthly.GN[,-fn.crap(crap,names(Data.monthly.GN))],
       Data.monthly.LL=Data.monthly.LL[,-fn.crap(crap,names(Data.monthly.LL))],
