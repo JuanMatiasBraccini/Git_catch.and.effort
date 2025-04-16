@@ -369,7 +369,7 @@ Gummy.range=c(116,129)
 
 
 
-# Remove incomplete last year & aggregate weights-----------------------------------------------------------------------
+# Remove duplicates and incomplete last year & aggregate weights-----------------------------------------------------------------------
 Tab.incomplit=table(Data.daily.GN$FINYEAR,Data.daily.GN$MONTH)
 Tab.incomplit[Tab.incomplit>0]=1
 Incomplete.year=names(which(rowSums(Tab.incomplit)<12))
@@ -1166,9 +1166,13 @@ Data.monthly.GN=Data.monthly.GN%>%
 
 # REMOVE DAILY RECORDS FROM MONTHLY EFFORT-----------------------------------------------------------------------
 Effort.monthly=Effort.monthly%>%
+                filter(FINYEAR%in%unique(Data.monthly.GN$FINYEAR))
+Eff=Eff%>%
+  filter(FINYEAR%in%unique(Data.monthly.GN$FINYEAR))
+Eff.daily=Eff.daily%>%
   filter(FINYEAR%in%unique(Data.monthly.GN$FINYEAR))
 # CREATE SPECIES DATA SETS FOR STANDARDISATIONS ----------------------------------------------
-fn.cpue.data=function(Dat,EffrrT,sp)
+fn.cpue.data=function(Dat,EffrrT,sp)  #ACA
 {
   TAB=with(subset(Dat,SPECIES%in%sp),unique(YEAR.c))
   if(length(TAB)>=N.keep)
