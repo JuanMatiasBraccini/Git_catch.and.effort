@@ -1227,7 +1227,7 @@ Species.catch.ranking=function(d,TITL)
   return(p)
   
 }
-FitStephensMacCallModel = function(smdat, species_ids, indspecies_ids,indspecies_names, use_model=1, refit_sig=FALSE, sigval=0.05)
+FitStephensMacCallModel = function(smdat, species_ids, indspecies_ids,indspecies_names, use_model=MODL, refit_sig=FALSE, sigval=0.05)
 {
   smdat$zone=factor(smdat$zone)
   zones = levels(smdat$zone)
@@ -1346,8 +1346,10 @@ FitStephensMacCallModel = function(smdat, species_ids, indspecies_ids,indspecies
     as.data.frame
   modfit = modfit %>%
     left_join(lookuptable, by = join_by(RSSpeciesId)) %>%
-    mutate(zone = factor(zone, levels=zones)) %>%
-    arrange(zone, Estimate)
+   # mutate(zone = factor(zone, levels=zones)) %>%
+    arrange(zone, Estimate)%>%
+    mutate(zone=ifelse(is.na(zone),"Zones combined",zone),
+           RSSpeciesCommonName=ifelse(is.na(RSSpeciesCommonName),'noncollocated',RSSpeciesCommonName))
   order_names = unique(modfit$RSSpeciesCommonName)
   order_ids = unique(modfit$RSSpeciesId)
   modfit$RSSpeciesId = factor(modfit$RSSpeciesId, levels=order_ids)
@@ -1355,25 +1357,20 @@ FitStephensMacCallModel = function(smdat, species_ids, indspecies_ids,indspecies
   modfit$sig = ifelse(modfit$pvalue<sigval, "sig", "nonsig")
   
   
-  ## now compute pedictions and find critical value
+  ## now compute predictions and find critical value
   smdat$Pred = predict(mod1, type="response")
-  
   minprob = floor(quantile(smdat$Pred, 0.005) * 10) / 10
   maxprob = ceiling(quantile(smdat$Pred, 0.995) * 10) / 10
   output = data.frame(critval = seq(minprob, maxprob, 0.01),
                       diff = NA)
-  
-
   spidcolnum = which(names(smdat)==paste0("ind", species_ids))
   for (critval in output$critval){
     smdat$pred_presence = ifelse(smdat$Pred >= critval, 1, 0)
     output$diff[match(critval, output$critval)] = abs(sum(smdat[, spidcolnum]) - sum(smdat$pred_presence))
   }
   smdat$pred_presence = NULL
-  
   critical_value = output$critval[which.min(output$diff)]
   critical_diff = output$diff[which.min(output$diff)]
-  
   smdat$critval = critical_value
   smdat$TargetSM = ifelse(smdat$Pred >= critical_value, 1, 0)
 
@@ -1385,53 +1382,153 @@ FitStephensMacCallModel = function(smdat, species_ids, indspecies_ids,indspecies
               difftable = output,
               data = smdat))
 }
-
-wrapper.Stephens.McCall=function(d,target,minlocs=10)
+PlotStephensMacCallModel = function(smfit)
 {
-  options(scipen=999)
-  #Create species matrix
-  d_multi=d%>%dplyr::select(-c(SNAME))%>%spread(SPECIES,LIVEWT.c,fill=0)
+  modfit = smfit$modfit
+  ## Extract significant variables -----
+  sigfit = modfit %>%
+    filter(sig=="sig")
+  id_levels = unique(sigfit$RSSpeciesId)
+  name_levels = unique(sigfit$RSSpeciesCommonName)
+  sigfit$RSSpeciesCommonName = factor(sigfit$RSSpeciesCommonName, levels=name_levels)
+  sigfit$RSSpeciesId = factor(sigfit$RSSpeciesId, levels=id_levels)
+  if (smfit$use_model==2) sigfit$zone = factor(sigfit$zone, levels=unique(modfit$zone))
   
-  #Define co-located species and non-co-located species
-  id.sp=match(sort(unique(d$SPECIES)),names(d_multi))
-  bindata=d_multi[,id.sp]/d_multi[,id.sp]
-  bindata[is.na(bindata)] = 0
-  species_bincolnum = match(target, names(bindata))
-  sp_colocation = colSums(bindata[, species_bincolnum] * bindata) ## check how many events contain catches of target + species
-  
-  out_table = data.frame(RSSpeciesId = as.numeric(names(sp_colocation)),
-                         nlocs = unname(sp_colocation)) %>%
-    arrange(desc(nlocs))
-  
-  ## check for non-co-located species
-  noncollocated_speciesids = out_table$RSSpeciesId[which(out_table$nlocs<minlocs)]
-  noncollocated = noncollocated_speciesids
-  
-  #Set all non-co-located species to the same
-  if (length(noncollocated)>=1)
-  {
-    dcols = which(names(d_multi)%in%noncollocated)
-    if (length(dcols)>1)
-    {
-      d_multi$'99'  = rowSums(d_multi[, dcols])
-    } else
-    {
-      d_multi$'99'=d_multi[, dcols]
-    }
-    bindata$'99' = d_multi$'99' / d_multi$'99'
-    bindata$'99'[is.na(bindata$'99')] = 0
-    d_multi=d_multi[,-dcols]
-    bindata=bindata[,-which(names(bindata)%in%noncollocated)]
-  }
-  indspecies_names=d%>%distinct(SPECIES,SNAME)
-  indspecies_names=indspecies_names[match(names(bindata),indspecies_names$SPECIES),]$SNAME
-  names(bindata) = paste0("ind", names(bindata))
-  indspecies_ids=names(bindata)
+  p_all_RSSpeciesId = ggplot(modfit, aes(Estimate, RSSpeciesId, fill=sig)) +
+                      geom_col(width = 0.6) +
+                      scale_fill_manual(values=c(4,2)) +
+                      geom_vline(xintercept = 0, lty=2) +
+                      facet_grid(.~zone, scale="free_x") +
+                      labs(fill="Sig.")
+  p_all_RSSpeciesCommonName = ggplot(modfit, aes(Estimate, RSSpeciesCommonName, fill=sig)) +
+                              geom_col(width = 0.6) +
+                              scale_fill_manual(values=c(4,2)) +
+                              geom_vline(xintercept = 0, lty=2) +
+                              facet_grid(.~zone, scale="free_x") +
+                              labs(fill="Sig.")
+  p_sig_RSSpeciesId = ggplot(sigfit, aes(Estimate, RSSpeciesId)) +
+                      geom_col(fill = 2, width = 0.6) +
+                      geom_vline(xintercept = 0, lty=2) +
+                      facet_grid(.~zone)
+  p_sig_RSSpeciesCommonName = ggplot(sigfit, aes(Estimate, RSSpeciesCommonName)) +
+                              geom_col(fill = 2, width = 0.6) +
+                              geom_vline(xintercept = 0, lty=2) +
+                              facet_grid(.~zone)
+
+  return(list(p_all_RSSpeciesId=p_all_RSSpeciesId,
+              p_all_RSSpeciesCommonName=p_all_RSSpeciesCommonName,
+              p_sig_RSSpeciesId=p_sig_RSSpeciesId,
+              p_sig_RSSpeciesCommonName=p_sig_RSSpeciesCommonName))
+}
+PlotStephensMacCallCriticalValues = function(smfit, species_ids, species_names)
+{
+  smdat = smfit$data
+
+  ymax1 = max(smfit$difftable["diff"], na.rm=TRUE)
+  gg1 = ggplot(smfit$difftable, aes(critval, diff)) +
+    geom_line() +
+    geom_point(x=smfit$critical["critical_value"], 
+               y=smfit$critical["critical_diff"], col=2, size=3) +
+    geom_label(x=smfit$critical["critical_value"], 
+               y=smfit$critical["critical_diff"] + 0.1*ymax1, 
+               label=smfit$critical["critical_value"], col=2) +
+    theme_bw() +
+    labs(title = paste0("Critical value (", species_names,")"),
+         x="Probability", y="Events: abs(obs-pred)",
+         subtitle = paste0("The critical probability at which the difference between the\nobserved and expected number of events encountering the\nspecies is minimised."))
   
 
-  #fit binomial model
-  options(scipen=0)
-  test=FitStephensMacCallModel(smdat=cbind(zone=d_multi$zone,bindata), species_ids=target, indspecies_ids,indspecies_names)
+  gg2 = ggplot(smdat, aes(Pred, fill=factor(TargetSM))) +
+    geom_histogram(breaks=seq(0, 1, 0.05), col=1, show.legend=FALSE) +
+    theme_bw() +
+    labs(title = paste0("Predicted probabilities for presence of ", species_names,""),
+         subtitle = "Blue shading indicates selected records for calculating CPUE index.",
+         x="Probability", y="Frequency")
+  
+  gg3 = ggplot(smdat, aes(FishingSeason, Proportion, group=interaction(FishingSeason, TargetSM), fill=factor(TargetSM))) +
+    geom_boxplot(show.legend = FALSE) +
+    theme_bw() +
+    scale_x_continuous(breaks=seq(2006, 2024, 2)) +
+    labs(title = paste0("Proportion of ", species_names),
+         x="Fishing Season", y="Proportion",
+         subtitle = paste0("Critical value of predicted probability (Stephens-MacCall) is ", smfit$critical["critical_value"] ,".\nBlue shading indicates selected records for calculating CPUE index."),
+         fill="Target")
+  
+
+  gg4 = ggplot(smdat, aes(FishingSeason, CPUE, group=interaction(FishingSeason, TargetSM), fill=factor(TargetSM))) +
+    geom_boxplot(show.legend = FALSE) +
+    theme_bw() +
+    scale_x_continuous(breaks=seq(2006, 2024, 2)) +
+    labs(title = paste0("CPUE of ", species_names),
+         x="Fishing Season", y="CPUE",
+         subtitle = paste0("Critical value of predicted probability (Stephens-MacCall) is ", smfit$critical["critical_value"] ,".\nBlue shading indicates selected records for calculating CPUE index."),
+         fill="Target")
+  
+  ylim1 = boxplot.stats(smdat$CPUE)$stats[c(1, 5)] # compute lower and upper whiskers
+  gg5 = gg4 + coord_cartesian(ylim = ylim1*1.05)# scale y limits based on ylim1
+  
+  
+  
+  return(list(gg1=gg1,gg2=gg2,gg3=gg3,gg4=gg4,gg5=gg5))
+}
+PlotStephensMacCallTarget.vs.All_cpue=function(smfit, species_names)
+{
+  smdata = smfit$data
+  
+  nomcpueALL = smdata %>%
+    group_by(FishingSeason) %>%
+    summarise(n = length(CPUE),
+              m = length(CPUE[CPUE>0]),
+              mean.lognz = mean(log(CPUE[CPUE>0])),
+              sd.lognz = sd(log(CPUE[CPUE>0]))) %>%
+    mutate(p.nz = m/n,
+           theta = log(p.nz)+mean.lognz+sd.lognz^2/2,
+           c = (1-p.nz)^(n-1),
+           d = 1+(n-1)*p.nz,
+           vartheta = ((d-c)*(1-c*d)-m*(1-c)^2)/(m*(1-c*d)^2)+
+             sd.lognz^2/m+sd.lognz^4/(2*(m+1)),
+           mean = exp(theta),
+           lowCL = exp(theta - 1.96*sqrt(vartheta)),
+           uppCL = exp(theta + 1.96*sqrt(vartheta))) %>%
+    mutate(Group = "All") %>%
+    as.data.frame
+  
+  nomcpueTARG = smdata %>%
+    filter(TargetSM==1) %>%
+    group_by(FishingSeason) %>%
+    summarise(n = length(CPUE),
+              m = length(CPUE[CPUE>0]),
+              mean.lognz = mean(log(CPUE[CPUE>0])),
+              sd.lognz = sd(log(CPUE[CPUE>0]))) %>%
+    mutate(p.nz = m/n,
+           theta = log(p.nz)+mean.lognz+sd.lognz^2/2,
+           c = (1-p.nz)^(n-1),
+           d = 1+(n-1)*p.nz,
+           vartheta = ((d-c)*(1-c*d)-m*(1-c)^2)/(m*(1-c*d)^2)+
+             sd.lognz^2/m+sd.lognz^4/(2*(m+1)),
+           mean = exp(theta),
+           lowCL = exp(theta - 1.96*sqrt(vartheta)),
+           uppCL = exp(theta + 1.96*sqrt(vartheta))) %>%
+    mutate(Group = "Target") %>%
+    as.data.frame
+  
+  nomcpue = nomcpueALL %>%
+    full_join(nomcpueTARG)
+  
+  p=ggplot(nomcpue, aes(FishingSeason, mean, ymin=lowCL, ymax=uppCL, col=Group)) +
+    geom_errorbar(width=0, linewidth=1, position=position_dodge(width=0.3)) +
+    geom_line(lty=2, position=position_dodge(width=0.3)) +
+    geom_point(shape=21, fill="white", position=position_dodge(width=0.3), size=2) +
+    theme_bw() +
+    theme(legend.position.inside=c(0.1, 0.85),
+          legend.title = element_blank()) +
+    scale_color_manual(values=c(8, 2)) +
+    scale_x_continuous(breaks=seq(2008, 2024, 2), expand = c(0.01, 0.01)) +
+    expand_limits(x=c(2008, 2024)) +
+    labs(title = paste0("Nominal CPUE of ", species_names),
+         x="Fishing Season", y="CPUE",
+         subtitle = paste0("Deltalognormal distribution"))
+  return(p)
 }
 
   #cluster
