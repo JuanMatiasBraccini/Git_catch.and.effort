@@ -202,6 +202,9 @@ Use.Tweedie=TRUE
 Use.Delta=FALSE
 Use.Qualif.level=FALSE
 
+#Control if doing Stephens and McCall
+do_Stephens_McCall="YES"
+
 #Control if doing cluster analysis of daily data
 do_cluster="YES"
 
@@ -1723,19 +1726,13 @@ if(do_Stephens_McCall=="YES")
 {
   dir_plots=paste0(HndL.Species_targeting,'Stephens_McCall')
   
-  #1. Plot catch by year for each species
-  Species.catch.ranking(d=Data.monthly.GN,TITL="Catch by year")
-  ggsave(handl_OneDrive(paste0("Analyses/Catch and effort/Outputs/Top caught species_montly.tiff")),
-         width = 6,height = 6,compression = "lzw")
-  
-  Species.catch.ranking(d=Data.daily.GN,TITL="Catch by year")
-  ggsave(handl_OneDrive(paste0("Analyses/Catch and effort/Outputs/Top caught species_daily.tiff")),
-         width = 6,height = 12,compression = "lzw")
-  
-  #2. Catch of target vs catch of others
+  #1. Catch of target vs catch of others
   minlocs.vec=rep(NA,length(SP.list))
   for( i in 1:length(SP.list))
   {
+    output_dir=paste0(dir_plots,'/',names(SpiSis[i]))
+    if(!dir.exists(output_dir)) dir.create(output_dir)
+    print(paste('Catch of target vs catch of others for ----',names(SpiSis[i])))
     d=left_join(Data.daily.GN%>%
                   filter(Same.return.SNo%in%unique(DATA.list.LIVEWT.c.daily[[i]]$Same.return.SNo))%>%
                   dplyr::select(Same.return.SNo,zone,LIVEWT.c,SPECIES,SNAME),
@@ -1750,12 +1747,33 @@ if(do_Stephens_McCall=="YES")
       arrange(-n)%>%
       mutate(Cumsum=cumsum(n),
              Percent=Cumsum/sum(n))%>%
-      filter(Percent<=0.9)
+      mutate(id = row_number())
+    Tab%>%
+      ggplot(aes(id,Percent))+
+      geom_point(alpha=0.35,size=3.5,color='orange')+
+      xlab('Number of species')+ylab('Proportion of catch (by number)')+
+      geom_text(data=Tab%>%filter(abs(Percent - 0.9) == min(abs(Percent - 0.9))),
+                aes(id,Percent,label=paste0(round(100*Percent),'%, ',id,
+                                            ' species, minimum of ',n,' co-occurrences')), hjust = 0,color='black')+
+      geom_text(data=Tab%>%filter(abs(Percent - 0.95) == min(abs(Percent - 0.95))),
+                aes(id,Percent,label=paste0(round(100*Percent),'%, ',id,
+                                            ' species, minimum of ',n,' co-occurrences')), hjust = 0,color='black')+
+      geom_text(data=Tab%>%filter(abs(Percent - 0.99) == min(abs(Percent - 0.99))),
+                aes(id,Percent,label=paste0(round(100*Percent),'%, ',id,
+                                            ' species, minimum of ',n,' co-occurrences')), hjust = 0,color='black')+
+      theme_PA()
+    ggsave(paste0(output_dir,"/Cumulative catch.tiff"),width = 6, height = 6,compression="lzw")
+    
+    Tab=Tab%>%
+      filter(Percent<=0.99)
     minlocs.vec[i]=min(Tab$n)
     
     d1=d%>%
       filter(SPECIES%in%Tab$SPECIES)%>%
-      mutate(CPUE=LIVEWT.c/Km.Gillnet.Hours.c,
+      mutate(SNAME=case_when(SNAME=='Triggerfishes & Leatherjackets'~'Leatherjackets',
+                             SNAME=='Temperate Basses & Rockcods'~'Rockcods',
+                             TRUE~SNAME),
+             CPUE=LIVEWT.c/Km.Gillnet.Hours.c,
              SP.ID=ifelse(SPECIES==SP.list[[i]],'Target',SNAME))%>%
       dplyr::select(CPUE,SP.ID,Same.return.SNo)%>%
       mutate(SP.ID=str_replace_all(SP.ID," ","_"))%>%
@@ -1768,152 +1786,186 @@ if(do_Stephens_McCall=="YES")
     for(dd in 1:length(dis.sp))
     {
       plot.list[[dd]]=d1[,c('Target',dis.sp[dd])]%>%
-                          ggplot(aes_string(x='Target', y=dis.sp[dd]) ) +
-                          geom_bin2d(bins = 70) +scale_fill_continuous(type = "viridis") +
-                          theme_bw()
+        ggplot(aes_string(x='Target', y=dis.sp[dd]) ) +
+        geom_bin2d(bins = 70) +scale_fill_continuous(type = "viridis") +
+        theme_PA()
     }
     n.plts=n2mfrow(length(plot.list))
     multi.page <-ggarrange(plotlist=plot.list, nrow=n.plts[1],ncol = n.plts[2])
-    output_dir=paste0(dir_plots,'/',names(SpiSis[i]))
-    if(!dir.exists(output_dir)) dir.create(output_dir)
     ggsave(multi.page, filename = paste0(output_dir,"/Density.tiff"),width = 15, height = 15,compression="lzw")
     
   }
+  use.all.species=TRUE
+  if(use.all.species) minlocs.vec=rep(1,length(minlocs.vec))  #better contrasts (1 and 0s) with all species
+  #2. Plot catch by year for each species and extract relevant species
+  # Species.catch.ranking(d=Data.monthly.GN,TITL="Catch by year")
+  # ggsave(handl_OneDrive(paste0("Analyses/Catch and effort/Outputs/Top caught species_montly.tiff")),
+  #        width = 6,height = 6,compression = "lzw")
+  Kept.species.Steph.Mac=vector('list',length(SP.list))
+  names(Kept.species.Steph.Mac)=names(SP.list)
+  for( i in 1:length(SP.list))
+  {
+    target.name=names(SP.list)[i]
+    output_dir=paste(dir_plots,target.name,sep='/')
+    print(paste('Catch by year and non-collocated species for ----',target.name))
+    Kept.species.Steph.Mac[[i]]=Species.catch.ranking(d=Data.daily.GN%>%
+                                                          filter(Same.return.SNo%in%unique(DATA.list.LIVEWT.c.daily[[i]]$Same.return.SNo)),
+                                                      TITL="Catch by year",
+                                                      min.avrg.catch=1,
+                                                      minyears=10,
+                                                      minlocs=minlocs.vec[i],
+                                                      target=SP.list[[i]])
+    print(Kept.species.Steph.Mac[[i]]$p)
+    ggsave(paste0(output_dir,"/Top caught species.tiff"),width = 6,height = 12,compression = "lzw")
+  }
 
   #3. Run Stephens and McCall
-  tested.modls=c(1,2)
+  tested.modls=c(1,2) #mod 2 is region interactions
   Stephens.McCall=vector('list',length(tested.modls))
   names(Stephens.McCall)=paste("Model",tested.modls,sep='_')
-  for(m in 1:length(tested.modls))
+  system.time({for(m in 1:length(tested.modls))
   {
     MODL=tested.modls[m]
     Dummy=SP.list
     for( i in 1:length(SP.list))
     {
-      #Get inputs
-      minlocs=minlocs.vec[i] #10  #minimum number of co-occurrences for species to be considered
-      d=Data.daily.GN%>%
-        filter(Same.return.SNo%in%unique(DATA.list.LIVEWT.c.daily[[i]]$Same.return.SNo))%>%
-        dplyr::select(Same.return.SNo,zone,LIVEWT.c,SPECIES,SNAME)
-      EffrT=Effort.daily%>%
-        filter(Same.return.SNo%in%unique(DATA.list.LIVEWT.c.daily[[i]]$Same.return.SNo))%>%
-        mutate(FishingSeason=as.numeric(substr(finyear,1,4)))%>%
-        distinct(Same.return.SNo,Km.Gillnet.Hours.c,FishingSeason)
       target=SP.list[[i]]
-      
-      #Create species matrix
-      options(scipen=999)
-      d_multi=d%>%dplyr::select(-c(SNAME))%>%spread(SPECIES,LIVEWT.c,fill=0)
-      
-      #Define co-located species and non-co-located species
-      id.sp=match(sort(unique(d$SPECIES)),names(d_multi))
-      bindata=d_multi[,id.sp]/d_multi[,id.sp]
-      bindata[is.na(bindata)] = 0
-      species_bincolnum = match(target, names(bindata))
-      sp_colocation = colSums(bindata[, species_bincolnum] * bindata) ## check how many events contain catches of target + species
-      
-      out_table = data.frame(RSSpeciesId = as.numeric(names(sp_colocation)),
-                             nlocs = unname(sp_colocation)) %>%
-        arrange(desc(nlocs))
-      
-      ## check for non-co-located species
-      noncollocated_speciesids = out_table$RSSpeciesId[which(out_table$nlocs<minlocs)]
-      noncollocated = noncollocated_speciesids
-      
-      #Set all non-co-located species to the same
-      if (length(noncollocated)>=1)
+      if(MODL==1 | target%in%unlist(SP.list[Tar.sp]))
       {
-        dcols = which(names(d_multi)%in%noncollocated)
-        if (length(dcols)>1)
-        {
-          d_multi$'99'  = rowSums(d_multi[, dcols])
-        } else
-        {
-          d_multi$'99'=d_multi[, dcols]
-        }
-        bindata$'99' = d_multi$'99' / d_multi$'99'
-        bindata$'99'[is.na(bindata$'99')] = 0
-        d_multi=d_multi[,-dcols]
-        bindata=bindata[,-which(names(bindata)%in%noncollocated)]
-      }
-      indspecies_names=d%>%distinct(SPECIES,SNAME)
-      indspecies_names=indspecies_names[match(names(bindata),indspecies_names$SPECIES),]$SNAME
-      names(bindata) = paste0("ind", names(bindata))
-      indspecies_ids=names(bindata)
-      
-      aidi=match(paste0('ind',target),indspecies_ids)
-      target.name=indspecies_names[aidi]
-      
-      print(paste('Stephen & McCall ------',target.name,'---model',MODL))
-      
-      output_dir=paste(dir_plots,target.name,sep='/')
-      indspecies_ids=indspecies_ids[-aidi]
-      indspecies_names=indspecies_names[-aidi]
-      
-      #combine effort, catch and bidata
-      dat.comb=d_multi
-      iidd=match(names(bindata),paste0("ind", names(dat.comb)))
-      names(dat.comb)[iidd]=paste0('a_',names(dat.comb)[iidd])
-      dat.comb$Catch=dat.comb[,match(paste0('a_',target),names(dat.comb))]
-      dat.comb$Proportion=dat.comb$Catch/(rowSums(dat.comb[,iidd]))
-      dat.comb=cbind(dat.comb,bindata)%>%
-        left_join(EffrT%>%rename(Effort=Km.Gillnet.Hours.c),by='Same.return.SNo')%>%
-        mutate(CPUE=Catch/Effort)
-      
-      #fit binomial model
-      options(scipen=0)
-      smfit=FitStephensMacCallModel(smdat=dat.comb, species_ids=target, indspecies_ids,indspecies_names,use_model=MODL)
-      
-      #plot model
-      plot_width = 20;  plot_height = 20
-      Plots=PlotStephensMacCallModel(smfit)
-      names(Plots)=c('coefs.All_id','coefs.All_name','coefs.Sig_id','coefs.Sig_name')
-      for(p in 1:length(Plots))
-      {
-        print(Plots[[p]])
-        plot_name = paste0("filtermodel_", smfit$use_model, "_",names(Plots)[p],".png")
-        ggsave(paste(output_dir, plot_name, sep="/"),width = plot_width, height = plot_height, scale=1, units = "cm")
-      }
-       
- 
-      #plot critical values
-      Plots=PlotStephensMacCallCriticalValues(smfit, species_ids=target, species_names=target.name) 
-      plot_width = 17; plot_height = 10
-      names(Plots)=c('critical_values','predicted_probs','selected_proportions','selected_cpue','selected_cpue_without outliers')
-      for(p in 1:length(Plots))
-      {
-        print(Plots[[p]])
-        plot_name = paste0("filtermodel_", smfit$use_model, "_",names(Plots)[p],".png")
-        ggsave(paste(output_dir, plot_name, sep="/"),width = plot_width, height = plot_height, scale=1, units = "cm")
-      }
-      
-      #plot all cpue vs target cpue using delta lognormal
-      Plots=PlotStephensMacCallTarget.vs.All_cpue(smfit, species_names=target.name)
-      print(Plots)
-      plot_name = paste0("filtermodel_", smfit$use_model, "_Delta_lognormal_cpue_All.vs.Taget.png")
-      ggsave(paste(output_dir, plot_name, sep="/"),width = plot_width, height = plot_height, scale=1, units = "cm")
-      
-      #plot cpue vs pred prob
-      p1=smfit$data%>%
-        mutate(TargetSM=as.character(TargetSM))%>%
-        ggplot(aes(CPUE,Pred,color = TargetSM))+
-        geom_point()+
-        coord_cartesian(xlim = c(0,quantile(smfit$data$CPUE,probs=0.95)))
-      print(p1)
-      ggsave(paste(output_dir, "CPUE vs pred prob.png", sep="/"),width = plot_width, height = plot_height, scale=1, units = "cm")
+        #Get inputs 
+        #minlocs=minlocs.vec[i] #10  #minimum number of co-occurrences for species to be considered
+        d=Data.daily.GN%>%
+          filter(Same.return.SNo%in%unique(DATA.list.LIVEWT.c.daily[[i]]$Same.return.SNo))%>%
+          dplyr::select(Same.return.SNo,zone,LIVEWT.c,SPECIES,SNAME)
+        EffrT=Effort.daily%>%
+          filter(Same.return.SNo%in%unique(DATA.list.LIVEWT.c.daily[[i]]$Same.return.SNo))%>%
+          mutate(FishingSeason=as.numeric(substr(finyear,1,4)))%>%
+          distinct(Same.return.SNo,Km.Gillnet.Hours.c,FishingSeason)
         
-      #Store predictions
-      Dummy[[i]]=smfit$data%>%
-                    dplyr::select(Same.return.SNo,Pred,TargetSM)%>%
-                    rename(Step.MCal_pred=Pred,
-                           Step.MCal_use.record=TargetSM)
-                  
-      rm(smfit,Plots,indspecies_ids,indspecies_names,d_multi,bindata,out_table,
-         noncollocated,noncollocated_speciesids,dat.comb,id.sp,species_bincolnum,sp_colocation)
-    }
+        
+        #Set all non-co-located species to the same
+        noncollocated=Kept.species.Steph.Mac[[i]]$noncollocated
+        d_multi=Kept.species.Steph.Mac[[i]]$d_multi
+        bindata=Kept.species.Steph.Mac[[i]]$bindata
+        if (length(noncollocated)>=1)
+        {
+          dcols = which(names(d_multi)%in%noncollocated)
+          if (length(dcols)>1)
+          {
+            d_multi$'99'  = rowSums(d_multi[, dcols])
+          } else
+          {
+            d_multi$'99'=d_multi[, dcols]
+          }
+          bindata$'99' = d_multi$'99' / d_multi$'99'
+          bindata$'99'[is.na(bindata$'99')] = 0
+          d_multi=d_multi[,-dcols]
+          bindata=bindata[,-which(names(bindata)%in%noncollocated)]
+        }
+        indspecies_names=d%>%distinct(SPECIES,SNAME)
+        indspecies_names=indspecies_names[match(names(bindata),indspecies_names$SPECIES),]$SNAME
+        names(bindata) = paste0("ind", names(bindata))
+        indspecies_ids=names(bindata)
+        
+        aidi=match(paste0('ind',target),indspecies_ids)
+        target.name=indspecies_names[aidi]
+        
+        print(paste('Apply Stephen & McCall method to------',target.name,'---model',MODL))
+        
+        output_dir=paste(dir_plots,target.name,sep='/')
+        indspecies_ids=indspecies_ids[-aidi]
+        indspecies_names=indspecies_names[-aidi]
+        
+        #combine effort, catch and bidata
+        dat.comb=d_multi
+        iidd=match(names(bindata),paste0("ind", names(dat.comb)))
+        names(dat.comb)[iidd]=paste0('a_',names(dat.comb)[iidd])
+        dat.comb$Catch=dat.comb[,match(paste0('a_',target),names(dat.comb))]
+        dat.comb$Proportion=dat.comb$Catch/(rowSums(dat.comb[,iidd]))
+        dat.comb=cbind(dat.comb,bindata)%>%
+          left_join(EffrT%>%rename(Effort=Km.Gillnet.Hours.c),by='Same.return.SNo')%>%
+          mutate(CPUE=Catch/Effort)
+        
+        #fit binomial model
+        options(scipen=0)
+        smfit=FitStephensMacCallModel(smdat=dat.comb, species_ids=target, indspecies_ids,indspecies_names,use_model=MODL)
+        
+        #plot model
+        plot_width = 20;  plot_height = 20
+        Plots=PlotStephensMacCallModel(smfit)
+        names(Plots)=c('coefs.All_id','coefs.All_name','coefs.Sig_id','coefs.Sig_name')
+        for(p in 1:length(Plots))
+        {
+          print(Plots[[p]])
+          plot_name = paste0("filtermodel_", smfit$use_model, "_",names(Plots)[p],".png")
+          ggsave(paste(output_dir, plot_name, sep="/"),width = plot_width, height = plot_height, scale=1, units = "cm")
+        }
+        
+        #plot critical values
+        Plots=PlotStephensMacCallCriticalValues(smfit, species_ids=target, species_names=target.name) 
+        plot_width = 17; plot_height = 10
+        names(Plots)=c('critical_values','predicted_probs','selected_proportions','selected_cpue','selected_cpue_without outliers')
+        for(p in 1:length(Plots))
+        {
+          print(Plots[[p]])
+          plot_name = paste0("filtermodel_", smfit$use_model, "_",names(Plots)[p],".png")
+          ggsave(paste(output_dir, plot_name, sep="/"),width = plot_width, height = plot_height, scale=1, units = "cm")
+        }
+        
+        #plot all cpue vs target cpue using delta lognormal
+        Plots=PlotStephensMacCallTarget.vs.All_cpue(smfit, species_names=target.name)
+        print(Plots)
+        plot_name = paste0("filtermodel_", smfit$use_model, "_Delta_lognormal_cpue_All.vs.Taget.png")
+        ggsave(paste(output_dir, plot_name, sep="/"),width = plot_width, height = plot_height, scale=1, units = "cm")
+        
+        #plot cpue vs pred prob
+        p1=smfit$data%>%
+          mutate(TargetSM=as.character(TargetSM))%>%
+          ggplot(aes(CPUE,Pred,color = TargetSM))+
+          geom_point()+
+          coord_cartesian(xlim = c(0,quantile(smfit$data$CPUE,probs=0.95)))+
+          theme_PA()
+        print(p1)
+        plot_name = paste0("CPUE vs pred prob_model",smfit$use_model, ".png")
+        ggsave(paste(output_dir, plot_name, sep="/"),width = plot_width, height = plot_height, scale=1, units = "cm")
+        
+        
+        p1=smfit$data%>%
+          ggplot(aes(CPUE,Pred))+
+          geom_bin2d(bins = 200)+
+          coord_cartesian(xlim = c(0,quantile(smfit$data$CPUE,probs=0.95)))+
+          geom_hline(yintercept=unique(smfit$data$critval), color = "red")+
+          theme_PA()
+        print(p1)
+        plot_name = paste0("CPUE vs pred prob_model_density",smfit$use_model, ".png")
+        ggsave(paste(output_dir, plot_name, sep="/"),width = plot_width, height = plot_height, scale=1, units = "cm")
+        
+        #Store predictions
+        Dummy[[i]]=smfit$data%>%
+          dplyr::select(Same.return.SNo,Pred,TargetSM)%>%
+          rename(Step.MCal_pred=Pred,
+                 Step.MCal_use.record=TargetSM)
+        
+        rm(smfit,Plots,indspecies_ids,indspecies_names,d_multi,bindata,noncollocated,dat.comb)
+        
+      }
+     }
     Stephens.McCall[[m]]=Dummy
-  }
+  }})  #takes 326 secs
+  Selected.model=data.frame(SNAME=names(SP.list))%>%
+                  mutate(Selected.model=ifelse(SNAME%in%c('Gummy Shark','Whiskery Shark','Dusky Whaler'),'Model_2','Model_1'))
+  
+  #4. Add to cpue stand data set
+  for(m in 1:length(tested.modls))
+  {
+    for( i in 1:length(SP.list))
+    {
+      ID.mod=match(Selected.model[i,'Selected.model'],names(Stephens.McCall))
+      DATA.list.LIVEWT.c.daily[[i]]=left_join(DATA.list.LIVEWT.c.daily[[i]],
+                                              Stephens.McCall[[ID.mod]][[i]],by=c("Same.return.SNo")) 
+    }
 
+  }
 }
 
 if(do_cluster=="YES")

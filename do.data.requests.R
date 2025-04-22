@@ -1486,7 +1486,7 @@ if(do.Hammerheads=="YES")
 }
 
 #G 4.18 ABARES (James Woodhams) -------------------------------------------------------------------------
-if(do.ABARES="YES")
+if(do.ABARES=="YES")
 {
   #Catch by species and financial year for 2006-07 to 2014-15
   Abr.yrs=c("2006-07","2007-08","2008-09","2009-10","2010-11",
@@ -2251,6 +2251,9 @@ if(Check.school.shark.targeting=="YES")
   
   
   #Targeted trip since 2020-21
+  if(!"Hmisc" %in% .packages()) library(Hmisc)
+  if(!"ggrepel" %in% .packages()) library(ggrepel)
+  if(!"gridExtra" %in% .packages()) library(gridExtra)
   Min.yr=2019
   prop.school.target=0.5
   School.shots=Data.daily.original%>%

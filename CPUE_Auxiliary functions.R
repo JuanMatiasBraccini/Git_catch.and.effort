@@ -1192,19 +1192,39 @@ fn.prop.0.catch.by.fisher=function(d,explained.ktch,NM,series)
 
   #Stephens & McCall
 library(forcats)
-Species.catch.ranking=function(d,TITL)
+Species.catch.ranking=function(d,TITL,min.avrg.catch=50,minyears=5,minlocs=1,target)
 {
   d=d%>%filter(!SNAME=="Nil Fish Caught")%>%
     mutate(SNAME=case_when(SPECIES==22999~'Other sharks',
                            SPECIES==20000~'Dogfishes',
                            TRUE~SNAME))
+  #Create species matrix
+  options(scipen=999)
+  d_multi=d%>%
+    dplyr::select(Same.return.SNo,zone,LIVEWT.c,SPECIES,SNAME)%>%
+    dplyr::select(-c(SNAME))%>%spread(SPECIES,LIVEWT.c,fill=0)
+  
+  #Define co-located species and non-co-located species
+  id.sp=match(sort(unique(d$SPECIES)),names(d_multi))
+  bindata=d_multi[,id.sp]/d_multi[,id.sp]
+  bindata[is.na(bindata)] = 0
+  species_bincolnum = match(target, names(bindata))
+  sp_colocation = colSums(bindata[, species_bincolnum] * bindata) ## check how many events contain catches of target + species
+  out_table = data.frame(RSSpeciesId = as.numeric(names(sp_colocation)),
+                         nlocs = unname(sp_colocation)) %>%
+    arrange(desc(nlocs))
+  noncollocated = out_table$RSSpeciesId[which(out_table$nlocs<minlocs)]
+
   SpeciesCatch = d %>%
     group_by(SNAME, SPECIES) %>%
     summarise(Total = sum(LIVEWT.c, na.rm=TRUE)/1000,
               nYears = length(unique(FINYEAR)),
               .groups="drop") %>%
     arrange(desc(Total)) %>%
-    mutate(AverageCatch = Total / nYears) %>%
+    mutate(Select = case_when(SPECIES%in%noncollocated ~ "noncollocated",
+                              .default = "included"),
+           AverageCatch = Total / nYears,
+           Select = ifelse(AverageCatch<min.avrg.catch | nYears<minyears, "omit", Select)) %>%
     as.data.frame
   
   SpeciesAnnualCatch = d %>%
@@ -1216,15 +1236,23 @@ Species.catch.ranking=function(d,TITL)
     as.data.frame
 
   cc <- scales::seq_gradient_pal("darkturquoise", "firebrick4", "Lab")(seq(0,1,length.out=length(unique(d$FINYEAR))))
-  p=ggplot(SpeciesAnnualCatch, aes(x = fct_reorder(SNAME, AverageCatch), y = Catch, fill=factor(FishingSeason))) +
+  p=ggplot(SpeciesAnnualCatch, aes(x = fct_reorder(SNAME, Total), y = Catch, fill=factor(FishingSeason))) +
     geom_col() +
     coord_flip() + scale_fill_manual(name = "Financial year",values=cc)+
     labs(x = "Species", y = "Catch (tonnes)", title = TITL)+
-    #guides(fill=guide_legend(ncol =1))+
+    theme_PA()+
     theme(legend.position = 'right',
-    #      legend.text = element_text(size=8),
           axis.text.y = element_text(size=8))
-  return(p)
+  x_cols = as.matrix(get_guide_data(p,"y"))[,2] 
+  x_cols=data.frame(SNAME=x_cols)%>%
+          left_join(SpeciesCatch%>%dplyr::select(SNAME,Select),by="SNAME")%>%
+          mutate(Axis.col=ifelse(Select=='included','chartreuse4','grey50'))
+  
+  p=p+theme(axis.text.y = element_text(colour= x_cols$Axis.col))
+  
+ 
+  
+  return(list(p=p,dat=SpeciesCatch,noncollocated=noncollocated,d_multi=d_multi,bindata=bindata))
   
 }
 FitStephensMacCallModel = function(smdat, species_ids, indspecies_ids,indspecies_names, use_model=MODL, refit_sig=FALSE, sigval=0.05)
@@ -1512,8 +1540,8 @@ PlotStephensMacCallTarget.vs.All_cpue=function(smfit, species_names)
     mutate(Group = "Target") %>%
     as.data.frame
   
-  nomcpue = nomcpueALL %>%
-    full_join(nomcpueTARG)
+  nomcpue = suppressMessages(nomcpueALL %>%
+                               full_join(nomcpueTARG))
   
   p=ggplot(nomcpue, aes(FishingSeason, mean, ymin=lowCL, ymax=uppCL, col=Group)) +
     geom_errorbar(width=0, linewidth=1, position=position_dodge(width=0.3)) +
