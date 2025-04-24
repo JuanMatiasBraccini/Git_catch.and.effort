@@ -1727,7 +1727,7 @@ if(do_Stephens_McCall=="YES")
   dir_plots=paste0(HndL.Species_targeting,'Stephens_McCall')
   
   #1. Catch of target vs catch of others
-  minlocs.vec=rep(NA,length(SP.list))
+  minlocs.vec=rep(NA,length(SP.list)) #minimum number of co-occurrences for species to be considered
   for( i in 1:length(SP.list))
   {
     output_dir=paste0(dir_plots,'/',names(SpiSis[i]))
@@ -1796,11 +1796,9 @@ if(do_Stephens_McCall=="YES")
     
   }
   use.all.species=TRUE
-  if(use.all.species) minlocs.vec=rep(1,length(minlocs.vec))  #better contrasts (1 and 0s) with all species
+  if(use.all.species) minlocs.vec=rep(1,length(minlocs.vec))  
+  
   #2. Plot catch by year for each species and extract relevant species
-  # Species.catch.ranking(d=Data.monthly.GN,TITL="Catch by year")
-  # ggsave(handl_OneDrive(paste0("Analyses/Catch and effort/Outputs/Top caught species_montly.tiff")),
-  #        width = 6,height = 6,compression = "lzw")
   Kept.species.Steph.Mac=vector('list',length(SP.list))
   names(Kept.species.Steph.Mac)=names(SP.list)
   for( i in 1:length(SP.list))
@@ -1817,6 +1815,13 @@ if(do_Stephens_McCall=="YES")
                                                       target=SP.list[[i]])
     print(Kept.species.Steph.Mac[[i]]$p)
     ggsave(paste0(output_dir,"/Top caught species.tiff"),width = 6,height = 12,compression = "lzw")
+    
+    p=fn.prop.by.shot(NMS=Kept.species.Steph.Mac[[i]]$dat%>%distinct(SNAME,SPECIES),
+                      dd=Kept.species.Steph.Mac[[i]]$d_multi,
+                      tar=SP.list[[i]])
+    print(p)
+    ggsave(paste0(output_dir,"/Top caught species_proportions.tiff"),width = 5,height = 12,compression = "lzw")
+    
   }
 
   #3. Run Stephens and McCall
@@ -1833,7 +1838,6 @@ if(do_Stephens_McCall=="YES")
       if(MODL==1 | target%in%unlist(SP.list[Tar.sp]))
       {
         #Get inputs 
-        #minlocs=minlocs.vec[i] #10  #minimum number of co-occurrences for species to be considered
         d=Data.daily.GN%>%
           filter(Same.return.SNo%in%unique(DATA.list.LIVEWT.c.daily[[i]]$Same.return.SNo))%>%
           dplyr::select(Same.return.SNo,zone,LIVEWT.c,SPECIES,SNAME)
@@ -1937,14 +1941,24 @@ if(do_Stephens_McCall=="YES")
           geom_hline(yintercept=unique(smfit$data$critval), color = "red")+
           theme_PA()
         print(p1)
-        plot_name = paste0("CPUE vs pred prob_model_density",smfit$use_model, ".png")
+        plot_name = paste0("CPUE vs pred prob_density_model",smfit$use_model, ".png")
         ggsave(paste(output_dir, plot_name, sep="/"),width = plot_width, height = plot_height, scale=1, units = "cm")
+        
+        pps=fn.untangle(dat=smfit$data,axs=3)
+        print(pps$p1)
+        plot_name = paste0("CPUE vs pred prob_high cpue low & high probs",smfit$use_model, ".png")
+        ggsave(paste(output_dir, plot_name, sep="/"),width = 8, height = 12, scale=1, units = "cm")
+        
+        print(pps$p2)
+        plot_name = paste0("CPUE vs pred prob_low cpue low & high probs",smfit$use_model, ".png")
+        ggsave(paste(output_dir, plot_name, sep="/"),width = 8, height = 12, scale=1, units = "cm")
+        
         
         #Store predictions
         Dummy[[i]]=smfit$data%>%
           dplyr::select(Same.return.SNo,Pred,TargetSM)%>%
-          rename(Step.MCal_pred=Pred,
-                 Step.MCal_use.record=TargetSM)
+          rename(Step.MCal_target_prob=Pred,
+                 Step.MCal_target_group=TargetSM)
         
         rm(smfit,Plots,indspecies_ids,indspecies_names,d_multi,bindata,noncollocated,dat.comb)
         
@@ -1956,16 +1970,13 @@ if(do_Stephens_McCall=="YES")
                   mutate(Selected.model=ifelse(SNAME%in%c('Gummy Shark','Whiskery Shark','Dusky Whaler'),'Model_2','Model_1'))
   
   #4. Add to cpue stand data set
-  for(m in 1:length(tested.modls))
+  for( i in 1:length(SP.list))
   {
-    for( i in 1:length(SP.list))
-    {
-      ID.mod=match(Selected.model[i,'Selected.model'],names(Stephens.McCall))
-      DATA.list.LIVEWT.c.daily[[i]]=left_join(DATA.list.LIVEWT.c.daily[[i]],
-                                              Stephens.McCall[[ID.mod]][[i]],by=c("Same.return.SNo")) 
-    }
-
+    ID.mod=match(Selected.model[i,'Selected.model'],names(Stephens.McCall))
+    DATA.list.LIVEWT.c.daily[[i]]=left_join(DATA.list.LIVEWT.c.daily[[i]],
+                                            Stephens.McCall[[ID.mod]][[i]],by=c("Same.return.SNo")) 
   }
+
 }
 
 if(do_cluster=="YES")

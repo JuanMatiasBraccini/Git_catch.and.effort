@@ -1255,6 +1255,32 @@ Species.catch.ranking=function(d,TITL,min.avrg.catch=50,minyears=5,minlocs=1,tar
   return(list(p=p,dat=SpeciesCatch,noncollocated=noncollocated,d_multi=d_multi,bindata=bindata))
   
 }
+fn.prop.by.shot=function(NMS,dd,tar)
+{
+  dd1=dd%>%dplyr::select(where(is.numeric))%>%
+    mutate(Tot=rowSums(.))
+  dd1_prop <- dd1 %>%
+    mutate(across(everything()), . / Tot)%>%
+    dplyr::select(-Tot) %>%
+    gather(Species,Proportion) %>%
+    group_by(Species) %>%
+    summarise(Mean.prop=mean(Proportion),
+              SD.prop=sd(Proportion))%>%
+    ungroup()%>%
+    mutate(Species=as.numeric(Species))%>%
+    arrange(-Mean.prop)%>%
+    mutate(CL=ifelse(Species==tar,'brown','grey60'))%>%
+    left_join(NMS,by=c('Species'='SPECIES'))
+  dd1_prop$SNAME=factor(dd1_prop$SNAME,levels=rev(dd1_prop$SNAME))
+  p=dd1_prop%>%
+    ggplot(aes(SNAME,Mean.prop))+
+    geom_col(aes(fill = CL))+
+    geom_errorbar(aes(ymin = Mean.prop, ymax = Mean.prop+SD.prop,color= CL))+
+    coord_flip() +ylim(0,NA)+
+    theme_PA()+theme(legend.position = 'none')+
+    ylab('Shot mean proportion')+xlab('')
+  return(p)
+}
 FitStephensMacCallModel = function(smdat, species_ids, indspecies_ids,indspecies_names, use_model=MODL, refit_sig=FALSE, sigval=0.05)
 {
   smdat$zone=factor(smdat$zone)
@@ -1557,6 +1583,60 @@ PlotStephensMacCallTarget.vs.All_cpue=function(smfit, species_names)
          x="Fishing Season", y="CPUE",
          subtitle = paste0("Deltalognormal distribution"))
   return(p)
+}
+fn.untangle=function(dat,axs)
+{
+  dat.high.cpue=dat%>%
+    filter(CPUE>=quantile(dat$CPUE,probs=.90))%>%
+    filter(Pred>=0.975 | Pred<=0.5)%>%
+    select(starts_with("a_"),CPUE,Pred)%>%
+    gather(Species,Catch,-c(CPUE,Pred))%>%
+    mutate(Species=as.numeric(str_remove(Species,'a_')),
+           Pred=paste('Prob=',round(Pred,1)))%>%
+    filter(CPUE<quantile(dat$CPUE,probs=.95))
+  dat.low.cpue=dat%>%
+    filter(CPUE<=quantile(dat$CPUE,probs=0.15))%>%
+    filter(Pred>=0.975 | Pred<=0.1)%>%
+    select(starts_with("a_"),CPUE,Pred)%>%
+    gather(Species,Catch,-c(CPUE,Pred))%>%
+    mutate(Species=as.numeric(str_remove(Species,'a_')),
+           Pred=paste('Prob=',round(Pred,1)))
+  
+  # a=dat%>%
+  #   filter(CPUE>10 & Pred<0.5)%>%
+  #   select(starts_with("a_"),CPUE,Pred)%>%
+  #   gather(Species,Catch,-c(CPUE,Pred))%>%
+  #   mutate(Species=as.numeric(str_remove(Species,'a_')),
+  #          Pred=paste('Prob=',round(Pred,1)))
+  
+  p1=dat.high.cpue%>%
+    mutate(Species=factor(Species,levels=sort(unique(dat.high.cpue$Species))))%>%
+    ggplot(aes(Species,Catch,color=CPUE))+
+    geom_point()+
+    facet_wrap(~Pred,nrow=1)+coord_flip()+ylab('Catch of co-occurring species')+xlab('')+
+    theme_PA(lgT.siz=8,leg.siz=6,strx.siz=8,axs.t.siz=6,axs.T.siz=10)+
+    theme(legend.position = 'top',axis.text.y = element_text(size = axs))+
+    ylim(0,quantile(dat.high.cpue$Catch,probs=0.99))
+  #+ggtitle('High cpue and low and high predicted prob')
+  
+  # pa=a%>%
+  #   mutate(Species=factor(Species,levels=sort(unique(a$Species))))%>%
+  #   ggplot(aes(Species,Catch,color=CPUE))+
+  #   geom_point()+
+  #   facet_wrap(~Pred,nrow=1)+coord_flip()+ylab('Catch of co-occurring species')+xlab('')+
+  #   theme_PA()+theme(legend.position = 'top')+ggtitle('High cpue')
+  
+  p2=dat.low.cpue%>%
+    mutate(Species=factor(Species,levels=sort(unique(a$Species))))%>%
+    ggplot(aes(Species,Catch,color=CPUE))+
+    geom_point()+
+    facet_wrap(~Pred,nrow=1)+coord_flip()+ylab('Catch of co-occurring species')+xlab('')+
+    theme_PA(lgT.siz=8,leg.siz=6,strx.siz=8,axs.t.siz=6,axs.T.siz=10)+
+    theme(legend.position = 'top',axis.text.y = element_text(size = axs))+
+    ylim(0,quantile(dat.low.cpue$Catch,probs=0.99))
+  #+ggtitle('Low cpue and low and high predicted prob')
+  #
+  return(list(p1=p1,p2=p2))
 }
 
   #cluster
