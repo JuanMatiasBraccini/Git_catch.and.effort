@@ -141,8 +141,10 @@ if(Depth.range=="species_specific")
 
 #Vessel characteristics from DoF's annual survey and questionnaires
 Vessel.charac=read.csv(handl_OneDrive("Data/Fishing power/Vessel.charac.for_TDGDLF.cpue.stand.csv"))
-#from source("...Git_catch_and_effort/3.Vessel_characteristics.R")
+#extracted from source("...Git_catch_and_effort/3.Vessel_characteristics.R")
 
+#vessel monthly CFL
+Monthly_CLF_vessel=read.csv(handl_OneDrive("Data/Catch and Effort/Monthly_CLF_vessel.csv"))
 
 
 # PARAMETERS SECTION -----------------------------------------------------------------------
@@ -1104,39 +1106,97 @@ Data.daily.GN=Data.daily.GN%>%
                                MastersName%in%c('leighton matthews','l. matthews')~'matthews, leighton',
                                MastersName=='peter hughes & william ronald reay'~'reay, william ronald',
                                TRUE~MastersName))
+if(Model.run=="First") 
+{
+  Table.experience_daily=Data.daily.GN%>%
+    distinct(VESSEL,MastersName,Same.return.SNo,YEAR.c)%>%
+    group_by(VESSEL,MastersName,YEAR.c)%>%
+    tally()%>%
+    rename(n.shots=n)%>%
+    mutate(dummy=1)%>%
+    group_by(VESSEL,MastersName)%>%
+    mutate(Years.of.exp=cumsum(dummy))
+  
+  Table.experience_monthly=Data.monthly.GN%>%
+    distinct(VESSEL,Same.return,YEAR.c)%>%
+    group_by(VESSEL,YEAR.c)%>%
+    tally()%>%
+    rename(n.shots=n)%>%
+    mutate(dummy=1)%>%
+    group_by(VESSEL)%>%
+    mutate(Years.of.exp=cumsum(dummy))
+  
+  #plot it
+  Table.experience_daily%>%
+    mutate(VESSEL_MastersName=paste(VESSEL, MastersName,sep='-'))%>%
+    ggplot(aes(YEAR.c,VESSEL_MastersName))+
+    geom_point(aes(size=n.shots),color='darkred')+theme(axis.text.y = element_text(size = 6))
+  ggsave(handl_OneDrive('Analyses/Catch and effort/Outputs/Efficiency creep/Experience_daily.tiff'),
+         width = 6,height = 10, dpi = 300, compression = "lzw")
+  
+  
+  A=Table.experience_monthly%>%
+    group_by(VESSEL)%>%
+    summarise(n=sum(n.shots))%>%
+    arrange(-n)%>%
+    mutate(Cumsum=cumsum(n),
+           Per=Cumsum/sum(n))
+  
+  Table.experience_monthly=Table.experience_monthly%>%
+    filter(VESSEL%in%unique(c(A%>%filter(Per<=0.8)%>%pull(VESSEL),Table.experience_daily$VESSEL)))
+  
+  Table.experience_monthly%>%
+    ggplot(aes(YEAR.c,VESSEL))+
+    geom_point(aes(size=n.shots),color='darkred')+theme(axis.text.y = element_text(size = 6))
+  ggsave(handl_OneDrive('Analyses/Catch and effort/Outputs/Efficiency creep/Experience_monthly.tiff'),
+         width = 12,height = 10, dpi = 300, compression = "lzw")
+  
+}
 
-Table.experience_daily=Data.daily.GN%>%
-  distinct(VESSEL,MastersName,Same.return.SNo,YEAR.c)%>%
-  group_by(VESSEL,MastersName,YEAR.c)%>%
-  tally()%>%
-  rename(n.shots=n)%>%
-  mutate(dummy=1)%>%
-  group_by(VESSEL,MastersName)%>%
-  mutate(Years.of.exp=cumsum(dummy))
 
-Table.experience_monthly=Data.monthly.GN%>%
-  distinct(VESSEL,Same.return,YEAR.c)%>%
-  group_by(VESSEL,YEAR.c)%>%
-  tally()%>%
-  rename(n.shots=n)%>%
-  mutate(dummy=1)%>%
+# Extract first year of reporting by Vessel as proxy to experience
+Vessel.start.rep=Data.monthly.GN%>%
+  distinct(FINYEAR,VESSEL)%>%
+  mutate(finyear=as.numeric(substr(FINYEAR,1,4)))%>%
   group_by(VESSEL)%>%
-  mutate(Years.of.exp=cumsum(dummy))
+  mutate(Start.reporting=min(finyear))%>%
+  ungroup()%>%
+  distinct(VESSEL,Start.reporting,.keep_all = T)%>%
+  select(VESSEL,Start.reporting)
 
-Data.daily.GN=Data.daily.GN%>%
-  left_join(Table.experience_daily%>%dplyr::select(-c(n.shots,dummy)),
-            by=c('VESSEL','MastersName','YEAR.c'))
+Vessel.start.rep.daily=Data.daily.GN%>%
+  distinct(FINYEAR,VESSEL)%>%
+  mutate(finyear=as.numeric(substr(FINYEAR,1,4)))%>%
+  group_by(VESSEL)%>%
+  mutate(Start.reporting=min(finyear))%>%
+  ungroup()%>%
+  distinct(VESSEL,Start.reporting,.keep_all = T)%>%
+  select(VESSEL,Start.reporting)%>%
+  filter(!VESSEL%in%Vessel.start.rep$VESSEL)
 
-Data.monthly.GN=Data.monthly.GN%>%
-  left_join(Table.experience_monthly%>%dplyr::select(-c(n.shots,dummy)),
-            by=c('VESSEL','YEAR.c'))
-
+Vessel.start.rep=rbind(Vessel.start.rep,Vessel.start.rep.daily)
 
 # REMOVE DAILY RECORDS FROM MONTHLY EFFORT-----------------------------------------------------------------------
 Effort.monthly=Effort.monthly%>%
   filter(FINYEAR%in%unique(Data.monthly.GN$FINYEAR))
 Eff=Eff%>%
   filter(FINYEAR%in%unique(Data.monthly.GN$FINYEAR))
+
+# EFFICIENCY_ADD SKIPPER'S YEARS OF EXPERIENCE ----------------------------------------------
+#note: Vessel rego is used as proxy to skippers experience
+Data.monthly.GN=Data.monthly.GN%>%
+                  left_join(Vessel.start.rep,by='VESSEL')%>%
+                  mutate(finyear=as.numeric(substr(FINYEAR,1,4)),
+                         Yrs.of.experience=finyear-Start.reporting,
+                         Yrs.of.experience=ifelse(Yrs.of.experience==0,1,Yrs.of.experience))%>%
+                  dplyr::select(-c(Start.reporting,finyear))
+
+Data.daily.GN=Data.daily.GN%>%
+                  left_join(Vessel.start.rep,by='VESSEL')%>%
+                  mutate(finyear=as.numeric(substr(FINYEAR,1,4)),
+                         Yrs.of.experience=finyear-Start.reporting,
+                         Yrs.of.experience=ifelse(Yrs.of.experience==0,1,Yrs.of.experience))%>%
+                  dplyr::select(-c(Start.reporting,finyear))
 
 # CREATE SPECIES DATA SETS FOR STANDARDISATIONS ----------------------------------------------
 
@@ -1225,10 +1285,6 @@ for(s in nnn)
 
 
 # VESSELS & BLOCKS----------------------------------------------
-# Keep vessel characteristics from vessel survey for vessels that have fished      
-if(exists("Vessel.charac"))  Vessel.charac=subset(Vessel.charac, BOATREGO%in%
-                                                    unique(c(Data.monthly.GN$VESSEL,Data.daily.GN$VESSEL)))   
-
 Table.species.by.vessel=Data.daily.GN%>%
   filter(SPECIES%in%unlist(SP.list))%>%
   distinct(VESSEL,FINYEAR,RSCommonName)%>%
@@ -1436,6 +1492,81 @@ if(Remove.blk.by=="blk_only")
   dev.off()
 }
 
+# EFFICIENCY_ADD VESSEL CHARACTERISTICS FOR SELECTED VESSELS----------------------------------------------
+#select only vessels used for cpue stand
+Vessel.charac=Vessel.charac%>%
+  filter(BOATREGO%in%c(unique(unlist(VES.used)),unique(unlist(VES.used.daily))))
+
+#show changes thru time
+if(Model.run=="First")  
+{
+  ves.vars=names(Vessel.charac)
+  ves.vars.drop=c("BOATNAME","BOATREGO","LICYEAR","PFL","SKIPPER")
+  ves.vars=subset(ves.vars,!ves.vars%in%ves.vars.drop)
+  p.list=vector('list',length(ves.vars))
+  pdf(handl_OneDrive('Analyses/Catch and effort/Outputs/Efficiency creep/Vessel_char_hist.pdf'))
+  for(p in 1:length(p.list))
+  {
+    d=distinct(Vessel.charac, across(all_of(c('BOATNAME',ves.vars[p])))) 
+    
+    if(is.integer(d[,ves.vars[p]])|is.numeric(d[,ves.vars[p]]))
+    {
+      min.y=min(d[,ves.vars[p]],na.rm=T)-1
+      p.list[[p]]=d%>%
+        ggplot(aes_string(x="BOATNAME",y=ves.vars[p]))+
+        geom_segment( aes_string(x="BOATNAME", xend="BOATNAME", y=min.y, yend=ves.vars[p])) +
+        geom_point( size=5, color="red", fill="orange", shape=21, stroke=2)+
+        coord_flip()+ggtitle(ves.vars[p])+ylim(min.y,NA)
+    }else
+    {
+      p.list[[p]]=d%>%
+        ggplot(aes_string("BOATNAME",fill=ves.vars[p]))+
+        geom_bar()+
+        coord_flip()+ggtitle(ves.vars[p])
+    }
+    print(p.list[[p]]+theme_PA())
+  }
+  dev.off()
+}
+
+#expand Vessel.charac
+Vessel.charac=Vessel.charac%>%
+  mutate(DATEBUILT=case_when(BOATNAME=='CINDERELLA' & is.na(DATEBUILT)~1993,
+                             BOATNAME=='COSAN II' & is.na(DATEBUILT)~2004,
+                             BOATREGO=='E 061'& is.na(DATEBUILT)~2014, 
+                             TRUE~DATEBUILT))
+dis.FINYEAR=sort(c(unique(Data.monthly.GN$FINYEAR),unique(Data.daily.GN$FINYEAR)))
+dammy=Vessel.charac%>%distinct(BOATNAME,BOATREGO)
+n.dammy=nrow(dammy)
+dammy=dammy[rep(rownames(dammy),length(dis.FINYEAR)),]%>%
+      arrange(BOATNAME, BOATREGO)%>%
+      mutate(FINYEAR=rep(dis.FINYEAR,n.dammy))%>%
+  mutate(LICYEAR=as.integer(substr(FINYEAR,1,4)))
+
+Vessel.charac.exp=full_join(Vessel.charac,
+                            dammy,by=c('BOATNAME','BOATREGO','LICYEAR'))%>%
+  mutate(finyear=as.numeric(substr(FINYEAR,1,4)))%>%
+  arrange(BOATNAME,BOATREGO,finyear)%>%
+  dplyr::select(-c(PFL,SKIPPER))%>%
+  group_by(BOATNAME,BOATREGO)%>%
+  filter(finyear>=min(DATEBUILT,na.rm=T))
+  
+#fill in missing years
+Vessel.charac.exp=Vessel.charac.exp%>%
+  group_by(BOATNAME,BOATREGO)%>%
+  fill(ENGDERAT,ENGNUM,FRZCAP,DATEBUILT,FLYBRIDGE,
+       HULLCONS,HULLNUMB,HULLTYPE,WHEELHOU,
+       GPS,PLOT,COECHO,RADAR,SONAR,BWECHO, .direction = "down")%>%
+  fill(ENGPOWR,ENGSPD,BRNTNK,ICEBOX,LHTABV,LHTBLW,GROSSTON,MAXBEAM,
+       MAXDRAU,REG_LENGTH, .direction = "updown")
+       
+       
+       
+  
+#add to data.frame #ACA. Add vessel char for selected vessels....
+
+
+
 # ILLUSTRATE FOLLY EFFECT (MEAN vs SUM) AND CATCH RATE VARIABILITY---------------------------
 if(Show.folly.eg=="YES")
 {
@@ -1601,12 +1732,15 @@ if(Model.run=="First")
   }
 }
 
-# PROPORTION NO CATCH THRU TIME BY FISHER TO ID FISHING EFFICIENCY CREEP ----------------------------------------------
+# EFFICIENCY_PROPORTION ZERO CATCH THRU TIME BY FISHER TO ID FISHING EFFICIENCY CREEP ----------------------------------------------
+#note: Monthly is aggregated so low incidence of 0 catch records. Not very informative
 if(Model.run=="First")  
 {
   indis=match(c("Gummy Shark","Whiskery Shark","Dusky Whaler","Sandbar Shark"),names(DATA.list.LIVEWT.c))
   for(i in indis)
   {
+    print(paste('PROPORTION ZERO CATCH THRU TIME for ----',names(DATA.list.LIVEWT.c)[i]))
+    
     explained.ktch=0.90
     if(names(Species.list)[i]%in%c("Dusky Whaler","Whiskery Shark")) explained.ktch=0.8
     if(!is.null(DATA.list.LIVEWT.c[[i]]))
@@ -1631,11 +1765,8 @@ if(Model.run=="First")
                                 NM=names(DATA.list.LIVEWT.c.daily)[i],
                                 series='Daily')
     }
-    
   }
 }
-
-
 # CALCULATE BLOCK CORNERS FOR GAM ----------------------------------------------
 for(s in nnn)
 {
@@ -1721,7 +1852,7 @@ if(Model.run=="First")
   multi.page <-ggarrange(plotlist=plot_list, nrow = 2, ncol = 2)
   ggexport(multi.page, filename = paste(HndL.Species_targeting,"Density.pdf",sep=''))
 }
-
+#ACA
 if(do_Stephens_McCall=="YES")
 {
   dir_plots=paste0(HndL.Species_targeting,'Stephens_McCall')
@@ -1795,7 +1926,7 @@ if(do_Stephens_McCall=="YES")
     ggsave(multi.page, filename = paste0(output_dir,"/Density.tiff"),width = 15, height = 15,compression="lzw")
     
   }
-  use.all.species=TRUE
+  use.all.species=FALSE
   if(use.all.species) minlocs.vec=rep(1,length(minlocs.vec))  
   
   #2. Plot catch by year for each species and extract relevant species
@@ -1825,7 +1956,11 @@ if(do_Stephens_McCall=="YES")
   }
 
   #3. Run Stephens and McCall
+  do.this=FALSE
   tested.modls=c(1,2) #mod 2 is region interactions
+  Selected.model=data.frame(SNAME=names(SP.list))%>%
+    mutate(Selected.model=ifelse(SNAME%in%c('Gummy Shark','Whiskery Shark','Dusky Whaler'),'Model_2','Model_1'))
+  
   Stephens.McCall=vector('list',length(tested.modls))
   names(Stephens.McCall)=paste("Model",tested.modls,sep='_')
   system.time({for(m in 1:length(tested.modls))
@@ -1835,7 +1970,8 @@ if(do_Stephens_McCall=="YES")
     for( i in 1:length(SP.list))
     {
       target=SP.list[[i]]
-      if(MODL==1 | target%in%unlist(SP.list[Tar.sp]))
+      do.it=Selected.model[i,'Selected.model']
+      if(paste0('Model_',MODL)==do.it) #if(MODL==1 | target%in%unlist(SP.list[Tar.sp]))
       {
         #Get inputs 
         d=Data.daily.GN%>%
@@ -1944,14 +2080,18 @@ if(do_Stephens_McCall=="YES")
         plot_name = paste0("CPUE vs pred prob_density_model",smfit$use_model, ".png")
         ggsave(paste(output_dir, plot_name, sep="/"),width = plot_width, height = plot_height, scale=1, units = "cm")
         
-        pps=fn.untangle(dat=smfit$data,axs=3)
-        print(pps$p1)
-        plot_name = paste0("CPUE vs pred prob_high cpue low & high probs",smfit$use_model, ".png")
-        ggsave(paste(output_dir, plot_name, sep="/"),width = 8, height = 12, scale=1, units = "cm")
-        
-        print(pps$p2)
-        plot_name = paste0("CPUE vs pred prob_low cpue low & high probs",smfit$use_model, ".png")
-        ggsave(paste(output_dir, plot_name, sep="/"),width = 8, height = 12, scale=1, units = "cm")
+        if(do.this)
+        {
+          pps=fn.untangle(dat=smfit$data,axs=3)
+          print(pps$p1)
+          plot_name = paste0("CPUE vs pred prob_high cpue low & high probs",smfit$use_model, ".png")
+          ggsave(paste(output_dir, plot_name, sep="/"),width = 8, height = 12, scale=1, units = "cm")
+          
+          print(pps$p2)
+          plot_name = paste0("CPUE vs pred prob_low cpue low & high probs",smfit$use_model, ".png")
+          ggsave(paste(output_dir, plot_name, sep="/"),width = 8, height = 12, scale=1, units = "cm")
+          
+        }
         
         
         #Store predictions
@@ -1966,8 +2106,6 @@ if(do_Stephens_McCall=="YES")
      }
     Stephens.McCall[[m]]=Dummy
   }})  #takes 326 secs
-  Selected.model=data.frame(SNAME=names(SP.list))%>%
-                  mutate(Selected.model=ifelse(SNAME%in%c('Gummy Shark','Whiskery Shark','Dusky Whaler'),'Model_2','Model_1'))
   
   #4. Add to cpue stand data set
   for( i in 1:length(SP.list))

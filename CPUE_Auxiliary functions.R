@@ -582,7 +582,7 @@ fn.cpue.data=function(Dat,EffrrT,sp)
     #aggregate records by Same return (drop issues with Condition and Bioregion...)
     Dat=Dat%>%group_by(FINYEAR,MONTH,VESSEL,METHOD,BLOCKX,Boundary.blk,SPECIES,SNAME,YEAR.c,
                        LAT,LONG,Same.return,TYPE.DATA,zone,Reporter,Sch.or.DogS,
-                       Temperature,Temp.res,SOI,Freo,Freo_lag6,Freo_lag12)%>%
+                       Temperature,Temp.res,SOI,Freo,Freo_lag6,Freo_lag12,Yrs.of.experience)%>%
       summarise(LIVEWT = sum(LIVEWT),
                 LIVEWT.c = sum(LIVEWT.c))%>%
       data.frame()
@@ -629,7 +629,7 @@ fn.cpue.data.daily=function(Dat,EffrrT,sp)
                        VESSEL,METHOD,BLOCKX,block10,SPECIES,SNAME,YEAR.c,LAT,LONG,
                        TYPE.DATA,zone,Reporter,Sch.or.DogS,ZnID,
                        Temperature,Temp.res,SOI,Freo,Freo_lag6,Freo_lag12,Lunar,
-                       BoatName,MastersName)%>%
+                       BoatName,MastersName,Yrs.of.experience)%>%
       summarise(LIVEWT = sum(LIVEWT),
                 LIVEWT.c = sum(LIVEWT.c),
                 nfish = sum(nfish))%>%
@@ -1113,7 +1113,7 @@ fn.prop.0.catch.by.fisher=function(d,explained.ktch,NM,series)
   
   d1.bin=d1%>%mutate(Target=ifelse(cpue>0,1,0))
   N.row=ceiling(length(unique(d1$Ves.var))/10)
-  TitlE=paste("Vessels explaining",100*explained.ktch,"%of catch")
+  TitlE=paste("Vessels explaining",100*explained.ktch,"% of the catch")
   p=d1%>%
     group_by(Ves.var,yr)%>%
     summarise(Target=mean(cpue))%>%
@@ -1137,7 +1137,7 @@ fn.prop.0.catch.by.fisher=function(d,explained.ktch,NM,series)
     guides(color=guide_legend(nrow=N.row,byrow=TRUE))
   
   print(ggarrange(p,p.bin, ncol=1,common.legend = T))
-  Out.name=handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Proportion No catch thru time by fisher ti ID efficiency creep/',series,'_',NM))
+  Out.name=handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Efficiency creep/Proportion No catch thru time by fisher/',NM,'_',series))
   ggsave(paste0(Out.name,'.tiff'), width = 12,height = 10, dpi = 300, compression = "lzw")
   
   print(d1%>%
@@ -1179,14 +1179,6 @@ fn.prop.0.catch.by.fisher=function(d,explained.ktch,NM,series)
   
   
 }
-
-
-
-
-
-
-
-
 
 # IDENTIFY FISHING ON DIFFERENT HABITATS (~TARGETING BEHAVIOUR, only applicable to Daily logbooks) ----------------------------------------------
 
