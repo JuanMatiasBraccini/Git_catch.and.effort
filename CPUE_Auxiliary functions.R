@@ -986,17 +986,16 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
     
     #target species and other main species catch 
     DATA=DATA%>%
-      mutate(
-        Catch.Target=ifelse(SPECIES%in%target,!!sym(ktch),0),
-        Catch.Gummy=ifelse(SPECIES==17001,!!sym(ktch),0),
-        Catch.Whiskery=ifelse(SPECIES==17003,!!sym(ktch),0),
-        Catch.Dusky=ifelse(SPECIES%in%c(18003),!!sym(ktch),0),
-        Catch.Sandbar=ifelse(SPECIES==18007,!!sym(ktch),0),
-        Catch.Groper=ifelse(SPECIES%in%c(384002),!!sym(ktch),0),
-        Catch.Snapper=ifelse(SPECIES%in%c(353001),!!sym(ktch),0),
-        Catch.Blue_mor=ifelse(SPECIES%in%c(377004),!!sym(ktch),0),
-        Catch.Total=ifelse(SPECIES%in%c(5001:24900,25000:31000,188000:599001),!!sym(ktch),0))
-    
+      mutate(Catch.Target=ifelse(SPECIES%in%target,!!sym(ktch),0),
+             Catch.Gummy=ifelse(SPECIES==17001,!!sym(ktch),0),
+             Catch.Whiskery=ifelse(SPECIES==17003,!!sym(ktch),0),
+             Catch.Dusky=ifelse(SPECIES%in%c(18003),!!sym(ktch),0),
+             Catch.Sandbar=ifelse(SPECIES==18007,!!sym(ktch),0),
+             Catch.Groper=ifelse(SPECIES%in%c(384002),!!sym(ktch),0),
+             Catch.Snapper=ifelse(SPECIES%in%c(353001),!!sym(ktch),0),
+             Catch.Blue_mor=ifelse(SPECIES%in%c(377004),!!sym(ktch),0),
+             Catch.Total=ifelse(SPECIES%in%c(5001:24900,25000:31000,188000:599001),!!sym(ktch),0))
+
     #reshape catch data
     if(Use.Date=="NO")
     {
@@ -1184,7 +1183,7 @@ fn.prop.0.catch.by.fisher=function(d,explained.ktch,NM,series)
 
   #Stephens & McCall
 library(forcats)
-Species.catch.ranking=function(d,TITL,min.avrg.catch=50,minyears=5,minlocs=1,target)
+Species.catch.ranking=function(d,TITL,min.avrg.catch=50,minyears=5,minlocs=1,target,drop.noncollocated)
 {
   d=d%>%filter(!SNAME=="Nil Fish Caught")%>%
     mutate(SNAME=case_when(SPECIES==22999~'Other sharks',
@@ -1242,15 +1241,23 @@ Species.catch.ranking=function(d,TITL,min.avrg.catch=50,minyears=5,minlocs=1,tar
   
   p=p+theme(axis.text.y = element_text(colour= x_cols$Axis.col))
   
- 
+  if(drop.noncollocated)
+  {
+    SpeciesCatch=SpeciesCatch%>%filter(!SPECIES%in%noncollocated)
+    d_multi=d_multi[,-match(noncollocated,names(d_multi))]
+    bindata=bindata[,-match(noncollocated,names(bindata))] 
+    noncollocated=NA
+  }
   
   return(list(p=p,dat=SpeciesCatch,noncollocated=noncollocated,d_multi=d_multi,bindata=bindata))
   
 }
 fn.prop.by.shot=function(NMS,dd,tar)
 {
-  dd1=dd%>%dplyr::select(where(is.numeric))%>%
-    mutate(Tot=rowSums(.))
+  dd1=dd%>%
+    dplyr::select(where(is.numeric))%>%
+    mutate(Tot=rowSums(.))%>%
+    filter(Tot>0)
   dd1_prop <- dd1 %>%
     mutate(across(everything()), . / Tot)%>%
     dplyr::select(-Tot) %>%
@@ -1594,12 +1601,12 @@ fn.untangle=function(dat,axs)
     mutate(Species=as.numeric(str_remove(Species,'a_')),
            Pred=paste('Prob=',round(Pred,1)))
   
-  # a=dat%>%
-  #   filter(CPUE>10 & Pred<0.5)%>%
-  #   select(starts_with("a_"),CPUE,Pred)%>%
-  #   gather(Species,Catch,-c(CPUE,Pred))%>%
-  #   mutate(Species=as.numeric(str_remove(Species,'a_')),
-  #          Pred=paste('Prob=',round(Pred,1)))
+  a=dat%>%
+    filter(CPUE>10 & Pred<0.5)%>%
+    select(starts_with("a_"),CPUE,Pred)%>%
+    gather(Species,Catch,-c(CPUE,Pred))%>%
+    mutate(Species=as.numeric(str_remove(Species,'a_')),
+           Pred=paste('Prob=',round(Pred,1)))
   
   p1=dat.high.cpue%>%
     mutate(Species=factor(Species,levels=sort(unique(dat.high.cpue$Species))))%>%
@@ -1609,15 +1616,7 @@ fn.untangle=function(dat,axs)
     theme_PA(lgT.siz=8,leg.siz=6,strx.siz=8,axs.t.siz=6,axs.T.siz=10)+
     theme(legend.position = 'top',axis.text.y = element_text(size = axs))+
     ylim(0,quantile(dat.high.cpue$Catch,probs=0.99))
-  #+ggtitle('High cpue and low and high predicted prob')
-  
-  # pa=a%>%
-  #   mutate(Species=factor(Species,levels=sort(unique(a$Species))))%>%
-  #   ggplot(aes(Species,Catch,color=CPUE))+
-  #   geom_point()+
-  #   facet_wrap(~Pred,nrow=1)+coord_flip()+ylab('Catch of co-occurring species')+xlab('')+
-  #   theme_PA()+theme(legend.position = 'top')+ggtitle('High cpue')
-  
+
   p2=dat.low.cpue%>%
     mutate(Species=factor(Species,levels=sort(unique(a$Species))))%>%
     ggplot(aes(Species,Catch,color=CPUE))+
@@ -1626,8 +1625,7 @@ fn.untangle=function(dat,axs)
     theme_PA(lgT.siz=8,leg.siz=6,strx.siz=8,axs.t.siz=6,axs.T.siz=10)+
     theme(legend.position = 'top',axis.text.y = element_text(size = axs))+
     ylim(0,quantile(dat.low.cpue$Catch,probs=0.99))
-  #+ggtitle('Low cpue and low and high predicted prob')
-  #
+
   return(list(p1=p1,p2=p2))
 }
 
