@@ -1185,10 +1185,6 @@ fn.prop.0.catch.by.fisher=function(d,explained.ktch,NM,series)
 library(forcats)
 Species.catch.ranking=function(d,TITL,min.avrg.catch=50,minyears=5,minlocs=1,target,drop.noncollocated)
 {
-  d=d%>%filter(!SNAME=="Nil Fish Caught")%>%
-    mutate(SNAME=case_when(SPECIES==22999~'Other sharks',
-                           SPECIES==20000~'Dogfishes',
-                           TRUE~SNAME))
   #Create species matrix
   options(scipen=999)
   d_multi=d%>%
@@ -1231,6 +1227,7 @@ Species.catch.ranking=function(d,TITL,min.avrg.catch=50,minyears=5,minlocs=1,tar
     geom_col() +
     coord_flip() + scale_fill_manual(name = "Financial year",values=cc)+
     labs(x = "Species", y = "Catch (tonnes)", title = TITL)+
+    geom_hline(yintercept=min.avrg.catch,color='orange')+
     theme_PA()+
     theme(legend.position = 'right',
           axis.text.y = element_text(size=8))
@@ -1249,7 +1246,13 @@ Species.catch.ranking=function(d,TITL,min.avrg.catch=50,minyears=5,minlocs=1,tar
     noncollocated=NA
   }
   
-  return(list(p=p,dat=SpeciesCatch,noncollocated=noncollocated,d_multi=d_multi,bindata=bindata))
+  xx = SpeciesCatch %>%
+          filter(Select=="included" & !SPECIES==target) 
+  indspecies_ids=xx%>%pull(SPECIES)
+  indspecies_names=xx%>%pull(SNAME)
+  
+  return(list(p=p,dat=SpeciesCatch,noncollocated=noncollocated,d_multi=d_multi,bindata=bindata,
+              indspecies_ids=indspecies_ids, indspecies_names=indspecies_names))
   
 }
 fn.prop.by.shot=function(NMS,dd,tar)
@@ -1285,7 +1288,7 @@ FitStephensMacCallModel = function(smdat, species_ids, indspecies_ids,indspecies
   smdat$zone=factor(smdat$zone)
   zones = levels(smdat$zone)
   nzones = length(zones)
-  
+  indspecies_ids=paste0("ind", indspecies_ids)
   ## Fit glm (binomial) model to indicator variables
   if (use_model==1)
   {
@@ -1583,7 +1586,7 @@ PlotStephensMacCallTarget.vs.All_cpue=function(smfit, species_names)
          subtitle = paste0("Deltalognormal distribution"))
   return(p)
 }
-fn.untangle=function(dat,axs)
+fn.untangle=function(dat,axs,tar.sp)
 {
   dat.high.cpue=dat%>%
     filter(CPUE>=quantile(dat$CPUE,probs=.90))%>%
@@ -1601,36 +1604,96 @@ fn.untangle=function(dat,axs)
     mutate(Species=as.numeric(str_remove(Species,'a_')),
            Pred=paste('Prob=',round(Pred,1)))
   
-  a=dat%>%
-    filter(CPUE>10 & Pred<0.5)%>%
-    select(starts_with("a_"),CPUE,Pred)%>%
-    gather(Species,Catch,-c(CPUE,Pred))%>%
-    mutate(Species=as.numeric(str_remove(Species,'a_')),
-           Pred=paste('Prob=',round(Pred,1)))
+  # a=dat%>%
+  #   filter(CPUE>10 & Pred<0.5)%>%
+  #   select(starts_with("a_"),CPUE,Pred)%>%
+  #   gather(Species,Catch,-c(CPUE,Pred))%>%
+  #   mutate(Species=as.numeric(str_remove(Species,'a_')),
+  #          Pred=paste('Prob=',round(Pred,1)))
   
+  Lvls=sort(unique(dat.high.cpue$Species))
+  names(Lvls)=rep('black',length(Lvls))
+  names(Lvls)[match(tar.sp,Lvls)]='brown'
   p1=dat.high.cpue%>%
-    mutate(Species=factor(Species,levels=sort(unique(dat.high.cpue$Species))))%>%
+    mutate(Species=factor(Species,levels=Lvls))%>%
     ggplot(aes(Species,Catch,color=CPUE))+
     geom_point()+
     facet_wrap(~Pred,nrow=1)+coord_flip()+ylab('Catch of co-occurring species')+xlab('')+
     theme_PA(lgT.siz=8,leg.siz=6,strx.siz=8,axs.t.siz=6,axs.T.siz=10)+
     theme(legend.position = 'top',axis.text.y = element_text(size = axs))+
-    ylim(0,quantile(dat.high.cpue$Catch,probs=0.99))
-
-  p2=dat.low.cpue%>%
-    mutate(Species=factor(Species,levels=sort(unique(a$Species))))%>%
-    ggplot(aes(Species,Catch,color=CPUE))+
-    geom_point()+
-    facet_wrap(~Pred,nrow=1)+coord_flip()+ylab('Catch of co-occurring species')+xlab('')+
-    theme_PA(lgT.siz=8,leg.siz=6,strx.siz=8,axs.t.siz=6,axs.T.siz=10)+
-    theme(legend.position = 'top',axis.text.y = element_text(size = axs))+
-    ylim(0,quantile(dat.low.cpue$Catch,probs=0.99))
-
+    ylim(0,quantile(dat.high.cpue$Catch,probs=0.99))+
+    theme(axis.text.y = element_text(colour = names(Lvls)))
+  
+  p2=NULL
+  if(nrow(dat.low.cpue)>0)
+  {
+    Lvls=sort(unique(dat.low.cpue$Species))
+    #Lvls=sort(unique(a$Species))
+    names(Lvls)=rep('black',length(Lvls))
+    names(Lvls)[match(tar.sp,Lvls)]='brown'
+    p2=dat.low.cpue%>%
+      mutate(Species=factor(Species,levels=Lvls))%>%
+      ggplot(aes(Species,Catch,color=CPUE))+
+      geom_point()+
+      facet_wrap(~Pred,nrow=1)+coord_flip()+ylab('Catch of co-occurring species')+xlab('')+
+      theme_PA(lgT.siz=8,leg.siz=6,strx.siz=8,axs.t.siz=6,axs.T.siz=10)+
+      theme(legend.position = 'top',axis.text.y = element_text(size = axs))+
+      ylim(0,quantile(dat.low.cpue$Catch,probs=0.99))+
+      theme(axis.text.y = element_text(colour = names(Lvls)))
+  }
+ 
   return(list(p1=p1,p2=p2))
 }
 
   #cluster
-fn.cluster=function(data,TarSp,n.clus,target)
+fn.cluster.bindata=function(a,selected.species,n.clus,target,check.clustrbl,out.clara)
+{
+  a=scale(a[,match(selected.species,names(a))])
+  
+  #step 1. Define if data are clusterable
+  if(check.clustrbl=="YES")
+  {
+    ran.samp=sample(1:nrow(a),5000,replace=F) #random sample to reduce computation time
+    res <- get_clust_tendency(a[ran.samp,], n = nrow(a[ran.samp,])-1, graph = FALSE)
+    if(1-res$hopkins_stat>0.75) clusterable="YES"else  clusterable="NO"
+    print(clusterable)
+  }
+  
+  #step 2. Determine optimum number of clusters
+  if(check.clustrbl=="YES")
+  {
+    ran.samp=sample(1:nrow(a),round(nrow(a)*.5),replace=F) #random sample to reduce computation time
+    b=fviz_nbclust(a[ran.samp,], clara, method = "silhouette",print.summary=T,k.max=6,nboot=10)
+    print(b+theme_classic())
+    ggsave(paste(HndL.Species_targeting,"Cluster/CLARA_optimal_numbers_",target,".tiff",sep=""),
+           width = 8,height = 8, dpi = 300, compression = "lzw")
+    num.clus=as.numeric(as.character(b$data$clusters[match(max(b$data$y),b$data$y)]))
+  }
+  
+  #step 3. fit clara
+  if(!exists("num.clus")) num.clus=n.clus
+  clara.res <- clara(a, num.clus, samples = 50, pamLike = TRUE)
+  
+  #step 4. visualize CLARA clusters in data scattergram
+  if(out.clara)
+  {
+    print(fviz_cluster(clara.res, 
+                 palette = rainbow(num.clus), # color palette
+                 ellipse.type = "t", # Concentration ellipse
+                 geom = "point", pointsize = 1,
+                 ggtheme = theme_classic()))
+    ggsave(paste(HndL.Species_targeting,"Cluster/CLARA_cluster_",target,".tiff",sep=""),
+           width = 8,height = 8, dpi = 300, compression = "lzw") 
+  }
+  
+  #step 5. export cluster to add to input data
+  dd.clara <- cbind(as.data.frame(a), cluster_clara = clara.res$cluster)
+  dd.clara=dd.clara%>%
+    rownames_to_column(var = "Same.return.SNo")%>%
+    dplyr::select(cluster_clara,Same.return.SNo)%>%remove_rownames()
+  return(dd.clara)
+}
+fn.cluster=function(data,TarSp,n.clus,target,check.clustrbl)
 {
   a=data[[TarSp]]%>%
     filter(Same.return.SNo%in%unique(DATA.list.LIVEWT.c.daily[[TarSp]]$Same.return.SNo))%>%

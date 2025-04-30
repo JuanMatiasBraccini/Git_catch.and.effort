@@ -2231,6 +2231,7 @@ if(Check.school.shark.targeting=="YES")
   library(Hmisc)
   
   #Annual catches
+    #financial year
   a=Data.monthly%>%filter(SPECIES==17008)%>%group_by(SNAME,FINYEAR,LAT,LONG)%>%summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
   b=Data.daily%>%filter(SPECIES==17008)%>%group_by(SNAME,FINYEAR,LAT,LONG)%>%summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
   ab=rbind(a,b)%>%group_by(SNAME,FINYEAR,LAT,LONG)%>%summarise(Tonnes=sum(Tonnes,na.rm=T))
@@ -2240,6 +2241,14 @@ if(Check.school.shark.targeting=="YES")
   write.csv(ab%>%group_by(SNAME,FINYEAR)%>%summarise(Tonnes=sum(Tonnes,na.rm=T)),
             paste(hndl,'School shark/Catch_temporal.csv',sep='/'),row.names = F)
   
+    #calendar year
+  a=Data.monthly%>%filter(SPECIES==17008)%>%group_by(SNAME,YEAR,LAT,LONG)%>%summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
+  b=Data.daily%>%filter(SPECIES==17008)%>%group_by(SNAME,YEAR,LAT,LONG)%>%summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
+  ab=rbind(a,b)%>%group_by(SNAME,YEAR,LAT,LONG)%>%summarise(Tonnes=sum(Tonnes,na.rm=T))
+  write.csv(ab%>%group_by(SNAME,YEAR)%>%summarise(Tonnes=sum(Tonnes,na.rm=T)),
+            paste(hndl,'School shark/Catch_temporal_calendar_year.csv',sep='/'),row.names = F)
+  
+    #financial by vessel
   a=Data.monthly%>%filter(SPECIES==17008)%>%group_by(SNAME,FINYEAR,VESSEL)%>%summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
   b=Data.daily%>%filter(SPECIES==17008)%>%group_by(SNAME,FINYEAR,VESSEL)%>%summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
   ab=rbind(a,b)%>%group_by(SNAME,FINYEAR,VESSEL)%>%summarise(Tonnes=sum(Tonnes,na.rm=T))
