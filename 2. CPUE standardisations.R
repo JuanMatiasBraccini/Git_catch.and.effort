@@ -407,6 +407,12 @@ Data.monthly.GN=Data.monthly.GN%>%
   ungroup()
 
 # BASIC MANIPULATIONS -----------------------------------------------------------------------
+
+#Remove Nil fish caught from daily
+a1=Data.daily.GN%>%filter(SPECIES==9998)
+Data.daily.GN=Data.daily.GN%>%filter(!SPECIES==9998)
+Effort.daily=Effort.daily%>%filter(!Same.return.SNo%in%unique(a1$Same.return.SNo))
+
 #Reset BLOCKX to 4 digits as some have 5 digits
 Data.monthly.GN$BLOCKX=as.integer(substr(Data.monthly.GN$BLOCKX,1,4))
 Effort.monthly$BLOCKX=as.integer(substr(Effort.monthly$BLOCKX,1,4))
@@ -2046,7 +2052,7 @@ if(do_Stephens_McCall=="YES")
                                                       minyears=Minyears.with.catch,
                                                       minlocs=minlocs.vec[i],
                                                       target=SP.list[[i]],
-                                                      drop.noncollocated=TRUE)
+                                                      drop.noncollocated=FALSE)
     print(Kept.species.Steph.Mac[[i]]$p)
     ggsave(paste0(output_dir,"/Top caught species.tiff"),width = 6,height = 12,compression = "lzw")
     
@@ -2090,24 +2096,39 @@ if(do_Stephens_McCall=="YES")
         #Set all non-co-located species to the same
         noncollocated=Kept.species.Steph.Mac[[i]]$noncollocated
         d_multi=Kept.species.Steph.Mac[[i]]$d_multi
-        bindata=Kept.species.Steph.Mac[[i]]$bindata
+        #bindata=Kept.species.Steph.Mac[[i]]$bindata
         indspecies_ids=Kept.species.Steph.Mac[[i]]$indspecies_ids 
         indspecies_names=Kept.species.Steph.Mac[[i]]$indspecies_names
-        if (length(noncollocated)>=1 & !is.na(noncollocated))
-        {
-          dcols = which(names(d_multi)%in%noncollocated)
-          if (length(dcols)>1)
-          {
-            d_multi$'99'  = rowSums(d_multi[, dcols])
-          } else
-          {
-            d_multi$'99'=d_multi[, dcols]
-          }
-          bindata$'99' = d_multi$'99' / d_multi$'99'
-          bindata$'99'[is.na(bindata$'99')] = 0
-          d_multi=d_multi[,-dcols]
-          bindata=bindata[,-which(names(bindata)%in%noncollocated)]
-        }
+
+        # add 'other' to group non-selected species and avoid 0 catch records of selected species
+        id.other.sp=which(!names(d_multi)%in%c("Same.return.SNo","zone",target,indspecies_ids))
+        d_multi$'99'  = rowSums(d_multi[, id.other.sp])
+        indspecies_ids=c(indspecies_ids,99)
+        indspecies_names=c(indspecies_names,"other fish")
+        id.sp=which(!names(d_multi)%in%c("Same.return.SNo","zone"))
+        bindata=d_multi[,id.sp]/d_multi[,id.sp]
+        bindata[is.na(bindata)] = 0
+        
+        #remove grouped species
+        d_multi=d_multi[,-which(!names(d_multi)%in%c("Same.return.SNo","zone",target,indspecies_ids,99))]
+        bindata=bindata[,-which(!names(bindata)%in%c("Same.return.SNo","zone",target,indspecies_ids,99))]
+       
+        # if (length(noncollocated)>=1 & !is.na(noncollocated))
+        # {
+        #   dcols = which(names(d_multi)%in%noncollocated)
+        #   if (length(dcols)>1)
+        #   {
+        #     d_multi$'99'  = rowSums(d_multi[, dcols])
+        #   } else
+        #   {
+        #     d_multi$'99'=d_multi[, dcols]
+        #   }
+        #   bindata$'99' = d_multi$'99' / d_multi$'99'
+        #   bindata$'99'[is.na(bindata$'99')] = 0
+        #   d_multi=d_multi[,-dcols]
+        #   bindata=bindata[,-which(names(bindata)%in%noncollocated)]
+        # }
+        
         names(bindata) = paste0("ind", names(bindata))
         target.name=names(SP.list)[i]
         
@@ -2129,6 +2150,12 @@ if(do_Stephens_McCall=="YES")
         #fit binomial model
         options(scipen=0)
         smfit=FitStephensMacCallModel(smdat=dat.comb, species_ids=target, indspecies_ids,indspecies_names,use_model=MODL)
+        
+        #reset predictions set to high but no catch other than 99
+        id.dodgy=which(rowSums(smfit$data[,paste0('ind',c(target,subset(indspecies_ids,!indspecies_ids==99)))])==0 &
+                         smfit$data[,paste0('ind',99)]>0)
+        smfit$data[id.dodgy,'Pred']=0
+        smfit$data[id.dodgy,'TargetSM']=0
         
         #plot model
         plot_width = 20;  plot_height = 20
@@ -2200,11 +2227,15 @@ if(do_Stephens_McCall=="YES")
         }
         
         #Store predictions
-        Dummy[[i]]=smfit$data%>%
-          dplyr::select(Same.return.SNo,Pred,TargetSM)%>%
-          rename(Step.MCal_target_prob=Pred,
-                 Step.MCal_target_group=TargetSM)
-        
+        Dummy[[i]]=list(d_multi=d_multi,
+                        dat.comb=dat.comb,
+                        indspecies_ids=indspecies_ids,
+                        indspecies_names=indspecies_names,
+                        smfit.data=smfit$data%>%
+                            dplyr::select(Same.return.SNo,Pred,TargetSM)%>%
+                            rename(Step.MCal_target_prob=Pred,
+                                   Step.MCal_target_group=TargetSM))
+                          
         rm(smfit,Plots,indspecies_ids,indspecies_names,d_multi,bindata,noncollocated,dat.comb,p1,p2)
         
       }
@@ -2217,7 +2248,7 @@ if(do_Stephens_McCall=="YES")
   {
     ID.mod=match(Selected.model[i,'Selected.model'],names(Stephens.McCall))
     DATA.list.LIVEWT.c.daily[[i]]=left_join(DATA.list.LIVEWT.c.daily[[i]],
-                                            Stephens.McCall[[ID.mod]][[i]],by=c("Same.return.SNo")) 
+                                            Stephens.McCall[[ID.mod]][[i]]$smfit.data,by=c("Same.return.SNo")) 
   }
   
   if(exists('Data.daily.GN.DD')) rm(Data.daily.GN.DD)
@@ -2236,24 +2267,27 @@ if(do_cluster=="YES")
   #Using binomial data based on Stephen & MacCall
   N.clus=rep(2,length(SP.list))  #from initial optimum number
   if(Model.run=="First")out.clara=TRUE else out.clara=FALSE
-  
   tic()
   for(i in 1:length(SP.list))
   {
     print(paste('Cluster analysis for ---------',names(SP.list)[i]))
     
     #run cluster
-    selected.species=c(SP.list[[i]],Kept.species.Steph.Mac[[i]]$indspecies_ids)
-    names(selected.species)=c(names(SP.list)[i],Kept.species.Steph.Mac[[i]]$indspecies_names)
-    a=Kept.species.Steph.Mac[[i]]$bindata
-    rownames(a)=Kept.species.Steph.Mac[[i]]$d_multi$Same.return.SNo
+    ID.mod=match(Selected.model[i,'Selected.model'],names(Stephens.McCall))
+    selected.species=c(SP.list[[i]],Stephens.McCall[[ID.mod]][[i]]$indspecies_ids)
+    names(selected.species)=c(names(SP.list)[i],Stephens.McCall[[ID.mod]][[i]]$indspecies_names)
+    a=Stephens.McCall[[ID.mod]][[i]]$d_multi%>%data.frame
+    rownames(a)=a$Same.return.SNo
+    colnames(a)=str_remove(colnames(a),"X")
     
-    Store.cluster[[i]]=fn.cluster.bindata(a=a,
-                                          selected.species=selected.species,
-                                          n.clus=N.clus[i],
-                                          target=names(SP.list)[i],
-                                          check.clustrbl="NO",
-                                          out.clara=out.clara)
+    Store.cluster[[i]]=fn.cluster.Stephen.MacCall(a=a,
+                                                  selected.species=selected.species,
+                                                  n.clus=N.clus[i],
+                                                  target=names(SP.list)[i],
+                                                  check.clust.num=FALSE,
+                                                  out.clara=out.clara,
+                                                  apply.scale=FALSE,
+                                                  do.proportion=TRUE)
     
     #add to data frame
     DATA.list.LIVEWT.c.daily[[i]]=left_join(DATA.list.LIVEWT.c.daily[[i]],
@@ -2272,7 +2306,7 @@ if(do_cluster=="YES")
       Store.cluster[[Tar.sp[i]]]=fn.cluster(data=Species.list.daily,
                                             TarSp=Tar.sp[i],
                                             n.clus=N.clus[i],
-                                            target=names(data)[Tar.sp[i]],
+                                            target=names(Species.list.daily)[Tar.sp[i]],
                                             check.clustrbl="NO")
     }
     
@@ -2448,42 +2482,47 @@ if(do_pca=="YES")
   }
 }
 
-#Compare Stephens & McCall with cluster   #ACA
+#Compare Stephens & McCall with cluster   
 if(do_cluster=="YES" & do_Stephens_McCall=="YES")
 {
   library(ggcorrplot)
-  for(i in 1:length(Tar.sp))
-    
+  library(correlation)
+  for(i in 1:length(SP.list))
+  {
     p=DATA.list.LIVEWT.c.daily[[i]]%>%
-                  mutate(CPUE=Catch.Target/Km.Gillnet.Hours.c)%>%
-                  dplyr::select(CPUE,Step.MCal_target_prob,Step.MCal_target_group,cluster_clara)%>%
-                  rename(Step.MCal.prob=Step.MCal_target_prob,
-                         Step.MCal=Step.MCal_target_group,
-                         cluster=cluster_clara)
-  p1=p%>%
-    mutate(Step.MCal.prob=factor(round(Step.MCal.prob,1)),
-           Step.MCal=paste('group',Step.MCal),
-           cluster=paste('group',cluster))%>%
-    gather(Method,Value,-CPUE)%>%
-    ggplot(aes(Value,CPUE,fill=Method))+
-    geom_boxplot()+
-    ylim(0,quantile(p$CPUE,.99))+
-    facet_wrap(~Method,scales='free_x')+
+      mutate(CPUE=Catch.Target/Km.Gillnet.Hours.c)%>%
+      dplyr::select(CPUE,Step.MCal_target_prob,Step.MCal_target_group,cluster_clara)%>%
+      rename(Step.MCal.prob=Step.MCal_target_prob,
+             Step.MCal=Step.MCal_target_group,
+             cluster=cluster_clara)
+
+    p1=p%>%
+      mutate(Step.MCal.prob=factor(round(Step.MCal.prob,1)),
+             Step.MCal=paste('group',Step.MCal),
+             cluster=paste('group',cluster))%>%
+      gather(Method,Value,-CPUE)%>%
+      ggplot(aes(Value,CPUE,fill=Method))+
+      geom_boxplot()+
+      ylim(0,quantile(p$CPUE,.99))+
+      facet_wrap(~Method,scales='free_x')+
       theme_PA()+theme(legend.position = 'none')+xlab('')
     
-  corr <- cor(p[,c('Step.MCal','cluster')])
-  p.mat <- cor_pmat(p[,c('Step.MCal','cluster')])
-  ggcorrplot(corr)
-  
-  p%>%
-    mutate(Step.MCal=as.character(Step.MCal))%>%
-    ggplot(aes(cluster,group=Step.MCal))+
-    geom_bar(aes(fill=Step.MCal))
-  
-  p%>%
-    mutate(cluster=as.character(cluster))%>%
-    ggplot(aes(CPUE,Step.MCal.prob,group=cluster))+
-    geom_point(aes(color=cluster))
+    p.corr.dat=p%>%
+      dplyr::select(Step.MCal,cluster)%>%
+      filter(!is.na(Step.MCal) | !is.na(cluster))
+    p2=ggcorrplot(p.corr.dat %>% 
+                    correlation(),
+                  lab = T,
+                  show.diag = F)
+    
+    ggarrange(plotlist = list(p1,p2),ncol=1,nrow=2)
+
+    plot_name = paste0("Cluster Vs Steph MacCal_", names(SP.list)[i],".tiff")
+    ggsave(paste(HndL.Species_targeting, plot_name, sep="/"),width = 8,height = 6,compression = "lzw")
+    
+
+    
+  }
 
 }
 

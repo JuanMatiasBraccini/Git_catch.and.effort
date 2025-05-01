@@ -1646,21 +1646,17 @@ fn.untangle=function(dat,axs,tar.sp)
 }
 
   #cluster
-fn.cluster.bindata=function(a,selected.species,n.clus,target,check.clustrbl,out.clara)
+fn.cluster.Stephen.MacCall=function(a,selected.species,n.clus,target,check.clust.num,out.clara,
+                                    apply.scale,do.proportion)
 {
-  a=scale(a[,match(selected.species,names(a))])
+  a=a[,match(selected.species,names(a))]
   
-  #step 1. Define if data are clusterable
-  if(check.clustrbl=="YES")
-  {
-    ran.samp=sample(1:nrow(a),5000,replace=F) #random sample to reduce computation time
-    res <- get_clust_tendency(a[ran.samp,], n = nrow(a[ran.samp,])-1, graph = FALSE)
-    if(1-res$hopkins_stat>0.75) clusterable="YES"else  clusterable="NO"
-    print(clusterable)
-  }
+  if(apply.scale) a=scale(a)
+  if(do.proportion)  a=a/rowSums(a)
   
+
   #step 2. Determine optimum number of clusters
-  if(check.clustrbl=="YES")
+  if(check.clust.num)
   {
     ran.samp=sample(1:nrow(a),round(nrow(a)*.5),replace=F) #random sample to reduce computation time
     b=fviz_nbclust(a[ran.samp,], clara, method = "silhouette",print.summary=T,k.max=6,nboot=10)
@@ -1825,6 +1821,126 @@ fn.compare.targeting=function(DAT,Drop.var,Title)
     labs(title = Title,x = "",y="Proportion of catch")
   print(p)
 }
+
+
+#Simulated multivariate data to test performance of cluster analysis
+if(do.sim.cluster)
+{
+  n.samps=1e3
+  dumy.dat=data.frame(Species=rep(c("Gummy","Dusky","Whiskery","Sandbar","Snapper","Blue morwong"),each=n.samps))%>%
+    mutate(habitat=case_when(Species%in%c("Gummy","Blue morwong","Snapper")~sample(c('sand','reef','deep'),n(),replace=T,prob=c(.7,.2,.1)),
+                             Species%in%c("Dusky","Whiskery")~sample(c('sand','reef','deep'),n(),replace=T,prob=c(.2,.7,.1)),
+                             Species%in%c("Sandbar")~sample(c('sand','reef','deep'),n(),replace=T,prob=c(.1,.2,.7))),
+           Catch=case_when(Species%in%c("Gummy","Blue morwong","Snapper") & habitat=='sand'~runif(n(),min=100,max=500),
+                           Species%in%c("Gummy","Blue morwong","Snapper") & habitat=='reef'~runif(n(),min=10,max=20),
+                           Species%in%c("Gummy","Blue morwong","Snapper") & habitat=='deep'~runif(n(),min=0,max=10),
+                           Species%in%c("Dusky","Whiskery") & habitat=='sand'~runif(n(),min=10,max=20),
+                           Species%in%c("Dusky","Whiskery") & habitat=='reef'~runif(n(),min=100,max=500),
+                           Species%in%c("Dusky","Whiskery") & habitat=='deep'~runif(n(),min=0,max=10),
+                           Species%in%c("Sandbar") & habitat=='sand'~runif(n(),min=0,max=10),
+                           Species%in%c("Sandbar") & habitat=='reef'~runif(n(),min=10,max=20),
+                           Species%in%c("Sandbar") & habitat=='deep'~runif(n(),min=100,max=500)))%>%
+    group_by(habitat,Species)%>%
+    mutate(Count = 1:n())%>%
+    ungroup()%>%
+    mutate(Sample.number=paste(habitat,Count))
+  
+  p1=dumy.dat%>%
+    ggplot(aes(Species,Catch,fill=habitat))+
+    geom_boxplot()+coord_flip()+theme(legend.position = 'top')
+  
+  fn.sim.cluster=function(a,selected.species,n.clus,check.clustrbl,apply.scale,do.bin,do.proportion)
+  {
+    a.ori=a
+    row.names(a)=a$Sample.number
+    a=a[,match(selected.species,names(a))]
+    if(apply.scale) a=scale(a)
+    if(do.bin)  a[a>0]=1
+    if(do.proportion)  a=a/rowSums(a)
+    
+    #step 2. Determine optimum number of clusters
+    if(check.clustrbl)
+    {
+      ran.samp=sample(1:nrow(a),round(nrow(a)*.5),replace=F) #random sample to reduce computation time
+      b=fviz_nbclust(a[ran.samp,], clara, method = "silhouette",print.summary=T,k.max=6,nboot=10)+
+        theme_classic()
+      num.clus=as.numeric(as.character(b$data$clusters[match(max(b$data$y),b$data$y)]))
+    }
+    
+    #step 3. fit clara
+    if(!exists("num.clus")) num.clus=n.clus
+    clara.res <- clara(a, num.clus, samples = 50, pamLike = TRUE)
+    
+    #step 4. visualize CLARA clusters in data scattergram
+    p=fviz_cluster(clara.res, 
+                   palette = rainbow(num.clus), # color palette
+                   ellipse.type = "t", # Concentration ellipse
+                   geom = "point", pointsize = 1,
+                   ggtheme = theme_classic())
+    
+    
+    #step 5. export cluster to add to input data
+    dd.clara <- cbind(as.data.frame(a), cluster_clara = clara.res$cluster)
+    dd.clara=dd.clara%>%
+      rownames_to_column(var = "Sample.number")%>%
+      dplyr::select(cluster_clara,Sample.number)%>%remove_rownames()
+    
+    a.ori=a.ori%>%left_join(dd.clara,by='Sample.number')
+    
+    
+    p2=a.ori%>%
+      dplyr::select(-c(Count,Sample.number))%>%
+      gather(Species,Catch,-c(habitat,cluster_clara))%>%
+      mutate(cluster_clara=paste('cluster',cluster_clara))%>%
+      ggplot(aes(Species,Catch,fill=cluster_clara))+
+      geom_boxplot()+coord_flip()+theme(legend.position = 'top')
+    
+    return(list(b=b,p=p,p2=p2))
+    
+  }
+  
+  dumy.dat.spread=dumy.dat%>%
+    spread(Species,Catch,fill=0)%>%data.frame
+  
+  dd_scale=fn.sim.cluster(a=dumy.dat.spread,
+                          selected.species=c("Gummy","Dusky","Whiskery","Sandbar","Snapper","Blue.morwong"),
+                          n.clus=NA,
+                          check.clustrbl=TRUE,
+                          apply.scale=TRUE,
+                          do.bin=FALSE,
+                          do.proportion=FALSE)
+  
+  dd_proportion=fn.sim.cluster(a=dumy.dat.spread,
+                               selected.species=c("Gummy","Dusky","Whiskery","Sandbar","Snapper","Blue.morwong"),
+                               n.clus=NA,
+                               check.clustrbl=TRUE,
+                               apply.scale=FALSE,
+                               do.bin=FALSE,
+                               do.proportion=TRUE)
+  
+  dd_bin=fn.sim.cluster(a=dumy.dat.spread,
+                        selected.species=c("Gummy","Dusky","Whiskery","Sandbar","Snapper","Blue.morwong"),
+                        n.clus=NA,
+                        check.clustrbl=TRUE,
+                        apply.scale=FALSE,
+                        do.bin=TRUE,
+                        do.proportion=FALSE)
+  
+  dd_bin.scaled=fn.sim.cluster(a=dumy.dat.spread,
+                               selected.species=c("Gummy","Dusky","Whiskery","Sandbar","Snapper","Blue.morwong"),
+                               n.clus=NA,
+                               check.clustrbl=TRUE,
+                               apply.scale=TRUE,
+                               do.bin=TRUE,
+                               do.proportion=FALSE)
+  
+  ggarrange(plotlist = list(dd_scale$b,dd_scale$p,p1,dd_scale$p2),ncol=2,nrow=2)
+  ggarrange(plotlist = list(dd_proportion$b,dd_proportion$p,p1,dd_proportion$p2),ncol=2,nrow=2)
+  ggarrange(plotlist = list(dd_bin$b,dd_bin$p,p1,dd_bin$p2),ncol=2,nrow=2)
+  ggarrange(plotlist = list(dd_bin.scaled$b,dd_bin.scaled$p,p1,dd_bin.scaled$p2),ncol=2,nrow=2)
+  
+}
+
 
 # COMPUTE FOLLY AND NOMINAL INDICES FOR EXPORTING ----------------------------------------------
 fn.out.effective=function(a)
