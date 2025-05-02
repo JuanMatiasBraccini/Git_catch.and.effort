@@ -1823,8 +1823,9 @@ fn.compare.targeting=function(DAT,Drop.var,Title)
 }
 
 
-#Simulated multivariate data to test performance of cluster analysis
-if(do.sim.cluster)
+#Simulated multivariate data 
+do.sim.multivar=FALSE
+if(do.sim.multivar)
 {
   n.samps=1e3
   dumy.dat=data.frame(Species=rep(c("Gummy","Dusky","Whiskery","Sandbar","Snapper","Blue morwong"),each=n.samps))%>%
@@ -1832,19 +1833,103 @@ if(do.sim.cluster)
                              Species%in%c("Dusky","Whiskery")~sample(c('sand','reef','deep'),n(),replace=T,prob=c(.2,.7,.1)),
                              Species%in%c("Sandbar")~sample(c('sand','reef','deep'),n(),replace=T,prob=c(.1,.2,.7))),
            Catch=case_when(Species%in%c("Gummy","Blue morwong","Snapper") & habitat=='sand'~runif(n(),min=100,max=500),
-                           Species%in%c("Gummy","Blue morwong","Snapper") & habitat=='reef'~runif(n(),min=10,max=20),
-                           Species%in%c("Gummy","Blue morwong","Snapper") & habitat=='deep'~runif(n(),min=0,max=10),
-                           Species%in%c("Dusky","Whiskery") & habitat=='sand'~runif(n(),min=10,max=20),
+                           Species%in%c("Gummy","Blue morwong","Snapper") & habitat=='reef'~round(runif(n(),min=0,max=10)),
+                           Species%in%c("Gummy","Blue morwong","Snapper") & habitat=='deep'~round(runif(n(),min=0,max=1)),
+                           Species%in%c("Dusky","Whiskery") & habitat=='sand'~round(runif(n(),min=0,max=10)),
                            Species%in%c("Dusky","Whiskery") & habitat=='reef'~runif(n(),min=100,max=500),
-                           Species%in%c("Dusky","Whiskery") & habitat=='deep'~runif(n(),min=0,max=10),
-                           Species%in%c("Sandbar") & habitat=='sand'~runif(n(),min=0,max=10),
-                           Species%in%c("Sandbar") & habitat=='reef'~runif(n(),min=10,max=20),
+                           Species%in%c("Dusky","Whiskery") & habitat=='deep'~round(runif(n(),min=0,max=1)),
+                           Species%in%c("Sandbar") & habitat=='sand'~round(runif(n(),min=0,max=1)),
+                           Species%in%c("Sandbar") & habitat=='reef'~round(runif(n(),min=0,max=10)),
                            Species%in%c("Sandbar") & habitat=='deep'~runif(n(),min=100,max=500)))%>%
     group_by(habitat,Species)%>%
     mutate(Count = 1:n())%>%
     ungroup()%>%
     mutate(Sample.number=paste(habitat,Count))
+}
+
+#Test performance of Stephen & MacCall on simulated data
+test.sim.StephMac=FALSE
+if(test.sim.StephMac)
+{
+  output_dir=paste0(HndL.Species_targeting,'Stephens_McCall/z_test on simulated data/')
+  minlocs.vec=1
+  MODL=1
+  dumy.dat=dumy.dat%>%
+    rename(SNAME=Species)%>%
+    mutate(Species=case_when(SNAME=='Gummy'  ~  17001,
+                             SNAME=='Whiskery'  ~  17003,
+                             SNAME=='Dusky' ~   18003,
+                             SNAME=='Sandbar'  ~  18007,
+                             SNAME=='Snapper' ~ 353001,
+                             SNAME=='Blue morwong' ~ 377004))
   
+  p1=dumy.dat%>%
+    ggplot(aes(SNAME,Catch,fill=habitat))+
+    geom_boxplot()+coord_flip()+theme(legend.position = 'top')
+  UNIK=dumy.dat%>%distinct(Species,SNAME)
+  UNIK.names=UNIK$SNAME
+  UNIK=UNIK$Species
+  
+  for(i in 1:length(UNIK))
+  {
+    target=UNIK[i]
+    names(target)=UNIK.names[i]
+    
+    indspecies_ids=dumy.dat%>%distinct(SNAME,Species)
+    indspecies_names=indspecies_ids$SNAME
+    indspecies_ids=indspecies_ids$Species
+    indspecies_ids=subset(indspecies_ids,!indspecies_ids==target)
+    indspecies_names=subset(indspecies_names,!indspecies_names==names(target))
+    
+    dumy.dat.spread=dumy.dat%>%
+      dplyr::select(-SNAME)%>%
+      spread(Species,Catch,fill=0)%>%
+      data.frame
+    colnames(dumy.dat.spread)=str_remove(colnames(dumy.dat.spread),'X')
+    id.sp=match(c(target,indspecies_ids),names(dumy.dat.spread))
+    bindata=dumy.dat.spread[,id.sp]
+    bindata[bindata>0]=1
+    names(bindata)=paste0('ind',names(bindata))
+    
+    dumy.dat.spread$Catch=dumy.dat.spread[,match(target,names(dumy.dat.spread))] 
+    dumy.dat.spread$Proportion=dumy.dat.spread$Catch/rowSums(dumy.dat.spread[,id.sp])
+    dumy.dat.spread=dumy.dat.spread%>%
+      mutate(Effort=1,
+             zone=1,
+             FishingSeason=1,
+             CPUE=Catch/Effort)
+    
+    dat.comb=cbind(dumy.dat.spread,bindata)
+    
+    
+    smfit=FitStephensMacCallModel(smdat=dat.comb, species_ids=target, indspecies_ids,indspecies_names,use_model=MODL)
+    
+    #plot model coefs
+    Plots=PlotStephensMacCallModel(smfit)
+    names(Plots)=c('coefs.All_id','coefs.All_name','coefs.Sig_id','coefs.Sig_name')
+    
+
+    #plot cpue vs pred prob
+    p3=smfit$data%>%
+      mutate(TargetSM=as.character(TargetSM))%>%
+      ggplot(aes(CPUE,Pred,color = TargetSM))+
+      geom_point()+facet_wrap(~habitat)+
+      coord_cartesian(xlim = c(0,quantile(smfit$data$CPUE,probs=0.95)))+
+      theme_PA()
+    
+    ggarrange(plotlist = list(p1+ggtitle(paste('Simulated data. Target=',names(target))),Plots[[2]],p3),ncol=1,nrow=3)
+    plot_name=paste0(names(target),'.tiff')
+    ggsave(paste0(output_dir, plot_name),width = 5, height = 10,compression="lzw")
+    
+  }
+  
+  
+}
+
+#Test performance of cluster analysis on simulated data
+test.sim.cluster=FALSE
+if(test.sim.cluster)
+{
   p1=dumy.dat%>%
     ggplot(aes(Species,Catch,fill=habitat))+
     geom_boxplot()+coord_flip()+theme(legend.position = 'top')
@@ -2271,7 +2356,7 @@ fn.check.balanced=function(d,SP,what,MN.YR,pLot)
   
   return(list(this.blks=this.blks,this.ves=this.ves))
 }
-fn.show.blk=function(dat,CEX,SRt) 
+fn.show.blk=function(dat,CEX,SRt,dat.all) 
 {
   dat=sort(dat)
   LAT.kept=sapply(dat, function(x) -as.numeric(substr(x, 1, 2)))
@@ -2286,6 +2371,25 @@ fn.show.blk=function(dat,CEX,SRt)
     polygon(dd.x,dd.y,col=rgb(0, 0, 1,0.25), border=rgb(0, 0, 1,0.5))
     text(LONG.kept[e]+0.5,LAT.kept[e]-0.5,dat[e],cex=CEX,col=1,srt=SRt,font=2)
   }
+  
+  #add not used
+  dat.all=sort(dat.all)
+  id.not=which(!dat.all%in%dat)
+  if(length(id.not)>0)
+  {
+    dat.not.used=dat.all[id.not]
+    LAT.kept=sapply(dat.not.used, function(x) -as.numeric(substr(x, 1, 2)))
+    LONG.kept=sapply(dat.not.used, function(x) 100+as.numeric(substr(x, 3, 4)))
+    for(e in 1:length(LAT.kept))
+    {
+      dd.y=c(LAT.kept[e]-1,LAT.kept[e]-1,LAT.kept[e],LAT.kept[e])
+      dd.x=c(LONG.kept[e],LONG.kept[e]+1,LONG.kept[e]+1,LONG.kept[e])
+      polygon(dd.x,dd.y,col=rgb(1, 0, 0,0.01), border=rgb(1, 0, 0,0.1))
+      text(LONG.kept[e]+0.5,LAT.kept[e]-0.5,dat[e],cex=CEX,col=scales::alpha(2,.5),srt=SRt,font=2)
+    }
+  }
+    
+
 }
 
 # SHOW EFFECT OF USING km gn d VS km g h for gummy ----------------------------------------------
@@ -2466,6 +2570,50 @@ Export.tbl=function(WD,Tbl,Doc.nm,caption,paragph,HdR.col,HdR.bg,Hdr.fnt.sze,Hdr
 }
 
 
+
+# EFFICIENCY_CALCULATE EFFORT CREEP THRU TIME----------------------------------------------
+fun.check.ves.char.on.cpue=function(d,NM)
+{
+  d=d%>%
+    mutate(CPUE=Catch.Target/Km.Gillnet.Hours.c,
+           finyear=substr(FINYEAR,1,4))%>%
+    group_by(finyear)%>%
+    mutate(Annual.rel.cpue=CPUE/max(CPUE))%>%
+    ungroup()%>%
+    data.frame()
+  
+  #temporal dynamics of vess char and cpue
+  pdf(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Efficiency creep/CPUE vs Vessel_char_thru time_',NM,'.pdf')),
+      width=12)
+  for(v in 1:length(ves.vars))
+  {
+    d$var=d[,ves.vars[v]]
+    if(is.integer(d$var) | is.numeric(d$var)) d$var=factor(d$var,levels=sort(unique(d$var)))
+    nN=unique(d%>%filter(!is.na(var))%>%pull(VESSEL))
+    p=d%>%
+      filter(VESSEL%in%nN)%>%
+      filter(!is.na(var))%>%
+      ggplot(aes(finyear,Annual.rel.cpue,fill=var))+
+      geom_boxplot()+
+      ylim(0,quantile(d$Annual.rel.cpue,probs=0.99))+
+      scale_fill_manual(name = paste0(ves.vars[v],' (',length(nN),' vessels)'),
+                        values=colorRampPalette(c("cadetblue1", "dodgerblue4"))(length(unique(d$var))))+
+      theme_PA()+
+      theme(legend.position = 'top',
+            axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+    print(p)
+  }
+  dev.off()
+  
+  #vess char correlation
+  x=d[,ves.vars]
+  x=x[!rowSums(!is.na(x)) == 0,]
+  
+  pdf(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Efficiency creep/CPUE vs Vessel_char_correlation_',NM,'.pdf')))
+  ggcorrplot(x%>%correlation(), lab = T,type='upper', show.diag = F)
+  dev.off()
+  
+}
 
 # INFLUENCE PLOTS ---------------------------------------------------------
 Influence.fn=function(MOD,DAT,Term.type,termS,add.Influence,SCALER)  

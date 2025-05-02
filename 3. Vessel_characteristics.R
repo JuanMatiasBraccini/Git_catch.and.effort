@@ -253,7 +253,7 @@ TDGDLF.survey.selected=TDGDLF.survey%>%
 
 
 # Visualize records-------------------------------------------------------------------------
-setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/Vessel_characteristics_fishing_power"))
+setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/All_Vessel_characteristics"))
 
 unik.BOATNAME.BOATREGO=unique(TDGDLF.survey.selected$BOATNAME.BOATREGO)
 unik.BOATNAME=unique(TDGDLF.survey.selected$BOATNAME)

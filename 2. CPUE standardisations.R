@@ -62,6 +62,8 @@ library(broom)  #nice display of model fit
 library(mgcViz)
 library(grid)
 library(tictoc)
+library(ggcorrplot)
+library(correlation)
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240,dplyr.summarise.inform = FALSE)   
 
@@ -209,7 +211,7 @@ Use.Qualif.level=FALSE
 do_Stephens_McCall="YES"
 
 #Control if doing cluster analysis of daily data
-do_cluster="YES"
+do_cluster="NO"
 
 #Control if doing PCA analysis of daily data                    
 do_pca="NO"   
@@ -1930,7 +1932,7 @@ if(Model.run=="First")
   ggexport(multi.page, filename = paste(HndL.Species_targeting,"Density.pdf",sep=''))
 }
 
-#Run Stephens & McCall
+#Run Stephens & McCall 
 if(do_Stephens_McCall=="YES")
 {
   dir_plots=paste0(HndL.Species_targeting,'Stephens_McCall')
@@ -2485,8 +2487,6 @@ if(do_pca=="YES")
 #Compare Stephens & McCall with cluster   
 if(do_cluster=="YES" & do_Stephens_McCall=="YES")
 {
-  library(ggcorrplot)
-  library(correlation)
   for(i in 1:length(SP.list))
   {
     p=DATA.list.LIVEWT.c.daily[[i]]%>%
@@ -2691,12 +2691,12 @@ par(mfrow=c(4,2),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
 for(s in Tar.sp)
 {
   #Monthly
-  fn.show.blk(dat=BLKS.used[[s]],CEX=CEX,SRt=SRt)
-  if(s==1)mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
+  fn.show.blk(dat=BLKS.used[[s]],CEX=CEX,SRt=SRt,dat.all=BLKS.used.indi[[s]])
+  if(s==Tar.sp[1])mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
   
   #Daily
-  fn.show.blk(dat=BLKS.used.daily[[s]],CEX=CEX,SRt=SRt)
-  if(s==1)mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
+  fn.show.blk(dat=BLKS.used.daily[[s]],CEX=CEX,SRt=SRt,dat.all=BLKS.used.daily.indi[[s]])
+  if(s==Tar.sp[1])mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
   legend("topright",names(SP.list)[s],bty='n',cex=1.5)
 }
 mtext("Longitude",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
@@ -3036,6 +3036,34 @@ if(do.Exploratory=="YES")
   })    #takes 9 mins
   
 }
+
+# EFFICIENCY_CALCULATE EFFORT CREEP THRU TIME----------------------------------------------
+get.efficiency.creep=FALSE
+#ACA
+if(get.efficiency.creep)
+{
+  #Display ves.vars thru time
+  if(Model.run=="First")
+  {
+    for(i in Tar.sp)
+    {
+      NM=names(DATA.list.LIVEWT.c)[i]
+      print(paste("Display vessel carachteristics thru time for ------",NM))
+      fun.check.ves.char.on.cpue(d=DATA.list.LIVEWT.c[[i]],NM=NM)
+    }
+      
+  }
+  
+  #Model efficiency creep
+  #other vars highly correlated or very small sample size
+  ves.vars.selected=c("ENGDERAT","ENGNUM","ENGPOWR","FLYBRIDGE","GROSSTON",
+                      "HULLCONS","HULLNUMB","HULLTYPE","MAXBEAM","WHEELHOU",
+                      "GPS","COECHO")
+}
+
+
+
+#DATA.list.LIVEWT.c.daily
 
 # CONSTRUCT STANDARDISED ABUNDANCE INDEX----------------------------------------------
 source(handl_OneDrive('Analyses/Catch and effort/Git_catch.and.effort/CPUE Construct standardised abundance index.R'))
