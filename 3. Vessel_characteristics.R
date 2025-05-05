@@ -253,41 +253,58 @@ TDGDLF.survey.selected=TDGDLF.survey%>%
 
 
 # Visualize records-------------------------------------------------------------------------
-setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/All_Vessel_characteristics"))
+setwd(handl_OneDrive("Analyses/Catch and effort/Outputs/Efficiency creep/All_Vessel_characteristics"))
 
 unik.BOATNAME.BOATREGO=unique(TDGDLF.survey.selected$BOATNAME.BOATREGO)
 unik.BOATNAME=unique(TDGDLF.survey.selected$BOATNAME)
-fn.viz=function(dis)
+out.this=FALSE
+if(out.this)
 {
-  d=TDGDLF.survey.selected[,c(key.vars,'BOATNAME.BOATREGO',dis)]%>%
-    mutate(x=!!sym(dis))
-  if(is.numeric(d$x)|is.integer(d$x))
+  fn.viz=function(dis,sortby)
   {
-    LvLs=sort(unique(d$x))
-    d$x=factor(d$x,levels=LvLs)
+    d=TDGDLF.survey.selected%>%
+      mutate(BOATREGO.BOATNAME=paste(BOATREGO,BOATNAME,sep='.'))
+    
+    d=d[,c(key.vars,sortby,dis)]%>%
+      mutate(x=!!sym(dis))
+    if(is.numeric(d$x)|is.integer(d$x))
+    {
+      LvLs=sort(unique(d$x))
+      d$x=factor(d$x,levels=LvLs)
+    }
+    NKl=1
+    if(length(unique(d$x))>20) NKl=2
+    d$var=d[,sortby]
+    p=d%>%
+      ggplot(aes(x=DATE,y=var,color=x))+
+      geom_line(linewidth=5)+
+      theme(panel.background = element_rect(fill = "cadetblue3",
+                                            colour = "black",
+                                            size = 0.5, linetype = "solid"),
+            panel.grid.major = element_blank(), 
+            panel.grid.minor = element_blank(),
+            legend.title=element_blank(),
+            legend.text = element_text(size=6))+
+      ggtitle(names(dis))+scale_color_grey(start=0,end=1)+guides(color=guide_legend(ncol =NKl))
+    print(p)
   }
-  NKl=1
-  if(length(unique(d$x))>20) NKl=2
-  p=d%>%
-    ggplot(aes(x=DATE,y=BOATNAME.BOATREGO,color=x))+
-    geom_line(linewidth=5)+
-    theme(panel.background = element_rect(fill = "cadetblue3",
-                                          colour = "black",
-                                          size = 0.5, linetype = "solid"),
-          panel.grid.major = element_blank(), 
-          panel.grid.minor = element_blank(),
-          legend.title=element_blank(),
-          legend.text = element_text(size=6))+
-    ggtitle(names(dis))+scale_color_grey(start=0,end=1)+guides(color=guide_legend(ncol =NKl))
-  print(p)
+  pdf("All vessel variables_sorted_boatname.pdf")
+  for(i in 1:length(vessel.vars))
+  {
+    fn.viz(dis=vessel.vars[i],sortby='BOATNAME.BOATREGO')
+    print(vessel.vars[i])
+  }
+  dev.off()
+  
+  pdf("All vessel variables_sorted_boatrego.pdf")
+  for(i in 1:length(vessel.vars))
+  {
+    fn.viz(dis=vessel.vars[i],sortby='BOATREGO.BOATNAME')
+    print(vessel.vars[i])
+  }
+  dev.off()
 }
-pdf("All vessel variables.pdf")
-for(i in 1:length(vessel.vars))
-{
-  fn.viz(dis=vessel.vars[i])
-  print(vessel.vars[i])
-}
-dev.off()
+
 
 # Validate records-------------------------------------------------------------------------
 a=TDGDLF.survey.selected%>%
@@ -358,7 +375,7 @@ TDGDLF.cpue.stand=TDGDLF.survey.selected%>%
                    ENGMAKE,ENGMODL,
                    DECKYEAR, SKIPYEAR,  #meaningless, not updated each year of survey year and NA for some key players
                    NETHWINC,NETPOWER,NETVEHI,NETVWINC))%>% #hauling vars are incomplete, e.g. no data for top vessel ('SOUTH WESTERN')
-  group_by(BOATNAME)%>%
+  group_by(BOATNAME,BOATREGO)%>%
   mutate(GPS=min(GPS),
          PLOT=min(PLOT),
          COECHO=min(COECHO),

@@ -2571,7 +2571,7 @@ Export.tbl=function(WD,Tbl,Doc.nm,caption,paragph,HdR.col,HdR.bg,Hdr.fnt.sze,Hdr
 
 
 
-# EFFICIENCY_CALCULATE EFFORT CREEP THRU TIME----------------------------------------------
+# EFFICIENCY_ESTIMATE EFFORT CREEP ----------------------------------------------
 fun.check.ves.char.on.cpue=function(d,NM)
 {
   d=d%>%
@@ -2583,7 +2583,7 @@ fun.check.ves.char.on.cpue=function(d,NM)
     data.frame()
   
   #temporal dynamics of vess char and cpue
-  pdf(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Efficiency creep/CPUE vs Vessel_char_thru time_',NM,'.pdf')),
+  pdf(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Efficiency creep/CPUE vs Vessel_char/CPUE vs Vessel_char_thru time_',NM,'.pdf')),
       width=12)
   for(v in 1:length(ves.vars))
   {
@@ -2609,10 +2609,162 @@ fun.check.ves.char.on.cpue=function(d,NM)
   x=d[,ves.vars]
   x=x[!rowSums(!is.na(x)) == 0,]
   
-  pdf(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Efficiency creep/CPUE vs Vessel_char_correlation_',NM,'.pdf')))
+  pdf(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Efficiency creep/CPUE vs Vessel_char/CPUE vs Vessel_char_correlation_',NM,'.pdf')))
   ggcorrplot(x%>%correlation(), lab = T,type='upper', show.diag = F)
   dev.off()
   
+}
+fun.check.ves.char.representative=function(d,NM)
+{
+  #effort thru time
+  Total.effort=d%>%
+    distinct(Same.return,.keep_all = T)%>%
+    group_by(FINYEAR)%>%
+    summarise(Annual.effort.tot=sum(Km.Gillnet.Hours.c))%>%
+    ungroup()%>%
+    data.frame()
+  Surveyed.effort=d[,c('VESSEL',ves.vars.selected)]%>%
+    gather(Variable,Value,-VESSEL)%>%
+    filter(!is.na(Value))
+  UNIK=unique(Surveyed.effort$VESSEL)
+  Surveyed.effort=d%>%
+    filter(VESSEL%in%UNIK)%>%
+    distinct(Same.return,.keep_all = T)%>%
+    group_by(FINYEAR)%>%
+    summarise(Annual.effort.vess=sum(Km.Gillnet.Hours.c))%>%
+    ungroup()%>%
+    data.frame
+  Surveyed.effort=Surveyed.effort%>%
+                  left_join(Total.effort,by='FINYEAR')%>%
+                  mutate(Prop.effort=Annual.effort.vess/Annual.effort.tot)
+  
+  p=Surveyed.effort%>%
+    mutate(FINYEAR=as.numeric(substr(FINYEAR,1,4)))%>%
+    ggplot(aes(FINYEAR,Prop.effort))+
+    geom_bar(stat = "identity",fill='steelblue')+
+    theme_PA(Ttl.siz=14)+ylab('Proportion')+
+    ggtitle(NM)
+  
+  #effort by vessel
+  Total.effort=d%>%
+    filter(!VESSEL%in%UNIK)%>%
+    distinct(Same.return,.keep_all = T)%>%
+    group_by(VESSEL)%>%
+    summarise(Annual.effort=sum(Km.Gillnet.Hours.c))%>%
+    ungroup()%>%
+    data.frame()
+    
+  Surveyed.effort=d%>%
+    filter(VESSEL%in%UNIK)%>%
+    distinct(Same.return,.keep_all = T)%>%
+    group_by(VESSEL)%>%
+    summarise(Annual.effort=sum(Km.Gillnet.Hours.c))%>%
+    ungroup()%>%
+    data.frame
+  Total.effort=rbind(Total.effort,Surveyed.effort)%>%
+    mutate(Surveyed=ifelse(VESSEL%in%UNIK,1,0))%>%
+    arrange(-Surveyed,-Annual.effort)%>%
+    mutate(cum.eff=cumsum(Annual.effort),
+           cum.eff.prop=cum.eff/sum(Annual.effort))%>%
+    mutate(n=row_number(),
+           Surveyed=ifelse(Surveyed==1,'Yes','No'))
+  
+  p1=Total.effort%>%
+      ggplot(aes(n,cum.eff.prop))+
+      geom_line(aes(color=Surveyed))+
+      theme_PA(Ttl.siz=14)+ylab('Cumulative effort')+xlab('Vessel')+
+      ggtitle(NM)+
+      geom_text_repel(data=Total.effort%>%filter(Surveyed=='Yes'),
+                      aes(n,cum.eff.prop,label=VESSEL),max.overlaps = 25,nudge_x=1)+
+    theme(legend.position = TRUE)
+
+  return(list(p=p,p1=p1,vesl.list=UNIK))
+}
+
+fun.technology.adoption=function(d,NM,dis.var)
+{
+  for(v in 1:length(dis.var))
+  {
+    Vesl.with.technology=unique(d[,c('VESSEL',dis.var[v])]%>%
+                          gather(Variable,Value,-VESSEL)%>%
+                          filter(!is.na(Value))%>%pull(VESSEL))
+    dd=d%>%
+      filter(VESSEL%in%Vesl.with.technology)%>%
+      dplyr::select(FINYEAR,VESSEL,one_of(dis.var[v]))%>%
+      rename(Var=!!dis.var[v])%>%
+      mutate(Finyear=as.numeric(substr(FINYEAR,1,4)))
+    
+    dd.first=dd%>%
+      filter(Var=='Y')%>%
+      group_by(VESSEL,Var)%>%
+      mutate(First.year=min(Finyear))%>%
+      distinct(VESSEL,First.year)
+  }
+
+    
+  
+  
+  
+  #effort thru time
+  Total.effort=d%>%
+    distinct(Same.return,.keep_all = T)%>%
+    group_by(FINYEAR)%>%
+    summarise(Annual.effort.tot=sum(Km.Gillnet.Hours.c))%>%
+    ungroup()%>%
+    data.frame()
+  
+  Surveyed.effort=d%>%
+    filter(VESSEL%in%UNIK)%>%
+    distinct(Same.return,.keep_all = T)%>%
+    group_by(FINYEAR)%>%
+    summarise(Annual.effort.vess=sum(Km.Gillnet.Hours.c))%>%
+    ungroup()%>%
+    data.frame
+  Surveyed.effort=Surveyed.effort%>%
+    left_join(Total.effort,by='FINYEAR')%>%
+    mutate(Prop.effort=Annual.effort.vess/Annual.effort.tot)
+  
+  p=Surveyed.effort%>%
+    mutate(FINYEAR=as.numeric(substr(FINYEAR,1,4)))%>%
+    ggplot(aes(FINYEAR,Prop.effort))+
+    geom_bar(stat = "identity",fill='steelblue')+
+    theme_PA(Ttl.siz=14)+ylab('Proportion')+
+    ggtitle(NM)
+  
+  #effort by vessel
+  Total.effort=d%>%
+    filter(!VESSEL%in%UNIK)%>%
+    distinct(Same.return,.keep_all = T)%>%
+    group_by(VESSEL)%>%
+    summarise(Annual.effort=sum(Km.Gillnet.Hours.c))%>%
+    ungroup()%>%
+    data.frame()
+  
+  Surveyed.effort=d%>%
+    filter(VESSEL%in%UNIK)%>%
+    distinct(Same.return,.keep_all = T)%>%
+    group_by(VESSEL)%>%
+    summarise(Annual.effort=sum(Km.Gillnet.Hours.c))%>%
+    ungroup()%>%
+    data.frame
+  Total.effort=rbind(Total.effort,Surveyed.effort)%>%
+    mutate(Surveyed=ifelse(VESSEL%in%UNIK,1,0))%>%
+    arrange(-Surveyed,-Annual.effort)%>%
+    mutate(cum.eff=cumsum(Annual.effort),
+           cum.eff.prop=cum.eff/sum(Annual.effort))%>%
+    mutate(n=row_number(),
+           Surveyed=ifelse(Surveyed==1,'Yes','No'))
+  
+  p1=Total.effort%>%
+    ggplot(aes(n,cum.eff.prop))+
+    geom_line(aes(color=Surveyed))+
+    theme_PA(Ttl.siz=14)+ylab('Cumulative effort')+xlab('Vessel')+
+    ggtitle(NM)+
+    geom_text_repel(data=Total.effort%>%filter(Surveyed=='Yes'),
+                    aes(n,cum.eff.prop,label=VESSEL),max.overlaps = 25,nudge_x=1)+
+    theme(legend.position = TRUE)
+  
+  return(list(p=p,p1=p1,vesl.list=UNIK))
 }
 
 # INFLUENCE PLOTS ---------------------------------------------------------

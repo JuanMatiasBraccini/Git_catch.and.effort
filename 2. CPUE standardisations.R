@@ -64,6 +64,7 @@ library(grid)
 library(tictoc)
 library(ggcorrplot)
 library(correlation)
+library(ggrepel)
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240,dplyr.summarise.inform = FALSE)   
 
@@ -195,9 +196,12 @@ Do.jpeg="NO"
 Do.tiff="YES"
 
 #Control type of model run
-#Model.run="First"    # for first time of doing standardisation. This allows selection of 
+#Model.run="First"    # for first time doing standardisation. This allows selection of 
 #     best model and sensitivity tests
 Model.run="Standard"  # for running standardisations in subsequent years
+
+#Control if calculating efficiency creep from vessel survey data
+get.efficiency.creep=FALSE
 
 #Define is testing model structure (i.e. selection of model terms)
 Def.mod.Str="NO"
@@ -1501,7 +1505,7 @@ if(Remove.blk.by=="blk_only")
   dev.off()
 }
 
-# EFFICIENCY_ADD VESSEL CHARACTERISTICS FOR SELECTED VESSELS----------------------------------------------
+# EFFICIENCY_EXPAND VESSEL CHARACTERISTICS FOR SELECTED VESSELS----------------------------------------------
 #select only vessels used for cpue stand
 Vessel.charac=Vessel.charac%>%
   filter(BOATREGO%in%c(unique(unlist(VES.used)),unique(unlist(VES.used.daily))))
@@ -1509,27 +1513,29 @@ ves.vars=names(Vessel.charac)
 ves.vars.drop=c("BOATNAME","BOATREGO","LICYEAR","PFL","SKIPPER")
 ves.vars=subset(ves.vars,!ves.vars%in%ves.vars.drop)
 
-#show changes thru time
+#show history of vessel characteristics
 if(Model.run=="First")  
 {
   p.list=vector('list',length(ves.vars))
   pdf(handl_OneDrive('Analyses/Catch and effort/Outputs/Efficiency creep/Vessel_char_hist.pdf'))
   for(p in 1:length(p.list))
   {
-    d=distinct(Vessel.charac, across(all_of(c('BOATNAME',ves.vars[p])))) 
+    d=Vessel.charac%>%
+      distinct(across(all_of(c('BOATNAME','BOATREGO',ves.vars[p]))))%>%
+      mutate(BOATREGO.BOATNAME=paste(BOATREGO,BOATNAME,sep='_'))
     
     if(is.integer(d[,ves.vars[p]])|is.numeric(d[,ves.vars[p]]))
     {
       min.y=min(d[,ves.vars[p]],na.rm=T)-1
       p.list[[p]]=d%>%
-        ggplot(aes_string(x="BOATNAME",y=ves.vars[p]))+
-        geom_segment( aes_string(x="BOATNAME", xend="BOATNAME", y=min.y, yend=ves.vars[p])) +
+        ggplot(aes_string(x="BOATREGO.BOATNAME",y=ves.vars[p]))+
+        geom_segment( aes_string(x="BOATREGO.BOATNAME", xend="BOATREGO.BOATNAME", y=min.y, yend=ves.vars[p])) +
         geom_point( size=5, color="red", fill="orange", shape=21, stroke=2)+
         coord_flip()+ggtitle(ves.vars[p])+ylim(min.y,NA)
     }else
     {
       p.list[[p]]=d%>%
-        ggplot(aes_string("BOATNAME",fill=ves.vars[p]))+
+        ggplot(aes_string("BOATREGO.BOATNAME",fill=ves.vars[p]))+
         geom_bar()+
         coord_flip()+ggtitle(ves.vars[p])
     }
@@ -1539,27 +1545,87 @@ if(Model.run=="First")
 }
 
 #expand Vessel.charac
+amend.date.built=TRUE
 Vessel.charac=Vessel.charac%>%
-  mutate(DATEBUILT=case_when(BOATNAME=='CINDERELLA' & is.na(DATEBUILT)~1993,
-                             BOATNAME=='COSAN II' & is.na(DATEBUILT)~2004,
-                             BOATREGO=='E 061'& is.na(DATEBUILT)~2014, 
-                             TRUE~DATEBUILT))
+                mutate(DATEBUILT=case_when(BOATNAME=='CINDERELLA' & is.na(DATEBUILT)~1993,
+                                           BOATNAME=='COSAN II' & is.na(DATEBUILT)~2004,
+                                           BOATREGO=='E 061'& is.na(DATEBUILT)~2014, 
+                                           TRUE~DATEBUILT),
+                       BOATNAME=case_when(BOATNAME=='STEVE MAYREE D'~'SOUTHWESTERN',
+                                          BOATNAME=='PLANJAK'~'PLANJAK II',
+                                          BOATNAME=='FALCON 2'~'FALCON II',
+                                          BOATNAME=='ST. GERARD'~'ST GERARD M',
+                                          BOATNAME=='SOUTH WESTERN'~'SOUTHWESTERN',
+                                          BOATNAME=='SVET-NIKOLA'~'SVETI NIKOLA',
+                                          TRUE~BOATNAME))
+
 dis.FINYEAR=sort(c(unique(Data.monthly.GN$FINYEAR),unique(Data.daily.GN$FINYEAR)))
-dammy=Vessel.charac%>%distinct(BOATNAME,BOATREGO)
+dammy=Vessel.charac%>%
+          distinct(BOATREGO,BOATNAME,LICYEAR)%>%
+          group_by(BOATREGO,BOATNAME)%>%
+          mutate(first.year=min(LICYEAR),
+                 last.year=max(LICYEAR))%>%
+          ungroup()%>%
+          distinct(BOATREGO,BOATNAME,.keep_all = TRUE)%>%
+          mutate(first.year=case_when(BOATREGO=='G 297' & BOATNAME=='MISS-DEB-A-DEL II'~1998,
+                                      BOATREGO=='G 297' & BOATNAME=='ST GERARD M'~2000,
+                                      BOATREGO=='B 091 ' & BOATNAME=='PLANJAK II'~1997,
+                                      BOATREGO=='B 142 ' & BOATNAME=='SOUTHWESTERN'~2000,
+                                      TRUE~first.year))
 n.dammy=nrow(dammy)
 dammy=dammy[rep(rownames(dammy),length(dis.FINYEAR)),]%>%
       arrange(BOATNAME, BOATREGO)%>%
       mutate(FINYEAR=rep(dis.FINYEAR,n.dammy))%>%
-  mutate(LICYEAR=as.integer(substr(FINYEAR,1,4)))
+      mutate(LICYEAR=as.integer(substr(FINYEAR,1,4)))
+
+if(amend.date.built)
+{
+  first.year.data=Data.monthly.GN%>%
+    filter(VESSEL%in%unique(Vessel.charac$BOATREGO))%>%
+    distinct(VESSEL,FINYEAR)%>%
+    mutate(finyear=as.numeric(substr(FINYEAR,1,4)))%>%
+    group_by(VESSEL)%>%
+    summarise(first.year.data=min(finyear))
+  dammy=left_join(dammy,first.year.data,by=c('BOATREGO'='VESSEL'))
+}
+
+dis.FINYEAR.daily=Data.daily.GN%>%
+                    mutate(finyear=as.numeric(substr(FINYEAR,1,4)))%>%
+                    group_by(VESSEL,BoatName)%>%
+                    summarise(last.year.ktch=max(finyear))%>%
+                    ungroup()%>%
+                    mutate(BoatName=toupper(BoatName))
+dammy=dammy%>%
+    ungroup()%>%
+  left_join(dis.FINYEAR.daily,by=c('BOATNAME'='BoatName','BOATREGO'='VESSEL'))%>%
+  mutate(last.year=ifelse(!is.na(last.year.ktch),last.year.ktch,last.year))
+  rowwise() %>%
+  mutate(Min = min(first.year.data,first.year),
+         Max = max(first.year.data,last.year))          
+  mutate(id.max=ifelse(!is.na(last.year.ktch),first.year,last.year))%>%
+            filter(LICYEAR>=first.year.data & LICYEAR>=id.low)
+
+
+  
+dammy=dammy%>%
+  dplyr::select(-c(last.year.ktch,id.year,first.year,last.year))
 
 Vessel.charac.exp=full_join(Vessel.charac,
                             dammy,by=c('BOATNAME','BOATREGO','LICYEAR'))%>%
-  mutate(finyear=as.numeric(substr(FINYEAR,1,4)))%>%
+  mutate(finyear=as.integer(substr(FINYEAR,1,4)))%>%
   arrange(BOATNAME,BOATREGO,finyear)%>%
-  dplyr::select(-c(PFL,SKIPPER))%>%
-  group_by(BOATNAME,BOATREGO)%>%
-  filter(finyear>=min(DATEBUILT,na.rm=T))
+  dplyr::select(-c(PFL,SKIPPER))
+if(amend.date.built)
+{
+  Vessel.charac.exp=Vessel.charac.exp%>%
+    mutate(DATEBUILT=ifelse(DATEBUILT>first.year.data,first.year.data,DATEBUILT))%>%
+    dplyr::select(-first.year.data)
+}
   
+Vessel.charac.exp=Vessel.charac.exp%>%
+              group_by(BOATNAME,BOATREGO)%>%
+              filter(finyear>=min(DATEBUILT,na.rm=T))
+              
 #fill in missing years  
 Vessel.charac.exp=Vessel.charac.exp%>%
   group_by(BOATNAME,BOATREGO)%>%
@@ -1567,15 +1633,16 @@ Vessel.charac.exp=Vessel.charac.exp%>%
        HULLCONS,HULLNUMB,HULLTYPE,WHEELHOU,
        GPS,PLOT,COECHO,RADAR,SONAR,BWECHO, .direction = "downup")%>%
   fill(ENGPOWR,ENGSPD,BRNTNK,ICEBOX,LHTABV,LHTBLW,GROSSTON,MAXBEAM,
-       MAXDRAU,REG_LENGTH, .direction = "downup")
+       MAXDRAU,REG_LENGTH, .direction = "downup")%>%
+  ungroup()
 
 Vessel.charac.exp=Vessel.charac.exp%>%
-              mutate(GPS=ifelse(finyear<GPS,'N','Y'),
-                     PLOT=ifelse(finyear<PLOT,'N','Y'),
-                     COECHO=ifelse(finyear<COECHO,'N','Y'),
-                     RADAR=ifelse(finyear<RADAR,'N','Y'),
-                     SONAR=ifelse(finyear<SONAR,'N','Y'),
-                     BWECHO=ifelse(finyear<BWECHO,'N','Y'))%>%
+              mutate(GPS=ifelse(finyear<GPS & !is.na(GPS),'N',ifelse(finyear>=GPS & !is.na(GPS),'Y',GPS)),
+                     PLOT=ifelse(finyear<PLOT & !is.na(PLOT),'N',ifelse(finyear>=PLOT & !is.na(PLOT),'Y',PLOT)),
+                     COECHO=ifelse(finyear<COECHO & !is.na(COECHO),'N',ifelse(finyear>=COECHO ,'Y',COECHO)),
+                     RADAR=ifelse(finyear<RADAR & !is.na(RADAR),'N',ifelse(finyear>=RADAR & !is.na(RADAR),'Y',RADAR)),
+                     SONAR=ifelse(finyear<SONAR & !is.na(SONAR),'N',ifelse(finyear>=SONAR & !is.na(SONAR),'Y',SONAR)),
+                     BWECHO=ifelse(finyear<BWECHO & !is.na(BWECHO),'N',ifelse(finyear>=BWECHO & !is.na(BWECHO),'Y',BWECHO)))%>%
             data.frame()
      
 check.filled.properly=FALSE  
@@ -1613,11 +1680,11 @@ if(Model.run=="First")
   for(v in 1:length(ves.vars))
   {
     p=Vessel.charac.exp%>%
-      mutate(Boat.name_rego=paste(BOATNAME,BOATREGO))%>%
+      mutate(Boat.name_rego=paste(BOATREGO,BOATNAME,sep='_'))%>%
       ggplot(aes_string('LICYEAR','Boat.name_rego', color=ves.vars[v]))+
       geom_point( size=5)+
       ggtitle(ves.vars[v])+ylab('')+
-      theme_PA()
+      theme_PA()+geom_vline(xintercept=2006,color='orange',linewidth=1.5,alpha=.6) 
     print(p)
   }
   dev.off()
@@ -1772,7 +1839,9 @@ for(i in nnn)
   print(paste0('constructing wide Daily dataframe for -----',names(DATA.list.LIVEWT.c.daily)[i]))
 }
 
-#add vessel characteristics to data
+#add vessel characteristics to data #ACA
+#note: by not having 'boatname' in Monthly data, I have to drop this var when merging,
+#     this is an issue as many vessel regos were used in parallel in different boats, eg 'G 297'
 for(i in nnn)
 {
   print(paste('Adding vessel characteristicts to ---',names(DATA.list.LIVEWT.c)[i]))
@@ -3037,8 +3106,7 @@ if(do.Exploratory=="YES")
   
 }
 
-# EFFICIENCY_CALCULATE EFFORT CREEP THRU TIME----------------------------------------------
-get.efficiency.creep=FALSE
+# EFFICIENCY_ESTIMATE EFFORT CREEP----------------------------------------------
 #ACA
 if(get.efficiency.creep)
 {
@@ -3051,19 +3119,57 @@ if(get.efficiency.creep)
       print(paste("Display vessel carachteristics thru time for ------",NM))
       fun.check.ves.char.on.cpue(d=DATA.list.LIVEWT.c[[i]],NM=NM)
     }
-      
   }
   
-  #Model efficiency creep
-  #other vars highly correlated or very small sample size
+  #other vars are highly correlated or very small sample size
   ves.vars.selected=c("ENGDERAT","ENGNUM","ENGPOWR","FLYBRIDGE","GROSSTON",
                       "HULLCONS","HULLNUMB","HULLTYPE","MAXBEAM","WHEELHOU",
-                      "GPS","COECHO")
+                      "GPS","COECHO","PLOT","RADAR")
+  
+  #Determine representativeness of vessels filling in vessel survey
+  VSL.surveyed=vector('list',length(nnn))
+  names(VSL.surveyed)=names(Species.list)
+  dumi=dumi1=VSL.surveyed
+  for(i in nnn)
+  {
+    if(i%in%Tar.sp)
+    {
+      NM=names(DATA.list.LIVEWT.c)[i]
+      print(paste("How representative surveyed vessels are for ------",NM))
+      x=fun.check.ves.char.representative(d=DATA.list.LIVEWT.c[[i]],NM)
+      dumi[[i]]=x$p
+      dumi1[[i]]=x$p1
+      VSL.surveyed[[i]]=x$vesl.list
+    }
+  }
+  
+  dumi<-dumi[!sapply(dumi,is.null)]
+  ggarrange(plotlist = dumi,ncol=2,nrow=2)
+  ggsave(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Efficiency creep/Vessels with vessel char_annual prop. total effort.tiff')),
+         width=8,height= 6,compression="lzw")
+  dumi1<-dumi1[!sapply(dumi1,is.null)]
+  ggarrange(plotlist = dumi1,ncol=2,nrow=2,common.legend = TRUE)
+  ggsave(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Efficiency creep/Vessels with vessel char_cum total effort.tiff')),
+         width=8,height= 6,compression="lzw")
+
+  Boat.names_surveyed=Data.daily.GN%>%
+    filter(VESSEL%in%unique(unlist(VSL.surveyed)))%>%
+    distinct(VESSEL, BoatName,MastersName)%>%
+    arrange(MastersName,BoatName)
+  
+  #Determine technology adoption trend
+  for(i in Tar.sp)
+  {
+    NM=names(DATA.list.LIVEWT.c)[i]
+    print(paste("Calculate technology adoption for ------",NM))
+    fun.technology.adoption(d=DATA.list.LIVEWT.c[[i]],NM=NM,dis.var=c("GPS","COECHO"))
+  }
+  
+  
+  #Model efficiency creep
+
 }
 
-
-
-#DATA.list.LIVEWT.c.daily
 
 # CONSTRUCT STANDARDISED ABUNDANCE INDEX----------------------------------------------
 source(handl_OneDrive('Analyses/Catch and effort/Git_catch.and.effort/CPUE Construct standardised abundance index.R'))
