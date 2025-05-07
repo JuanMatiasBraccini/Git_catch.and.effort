@@ -1867,7 +1867,8 @@ for(i in nnn)
 #add vessel characteristics to data 
 #note: by not having 'boatname' in Monthly data, I have to drop this var when merging,
 #     this is an issue as many vessel regos were used in parallel in different boats, eg 'G 297'
-#     this is solved in '#reset first year to start at first year of catch data' 
+#     this is was attempted to be solved in '#reset first year to start at first year of catch data' 
+#     but still not enough, we need to have 'boatname' included in Monthly.returns and merge by BOATNAME-BOATREGO-FINYEAR
 if(get.efficiency.creep)
 {
   for(i in nnn)
@@ -1910,10 +1911,11 @@ if(Model.run=="First")
   }
 }
 
-# EFFICIENCY_PROPORTION ZERO CATCH THRU TIME BY FISHER TO ID FISHING EFFICIENCY CREEP ----------------------------------------------
+# EFFICIENCY_CATCH RATE BY FISHER TO ID FISHING EFFICIENCY CREEP ----------------------------------------------
 #note: Monthly is aggregated so low incidence of 0 catch records. Not very informative
 if(Model.run=="First")  
 {
+  #PROPORTION ZERO CATCH THRU TIME
   indis=match(c("Gummy Shark","Whiskery Shark","Dusky Whaler","Sandbar Shark"),names(DATA.list.LIVEWT.c))
   for(i in indis)
   {
@@ -1944,6 +1946,9 @@ if(Model.run=="First")
                                 series='Daily')
     }
   }
+  
+  #CATCH BY FISHER  ACA
+  
 }
 # CALCULATE BLOCK CORNERS FOR GAM ----------------------------------------------
 for(s in nnn)
@@ -3186,20 +3191,16 @@ if(get.efficiency.creep)
     distinct(VESSEL, BoatName,MastersName)%>%
     arrange(MastersName,BoatName)
   
-  #Determine technology adoption trend  #ACA
-  for(i in Tar.sp)
-  {
-    NM=names(DATA.list.LIVEWT.c)[i]
-    print(paste("Calculate technology adoption for ------",NM))
-    fun.technology.adoption(d=DATA.list.LIVEWT.c[[i]],NM=NM,dis.var=c("GPS","COECHO"))
-  }
+  #Determine technology adoption trend  
+  #fun.technology.adoption(d=Vessel.charac.exp%>%rename(VESSEL=BOATREGO),dis.var=c("GPS","PLOT","COECHO","RADAR"))
+  
   
   
   #Model efficiency creep
 
 }
 
-
+#ACA
 # CONSTRUCT STANDARDISED ABUNDANCE INDEX----------------------------------------------
 source(handl_OneDrive('Analyses/Catch and effort/Git_catch.and.effort/CPUE Construct standardised abundance index.R'))
 
