@@ -2229,11 +2229,17 @@ if(Check.school.shark.targeting=="YES")
   library(ggpubr)
   library(gridExtra)
   library(Hmisc)
-  
+
   #Annual catches
     #financial year
-  a=Data.monthly%>%filter(SPECIES==17008)%>%group_by(SNAME,FINYEAR,LAT,LONG)%>%summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
-  b=Data.daily%>%filter(SPECIES==17008)%>%group_by(SNAME,FINYEAR,LAT,LONG)%>%summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
+  a=Data.monthly%>%
+    filter(SPECIES==17008 & !FINYEAR%in%unique(Data.daily$FINYEAR))%>%
+    group_by(SNAME,FINYEAR,LAT,LONG)%>%
+    summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
+  b=Data.daily%>%
+    filter(SPECIES==17008)%>%
+    group_by(SNAME,FINYEAR,LAT,LONG)%>%
+    summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
   ab=rbind(a,b)%>%group_by(SNAME,FINYEAR,LAT,LONG)%>%summarise(Tonnes=sum(Tonnes,na.rm=T))
   ab%>%ggplot(aes(LONG,LAT,color=Tonnes))+geom_point()+facet_wrap(~FINYEAR)
   ggsave(paste(hndl,'School shark/Catch_spatio_temporal.tiff',sep='/'),width = 10,height = 10,compression = "lzw")
@@ -2242,15 +2248,27 @@ if(Check.school.shark.targeting=="YES")
             paste(hndl,'School shark/Catch_temporal.csv',sep='/'),row.names = F)
   
     #calendar year
-  a=Data.monthly%>%filter(SPECIES==17008)%>%group_by(SNAME,YEAR,LAT,LONG)%>%summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
-  b=Data.daily%>%filter(SPECIES==17008)%>%group_by(SNAME,YEAR,LAT,LONG)%>%summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
+  a=Data.monthly%>%
+    filter(SPECIES==17008 & !FINYEAR%in%unique(Data.daily$FINYEAR))%>%
+    group_by(SNAME,YEAR,LAT,LONG)%>%
+    summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
+  b=Data.daily%>%
+    filter(SPECIES==17008)%>%
+    group_by(SNAME,YEAR,LAT,LONG)%>%
+    summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
   ab=rbind(a,b)%>%group_by(SNAME,YEAR,LAT,LONG)%>%summarise(Tonnes=sum(Tonnes,na.rm=T))
   write.csv(ab%>%group_by(SNAME,YEAR)%>%summarise(Tonnes=sum(Tonnes,na.rm=T)),
             paste(hndl,'School shark/Catch_temporal_calendar_year.csv',sep='/'),row.names = F)
   
     #financial by vessel
-  a=Data.monthly%>%filter(SPECIES==17008)%>%group_by(SNAME,FINYEAR,VESSEL)%>%summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
-  b=Data.daily%>%filter(SPECIES==17008)%>%group_by(SNAME,FINYEAR,VESSEL)%>%summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
+  a=Data.monthly%>%
+    filter(SPECIES==17008 & !FINYEAR%in%unique(Data.daily$FINYEAR))%>%
+    group_by(SNAME,FINYEAR,VESSEL)%>%
+    summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
+  b=Data.daily%>%
+    filter(SPECIES==17008)%>%
+    group_by(SNAME,FINYEAR,VESSEL)%>%
+    summarise(Tonnes=sum(LIVEWT.c,na.rm=T)/1000)
   ab=rbind(a,b)%>%group_by(SNAME,FINYEAR,VESSEL)%>%summarise(Tonnes=sum(Tonnes,na.rm=T))
   U=Data.daily.1%>%
         distinct(vessel,BoatName,finyear)%>%
@@ -2266,14 +2284,14 @@ if(Check.school.shark.targeting=="YES")
   Min.yr=2019
   prop.school.target=0.5
   School.shots=Data.daily.original%>%
-    filter(year>2019)%>%
-    mutate(SP=ifelse(species==17008,'School','Other'))%>%
-    group_by(SP,TSNo)%>%summarise(livewt=sum(livewt,na.rm=T))%>%
-    spread(SP,livewt,fill=0)%>%
-    mutate(TOT=School+Other)%>%
-    filter(TOT>0)%>%
-    mutate(Prop.school=School/(School+Other))%>%
-    arrange(Prop.school)
+                filter(year>2019)%>%
+                mutate(SP=ifelse(species==17008,'School','Other'))%>%
+                group_by(SP,TSNo)%>%summarise(livewt=sum(livewt,na.rm=T))%>%
+                spread(SP,livewt,fill=0)%>%
+                mutate(TOT=School+Other)%>%
+                filter(TOT>0)%>%
+                mutate(Prop.school=School/(School+Other))%>%
+                arrange(Prop.school)
   table(round(School.shots$Prop.school,1))
   ID.school.shots=School.shots%>%filter(Prop.school>=prop.school.target)%>%pull( TSNo)
   
@@ -2313,13 +2331,31 @@ if(Check.school.shark.targeting=="YES")
           axis.title=element_text(size=14,face="bold"),
           axis.text=element_text(size=12))
   
-  
   infographic=grid.arrange(p1,p2, nrow = 2,ncol=1,heights=c(1.5,1))
   annotate_figure(infographic,
                   bottom = text_grob("",size = 20),
                   left = text_grob("",rot = 90,size = 20))
-  
   ggsave(paste(hndl,'School shark/School.shark.targeting.tiff',sep='/'), width = 12, height = 8,compression = "lzw")
+  
+   
+  #School shark catch per trip for informing trip limits
+  a=Data.daily.original%>%
+          filter(species==17008)%>%
+          group_by(FINYEAR,TSNo,BoatName,VESSEL)%>%
+          summarise(livewt=sum(livewt))%>%
+          ungroup()
+  write.csv(a,paste(hndl,'School shark/School.shark.catch.per.trip.csv',sep='/'),row.names = F)
+  
+  a%>%
+    mutate(FINYEAR=substr(FINYEAR,1,4))%>%
+    ggplot(aes(FINYEAR,livewt,fill=BoatName))+
+    geom_boxplot()+
+    facet_wrap(~BoatName)+
+    theme_bw()+ylab('Livewt (kg, log transformed)')+ scale_y_log10() +
+    theme(legend.position = 'none',
+          axis.text.x = element_text(size=7,angle = 90, vjust = 0.5, hjust=1))
+  ggsave(paste(hndl,'School shark/School.shark.catch.per.trip.tiff',sep='/'), width = 14, height = 8,compression = "lzw")
+  
 }
 
 #G 4.35 Zone 1 catch east and west Black Point-------------------------------------------------------------------------
