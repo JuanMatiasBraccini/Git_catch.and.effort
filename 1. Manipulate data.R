@@ -129,7 +129,7 @@ setwd(handl_OneDrive("Data/Catch and Effort"))  # working directory
 First.run="NO"    
 #First.run="YES"
 
-Current.yr="2024-25"    #Set current financial year 
+Current.yr="2023-24"    #Set current financial year 
 Current.yr.dat=paste(substr(Current.yr,1,4),substr(Current.yr,6,7),sep="_")
 xx=paste(getwd(),Current.yr.dat,sep="/")
 if(!file.exists(xx)) dir.create(xx) 

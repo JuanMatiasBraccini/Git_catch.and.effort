@@ -36,7 +36,7 @@ source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R"))
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)
 
-Current.yr="2022-23"   #financial year for latest catch
+Current.yr="2023-24"   #financial year for latest catch
 
 Percent.fin.of.livewt=0.03  #used as default if species not in Shark.Fin.Price.List
 Shark.Fin.Price.List=read.csv(handl_OneDrive("Data/Catch and Effort/Shark Fin Price List.csv")) #provided by Rory to Eva Lai
@@ -65,8 +65,9 @@ LL.equiv.Eff.days.zone=read.csv("LL.equiv.Eff.days.zone.csv")
 
 
 All.species.names=read.csv(handl_OneDrive("Data/Species.code.csv"))
-Ray.species=25000:31000
-Elasmo.species=5001:31000
+Shark.species=5001:24999
+Ray.species=c(25000:31000,38000,39001,90030)
+Elasmo.species=c(Shark.species,Ray.species)
 Gummy=17001;Dusky_whaler=c(18003,18001);Whiskery=17003;Sandbar=18007;Hammerheads=19000;
 Spinner=18023;Wobbegongs=13000;Common_saw_shark=23002;School=17008
 Order.Elas.Sp.SoFAR=data.frame(Species=c("Gummy","Dusky_whaler","Whiskery","Sandbar","Hammerheads",
@@ -77,7 +78,7 @@ Order.Elas.Sp.SoFAR=data.frame(Species=c("Gummy","Dusky_whaler","Whiskery","Sand
                                                   "F. Orectolobidae","Batoidea","Pristiophorus cirratus","Galeorhinus galeus","",""))
 
 
-Scalefish.species=180000:599001
+Scalefish.species=c(117001,180000:599001)
 Scalefish.species=Scalefish.species[which(Scalefish.species %in% unique(Data.monthly$SPECIES))]
 Redfishes=c(258000,258004,258005,258006)
 Blue_morwong=377004;Blue_groper=384002;West_Australian_dhufish=320000;Pink_snapper=353001;
@@ -104,7 +105,7 @@ FishEffLims=data.frame(zone=c("West","Zone1","Zone2"),Km.Gillnet.Hours.c=c(67692
 #species status for SOFAR
 Gummy.status="Adequate"
 Dusky.status="Recovering"
-Sandbar.status="Recovering"
+Sandbar.status="Adequate"
 Whiskery.status="Adequate"
 
 
@@ -616,7 +617,7 @@ write.csv(Retained.species,"Retained.species.csv",row.names=F)
 #Export if catch levels are Acceptable or Not 
 Ktch_comm_accept=Tot.wt%>%mutate(SPECIES=ifelse(SPECIES=="sandbar","Sandbar",SPECIES))%>%
                           filter(SPECIES%in%c("Gummy","Whiskery","Bronzy.Dusky","Sandbar"))%>%
-                          select(SPECIES,Catch.tons)%>%
+                          dplyr::select(SPECIES,Catch.tons)%>%
                           left_join(Catch.range.key.species,by="SPECIES")%>%
                           mutate(Acceptable=ifelse(Catch.tons>=Min.catch*.9 & Catch.tons<=Max.catch*1.1,"Acceptable",
                                                    "Unacceptable"))

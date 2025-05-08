@@ -386,10 +386,14 @@ Gummy.range=c(116,129)
 Tab.incomplit=table(Data.daily.GN$FINYEAR,Data.daily.GN$MONTH)
 Tab.incomplit[Tab.incomplit>0]=1
 Incomplete.year=names(which(rowSums(Tab.incomplit)<12))
-Data.daily.GN=subset(Data.daily.GN,!FINYEAR==Incomplete.year)
-Effort.daily=subset(Effort.daily,!finyear==Incomplete.year)
-Data.monthly.GN=subset(Data.monthly.GN,!FINYEAR==Incomplete.year)
-Effort.monthly=subset(Effort.monthly,!FINYEAR==Incomplete.year)
+if(length(Incomplete.year)>0)
+{
+  Data.daily.GN=subset(Data.daily.GN,!FINYEAR==Incomplete.year)
+  Effort.daily=subset(Effort.daily,!finyear==Incomplete.year)
+  Data.monthly.GN=subset(Data.monthly.GN,!FINYEAR==Incomplete.year)
+  Effort.monthly=subset(Effort.monthly,!FINYEAR==Incomplete.year)
+}
+
 
 Data.daily.GN=Data.daily.GN%>%
   mutate(Dupli=paste(Same.return.SNo,SPECIES,CONDITN,LIVEWT.c))%>% 
@@ -1175,7 +1179,7 @@ Vessel.start.rep=Data.monthly.GN%>%
   mutate(Start.reporting=min(finyear))%>%
   ungroup()%>%
   distinct(VESSEL,Start.reporting,.keep_all = T)%>%
-  select(VESSEL,Start.reporting)
+  dplyr::select(VESSEL,Start.reporting)
 
 Vessel.start.rep.daily=Data.daily.GN%>%
   distinct(FINYEAR,VESSEL)%>%
@@ -1184,7 +1188,7 @@ Vessel.start.rep.daily=Data.daily.GN%>%
   mutate(Start.reporting=min(finyear))%>%
   ungroup()%>%
   distinct(VESSEL,Start.reporting,.keep_all = T)%>%
-  select(VESSEL,Start.reporting)%>%
+  dplyr::select(VESSEL,Start.reporting)%>%
   filter(!VESSEL%in%Vessel.start.rep$VESSEL)
 
 Vessel.start.rep=rbind(Vessel.start.rep,Vessel.start.rep.daily)
