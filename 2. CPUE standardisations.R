@@ -201,7 +201,7 @@ Do.tiff="YES"
 Model.run="Standard"  # for running standardisations in subsequent years
 
 #Control if calculating efficiency creep from vessel survey data
-get.efficiency.creep=FALSE
+get.efficiency.creep=FALSE #cannot match ves vars with catch return (need vessel-boath, only vessel available)
 
 #Define is testing model structure (i.e. selection of model terms)
 Def.mod.Str="NO"
@@ -1897,8 +1897,6 @@ if(get.efficiency.creep)
   }
 }
 
-
-
 # EXPORT PROPORTIONS WITH CATCH ----------------------------------------------
 write.csv(Prop.Catch,paste(hndl,"Prop.records.with.catch.monthly.csv",sep=""),row.names=T)
 write.csv(Prop.Catch.daily,paste(hndl,"Prop.records.with.catch.daily.csv",sep=""),row.names=T)
@@ -1951,7 +1949,7 @@ if(Model.run=="First")
     }
   }
   
-  #CATCH BY FISHER  ACA
+  #CATCH BY FISHER  
   
 }
 # CALCULATE BLOCK CORNERS FOR GAM ----------------------------------------------
@@ -2634,6 +2632,14 @@ if(do_cluster=="YES" & do_Stephens_McCall=="YES")
 
 }
 
+#Remove Catch.x variables
+for(i in 1:length(SP.list))
+{
+  drop=names(DATA.list.LIVEWT.c.daily[[i]])[grep('Catch.',names(DATA.list.LIVEWT.c.daily[[i]]))]
+  drop=subset(drop,!drop=="Catch.Target")
+  if(length(drop)>0) DATA.list.LIVEWT.c.daily[[i]]=DATA.list.LIVEWT.c.daily[[i]]%>%dplyr::select(-all_of(drop))
+}
+
 # TABLE OF SENSITIVITY SCENARIOS ----------------------------------------------
 Tab.Sensi=data.frame(Scenario=c("Base case","Nominal","All vessels & blocks","No efficiency"),
                      Standardisation=c("Yes","No",rep("Yes",2)),
@@ -3205,11 +3211,72 @@ if(get.efficiency.creep)
 }
 
 #ACA
+#Explore vessel and vessel char effect on selected records for standardisation
+if(Model.run=="First")
+{
+  for(s in Tar.sp)
+  {
+    NM=names(DATA.list.LIVEWT.c)[s]
+    
+    #Monthly
+    iid=match(SpiSis[match(NM,names(SpiSis))],names(First.year.catch))
+    Firs.yr.ktch=names(First.year.catch[[iid]])
+    theseyears=sort(unique(DATA.list.LIVEWT.c[[s]]$FINYEAR))
+    theseyears=theseyears[match(Firs.yr.ktch,theseyears):length(theseyears)]
+    
+    d=DATA.list.LIVEWT.c[[s]]%>%
+      filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]] & FINYEAR%in%theseyears )%>%
+      mutate(CPUE=Catch.Target/Km.Gillnet.Hours.c)
+    
+    #remove first years with very few positive catch observation
+    if(NM=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
+    if(NM=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
+    x=fn.show.cpue.vsl(d)
+    x$p
+    ggsave(paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/check vessel and chars/',NM,'_cpue by vessel_monthly.tiff'))),
+           width = 8,height = 8, dpi = 300, compression = "lzw")
+    write.csv(x$d,paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/check vessel and chars/',NM,'_cpue by vessel_monthly.csv'))),
+              row.names = F)
+    
+    ggarrange(plotlist=list(x$p1,x$p2,x$p3,x$p4,x$p5,x$p6))
+    ggsave(paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/check vessel and chars/',NM,'_cpue by char_monthly.tiff'))),
+           width = 8,height = 8, dpi = 300, compression = "lzw")
+    
+    
+    #Daily
+    iid=match(SpiSis[match(names(DATA.list.LIVEWT.c.daily)[s],names(SpiSis))],names(First.year.catch.daily))
+    Firs.yr.ktch=names(First.year.catch.daily[[iid]])
+    theseyears=sort(unique(DATA.list.LIVEWT.c.daily[[s]]$FINYEAR))
+    theseyears=theseyears[match(Firs.yr.ktch,theseyears):length(theseyears)]
+    
+    #remove first year of transition from Monthly to Daily returns due to effort misreporting
+    drop.this=match("2006-07",theseyears)
+    if(!is.na(drop.this))theseyears=theseyears[-drop.this]
+    
+    d=DATA.list.LIVEWT.c.daily[[s]]%>%
+      filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]] & FINYEAR%in%theseyears)%>%
+      mutate(CPUE=Catch.Target/Km.Gillnet.Hours.c)
+    x=fn.show.cpue.vsl(d)
+    x$p
+    ggsave(paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/check vessel and chars/',NM,'_cpue by vessel_daily.tiff'))),
+           width = 8,height = 8, dpi = 300, compression = "lzw")
+    write.csv(x$d,paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/check vessel and chars/',NM,'_cpue by vessel_daily.csv'))),
+              row.names = F)
+    
+    ggarrange(plotlist=list(x$p1,x$p2,x$p3,x$p4,x$p5,x$p6))
+    ggsave(paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/check vessel and chars/',NM,'_cpue by char_daily.tiff'))),
+           width = 8,height = 8, dpi = 300, compression = "lzw")
+    
+    
+  }
+}
+
+
 # CONSTRUCT STANDARDISED ABUNDANCE INDEX----------------------------------------------
 source(handl_OneDrive('Analyses/Catch and effort/Git_catch.and.effort/CPUE Construct standardised abundance index.R'))
 
 # INFLUENCE PLOTS ---------------------------------------------------------
-# Bentley et al 2012; not useful for delta-MC method   
+# Bentley et al 2012; not useful for delta-MC method. check https://github.com/trophia/influ/blob/master/influ.R
 if(do.influence=="YES")
 {
   if(Use.Delta)

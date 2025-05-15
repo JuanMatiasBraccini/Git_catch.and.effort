@@ -1178,7 +1178,92 @@ fn.prop.0.catch.by.fisher=function(d,explained.ktch,NM,series)
   
   
 }
-
+fn.show.cpue.vsl=function(d)
+{
+  N.row=ceiling(length(unique(d$VESSEL))/10)
+  d1=d%>%
+    mutate(yr=as.numeric(substr(FINYEAR,1,4)))%>%
+    group_by(VESSEL,yr)%>%
+    summarise(Target=mean(CPUE))
+  p=d1%>%
+    ggplot(aes(yr,Target, color = VESSEL))+ 
+    geom_line() +
+    geom_point() +
+    ylab('Mean kg/km gn h') +
+    theme_PA()+theme(legend.title = element_blank(),
+                     legend.position = 'top')+
+    guides(color=guide_legend(nrow=N.row,byrow=TRUE))+
+    geom_line(data=d%>%
+                mutate(yr=as.numeric(substr(FINYEAR,1,4)))%>%
+                group_by(yr)%>%
+                summarise(Target=mean(CPUE))%>%
+                mutate(VESSEL='average'),
+              aes(yr,Target),linewidth=3,alpha=.3,color='black')
+  
+  #vesl char
+  p1=d%>%
+    mutate(yr=as.numeric(substr(FINYEAR,1,4)))%>%
+    group_by(ENGDERAT,yr)%>%
+    summarise(Target=mean(CPUE))%>%
+    ggplot(aes(yr,Target,color=ENGDERAT))+ 
+    geom_point() +
+    geom_line() +
+    ylab('Mean kg/km gn h') +
+    theme_PA()+theme(legend.position = 'top')
+  
+  p2=d%>%
+    mutate(yr=as.numeric(substr(FINYEAR,1,4)))%>%
+    group_by(ENGPOWR,yr)%>%
+    summarise(Target=mean(CPUE))%>%
+    ggplot(aes(yr,Target,color=ENGPOWR))+ 
+    geom_point() +
+    geom_line() +
+    ylab('Mean kg/km gn h') +
+    theme_PA()+theme(legend.position = 'top')
+  
+  
+  p3=d%>%
+    mutate(yr=as.numeric(substr(FINYEAR,1,4)))%>%
+    group_by(GPS,yr)%>%
+    summarise(Target=mean(CPUE))%>%
+    ggplot(aes(yr,Target,color=GPS))+ 
+    geom_point() +
+    geom_line() +
+    ylab('Mean kg/km gn h') +
+    theme_PA()+theme(legend.position = 'top')
+  
+  p4=d%>%
+    mutate(yr=as.numeric(substr(FINYEAR,1,4)))%>%
+    group_by(COECHO,yr)%>%
+    summarise(Target=mean(CPUE))%>%
+    ggplot(aes(yr,Target,color=COECHO))+ 
+    geom_point() +
+    geom_line() +
+    ylab('Mean kg/km gn h') +
+    theme_PA()+theme(legend.position = 'top')
+  
+  p5=d%>%
+    mutate(yr=as.numeric(substr(FINYEAR,1,4)))%>%
+    group_by(PLOT,yr)%>%
+    summarise(Target=mean(CPUE))%>%
+    ggplot(aes(yr,Target,color=PLOT))+ 
+    geom_point() +
+    geom_line() +
+    ylab('Mean kg/km gn h') +
+    theme_PA()+theme(legend.position = 'top')
+  
+  p6=d%>%
+    mutate(yr=as.numeric(substr(FINYEAR,1,4)))%>%
+    group_by(RADAR,yr)%>%
+    summarise(Target=mean(CPUE))%>%
+    ggplot(aes(yr,Target,color=RADAR))+ 
+    geom_point() +
+    geom_line() +
+    ylab('Mean kg/km gn h') +
+    theme_PA()+theme(legend.position = 'top')
+  
+  return(list(p=p,d=d1,p1=p1,p2=p2,p3=p3,p4=p4,p5=p5,p6=p6))
+}
 # IDENTIFY FISHING ON DIFFERENT HABITATS (~TARGETING BEHAVIOUR, only applicable to Daily logbooks) ----------------------------------------------
 
   #Stephens & McCall
