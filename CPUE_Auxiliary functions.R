@@ -656,7 +656,29 @@ fn.cpue.data.daily=function(Dat,EffrrT,sp)
 }
 
 # VESSELS & BLOCKS----------------------------------------------
-fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC,BLK.sel.sens,Min.ktch)
+fn.delta.log=function(d)
+{
+  d%>%
+    group_by(season) %>%
+    summarise(n = length(cpue),
+              m = length(cpue[cpue>0]),
+              mean.lognz = mean(log(cpue[cpue>0])),
+              sd.lognz = sd(log(cpue[cpue>0]))) %>%
+    mutate(p.nz = m/n,
+           theta = log(p.nz)+mean.lognz+sd.lognz^2/2,
+           c = (1-p.nz)^(n-1),
+           d = 1+(n-1)*p.nz,
+           vartheta = ((d-c)*(1-c*d)-m*(1-c)^2)/(m*(1-c*d)^2)+
+             sd.lognz^2/m+sd.lognz^4/(2*(m+1)),
+           mean = exp(theta),
+           lowCL = exp(theta - 1.96*sqrt(vartheta)),
+           uppCL = exp(theta + 1.96*sqrt(vartheta))) %>%
+    as.data.frame%>%
+    dplyr::select(season,mean,lowCL,uppCL)%>%
+    rename(year=season)
+}
+fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC,BLK.sel.sens,Min.ktch,MIN.rec,
+                                 use.records.criteria=TRUE)
 {
   All.ves=unique(as.character(a$VESSEL))
   All.blk=unique(as.character(a$BLOCKX))
@@ -664,27 +686,70 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
   dddd=subset(a,SPECIES%in%SP)
   if(nrow(dddd)>10)
   {
-    CATCH.sp=dddd %>% group_by(YEAR.c,VESSEL)%>%
-      summarise(LIVEWT.c=sum(LIVEWT.c)) %>%
-      spread(VESSEL, LIVEWT.c) %>%
-      arrange(YEAR.c) %>%
-      data.frame()
+    #catch matrix
+    CATCH.sp=dddd %>%
+              group_by(YEAR.c,VESSEL)%>%
+              summarise(LIVEWT.c=sum(LIVEWT.c)) %>%
+              spread(VESSEL, LIVEWT.c) %>%
+              arrange(YEAR.c) %>%
+              data.frame()
     Vess=names(CATCH.sp)[2:ncol(CATCH.sp)]
     Vess=chartr(".", " ", Vess)
     Yrs=CATCH.sp$YEAR.c
     Z=as.matrix(CATCH.sp[,-1])
     
-    #Step 1. Select vessels with > X years of records of a minimum catch
+    #records matrix
+    CATCH.sp.records=dddd
+    if(what==".monthly") CATCH.sp.records$dumy=CATCH.sp.records$Same.return
+    if(what==".daily") CATCH.sp.records$dumy=CATCH.sp.records$Same.return.SNo
+    CATCH.sp.records=CATCH.sp.records %>%
+      distinct(dumy,YEAR.c,VESSEL)%>%
+      group_by(YEAR.c,VESSEL)%>%
+      tally() %>%
+      spread(VESSEL, n) %>%
+      arrange(YEAR.c) %>%
+      data.frame()
+    Z.rec=as.matrix(CATCH.sp.records[,-1])
+    
+    #Step 1. Select vessels with > Ves.sel.BC years of records and >= Min.ktch
     ZZ=Z
     ZZ[ZZ<Min.ktch]=NA
     ZZ[ZZ>=Min.ktch]=1
     Yrs.with.ktch=colSums(ZZ,na.rm=T)
     
-    pdf(paste(handl_OneDrive("Analyses/Catch and effort/Outputs/Kept_blocks_vessels/Vessel_pos_records_by_yr/"),paste(NM,what,sep=""),".pdf",sep="")) 
+    ZZ.rec=Z.rec
+    ZZ.rec[ZZ.rec<MIN.rec]=NA
+    ZZ.rec[ZZ.rec>=MIN.rec]=1
+    Yrs.with.records=colSums(ZZ.rec,na.rm=T)
     
-    #Ves.sel.BC
+    
+    pdf(paste(handl_OneDrive("Analyses/Catch and effort/Outputs/Kept_blocks_vessels/Selected and dropped vessels and blocks/"),paste(NM,what,sep=""),".pdf",sep=""),width=12) 
+    
+    #Plot All vessels with catch of target species
     par(mar=c(3,3.5,.8,.8))
-    WHICh=which(Yrs.with.ktch>Ves.sel.BC)
+
+    Z.this=ZZ
+    if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
+    Ves.all=Vess
+    ID.sort=match(names(sort(colSums(Z.this,na.rm=TRUE))),colnames(Z.this))
+    Z.this=Z.this[,ID.sort]
+    if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
+    Ves.all=Ves.all[ID.sort]
+    image(x=1:length(Yrs),y=1:ncol(Z.this),Z.this,xaxt='n',yaxt='n',ann=F)
+    axis(1,1:length(Yrs),Yrs)
+    axis(2,1:ncol(Z.this),Ves.all,las=1,cex.axis=.6)
+    legend("top",paste("(>=",Min.ktch,"kg)"),bty='n')
+    mtext(paste0('All vessels ( n=',length(Ves.all),')'),3)
+
+    #Plot selected vessels (Ves.sel.BC)
+    WHICh=which(Yrs.with.ktch>Ves.sel.BC) 
+    WHICh.records=which(Yrs.with.records>Ves.sel.BC)
+    if(use.records.criteria)
+    {
+      id.which=intersect(names(WHICh),names(WHICh.records))
+      WHICh=WHICh[id.which]
+    }
+      
     Z.this=ZZ[,WHICh]
     if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
     Ves.BC=Vess[WHICh]
@@ -693,7 +758,6 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
       plot.new()
       legend("center","only 1 vessel selected",bty='n',cex=2)
     }
-    
     if(length(Ves.BC)>1)
     {
       ID.sort=match(names(sort(colSums(Z.this,na.rm=TRUE))),colnames(Z.this))
@@ -703,9 +767,25 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
       image(x=1:length(Yrs),y=1:ncol(Z.this),Z.this,xaxt='n',yaxt='n',ann=F)
       axis(1,1:length(Yrs),Yrs)
       axis(2,1:ncol(Z.this),Ves.BC,las=1,cex.axis=.9)
-      legend("top",paste("vessels with >=",Ves.sel.BC, "years of records and >",Min.ktch,"kg per year"),bty='n')
+      legend("top",paste(" (>=",Ves.sel.BC, "years of records and >",Min.ktch,"kg per year)"),bty='n')
+      mtext(paste0('Selected vessels ( n=',length(Ves.BC),')'),3)
     }
     Drop.ves=All.ves[which(!All.ves%in%Ves.BC)]
+    
+    #Plot vessel sensitivity (Ves.sel.sens)
+    WHICh=which(Yrs.with.ktch>Ves.sel.sens)
+    Z.this=ZZ[,WHICh]
+    if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
+    Ves.Sens=Vess[WHICh]
+    ID.sort=match(names(sort(colSums(Z.this,na.rm=TRUE))),colnames(Z.this))
+    Z.this=Z.this[,ID.sort]
+    if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
+    Ves.Sens=Ves.Sens[ID.sort]
+    image(x=1:length(Yrs),y=1:ncol(Z.this),Z.this,xaxt='n',yaxt='n',ann=F)
+    axis(1,1:length(Yrs),Yrs)
+    axis(2,1:ncol(Z.this),Ves.Sens,las=1,cex.axis=.6)
+    legend("top",paste("(>=",Ves.sel.sens, "years of records) "),bty='n')
+    mtext(paste0('Sensitivity vessels ( n=',length(Ves.Sens),')'),3)
     
     #Number of records for selected vessels
     Tab.sel.ves=dddd%>%
@@ -718,58 +798,55 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
       spread(FINYEAR,n,fill='')%>%
       data.frame
     colnames(Tab.sel.ves)[2:ncol(Tab.sel.ves)]=substr(colnames(Tab.sel.ves)[2:ncol(Tab.sel.ves)],2,10)
-    grid.newpage()
-    grid.draw(tableGrob(Tab.sel.ves,rows = NULL,theme=ttheme_minimal(base_size = 7) ))
+    #grid.newpage()
+    #grid.draw(tableGrob(Tab.sel.ves,rows = NULL,theme=ttheme_minimal(base_size = 5) ))
     
+    #Plot Delta lognormal
+    cpuedata1=a%>%
+      mutate(season=as.numeric(substr(FINYEAR,1,4)),
+             cpue=LIVEWT.c/Km.Gillnet.Hours.c,
+             SPECIES.tar=SPECIES,
+             SPECIES.tar=ifelse(SPECIES.tar%in%SP,'target','other'))
+    if(what==".monthly") cpuedata1$dumy=cpuedata1$Same.return
+    if(what==".daily") cpuedata1$dumy=cpuedata1$Same.return.SNo
     
-    #Ves.sel.sens
-    WHICh=which(Yrs.with.ktch>Ves.sel.sens)
-    Z.this=ZZ[,WHICh]
-    if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
-    Ves.Sens=Vess[WHICh]
-    ID.sort=match(names(sort(colSums(Z.this,na.rm=TRUE))),colnames(Z.this))
-    Z.this=Z.this[,ID.sort]
-    if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
-    Ves.Sens=Ves.Sens[ID.sort]
-    image(x=1:length(Yrs),y=1:ncol(Z.this),Z.this,xaxt='n',yaxt='n',ann=F)
-    axis(1,1:length(Yrs),Yrs)
-    axis(2,1:ncol(Z.this),Ves.Sens,las=1,cex.axis=.6)
-    legend("top",paste("vessels with >=",Ves.sel.sens, "years of records"),bty='n')
-    
-    #plot CPUEs
-    a$CPUE.km.gn.day=a$LIVEWT.c/a$Km.Gillnet.Days.c
-    a$CPUE.km.gn.h=a$LIVEWT.c/a$Km.Gillnet.Hours.c
-    a.mean.cpue.km.day_all=aggregate(CPUE.km.gn.day~YEAR.c,subset(a,SPECIES%in%SP),mean)
-    a.mean.cpue.km.h_all=aggregate(CPUE.km.gn.h~YEAR.c,subset(a, SPECIES%in%SP),mean)
-    a.mean.cpue.km.day_Sens=aggregate(CPUE.km.gn.day~YEAR.c,subset(a,VESSEL%in%Ves.Sens& SPECIES%in%SP),mean)
-    a.mean.cpue.km.h_Sens=aggregate(CPUE.km.gn.h~YEAR.c,subset(a,VESSEL%in%Ves.Sens& SPECIES%in%SP),mean)
-    a.mean.cpue.km.day_BC=aggregate(CPUE.km.gn.day~YEAR.c,subset(a,VESSEL%in%Ves.BC& SPECIES%in%SP),mean)
-    a.mean.cpue.km.h_BC=aggregate(CPUE.km.gn.h~YEAR.c,subset(a,VESSEL%in%Ves.BC& SPECIES%in%SP),mean)
-    
-    #kmgday
-    par(mar=c(3,3,.5,4),mgp=c(2,.7,0))
-    Yrs=a.mean.cpue.km.day_Sens$YEAR.c
-    plot(a.mean.cpue.km.day_all$YEAR.c,a.mean.cpue.km.day_all$CPUE.km.gn.day,ylab="",xlab="")
-    points(a.mean.cpue.km.day_Sens$YEAR.c,a.mean.cpue.km.day_Sens$CPUE.km.gn.day,pch=19,col=2)
-    if(nrow(a.mean.cpue.km.day_BC)==length(Yrs))points(Yrs,a.mean.cpue.km.day_BC$CPUE.km.gn.day,pch=19,col=3)
-    
-    #kmgday  
-    par(new = T)
-    plot(a.mean.cpue.km.h_all$YEAR.c,a.mean.cpue.km.h_all$CPUE.km.gn.h,ylab=NA, axes=F,xlab=NA,pch=0,cex=2)
-    points(a.mean.cpue.km.h_Sens$YEAR.c,a.mean.cpue.km.h_Sens$CPUE.km.gn.h,pch=15,col=2,cex=2)
-    if(nrow(a.mean.cpue.km.h_BC)==length(Yrs))points(Yrs,a.mean.cpue.km.h_BC$CPUE.km.gn.h,pch=15,col=3,cex=2)
-    axis(side = 4)
-    mtext("Financial year",1,line=2)
-    mtext("Nominal CPUE (Kg/km.gn.day)",2,line=2)
-    mtext("Nominal CPUE (Kg/km.gn.hour)",4,line=2)
-    legend("top",c("Kg/km.gn.day","Kg/km.gn.hour"),bty='n',pch=c(0,19))
-    legend("bottomleft",c("all",paste(Ves.sel.sens,"y"),paste(Ves.sel.BC,"y")),bty='n',pch=c(0,19,19),col=c(1,2,3))
-    
+    DLnMean_all=fn.delta.log(d=cpuedata1%>%
+                               filter(VESSEL%in%Ves.all)%>%   
+                               group_by(season,dumy,SPECIES.tar)%>%
+                               summarise(cpue=mean(cpue))%>%
+                               ungroup()%>%
+                               spread(SPECIES.tar,cpue,fill=0)%>%
+                               rename(cpue=target))
+    DLnMean_selected.ves=fn.delta.log(d=cpuedata1%>%
+                                        filter(VESSEL%in%Ves.BC)%>%    
+                                        group_by(season,dumy,SPECIES.tar)%>%
+                                        summarise(cpue=mean(cpue))%>%
+                                        ungroup()%>%
+                                        spread(SPECIES.tar,cpue,fill=0)%>%
+                                        rename(cpue=target))
+    DLnMean_not.selected.ves=fn.delta.log(d=cpuedata1%>%
+                                            filter(VESSEL%in%Ves.all[which(!Ves.all%in%Ves.BC)])%>%    
+                                            group_by(season,dumy,SPECIES.tar)%>%
+                                            summarise(cpue=mean(cpue))%>%
+                                            ungroup()%>%
+                                            spread(SPECIES.tar,cpue,fill=0)%>%
+                                            rename(cpue=target))
+    p=rbind(DLnMean_all%>%mutate(Vessel='All'),
+            DLnMean_selected.ves%>%mutate(Vessel='Selected',year=year+0.25),
+            DLnMean_not.selected.ves%>%mutate(Vessel='Not selected',year=year-0.25))%>%
+      mutate(Vessel=factor(Vessel,levels=c('Not selected','Selected','All')))
+    p=p%>%
+      ggplot(aes(year,mean,color=Vessel))+
+      geom_point()+
+      geom_line(linetype='dotted')+
+      geom_errorbar(aes(ymin=lowCL,ymax=uppCL),alpha=0.5)+
+      theme_PA()+theme(legend.position = 'top')+ylab('Delta lognormal (mean +/= 95%CI)')+
+      ylim(0,quantile(p$uppCL,probs=0.85,na.rm=T))
+    print(p)
     
     # step 2. For selected vessels, plot number of blocks by year
-    #Ves.BC
     #all blocks
-    AA=subset(a,SPECIES%in%SP & VESSEL%in%Ves.BC) %>%
+    AA=subset(a,SPECIES%in%SP) %>%
       group_by(YEAR.c,BLOCKX)%>%
       summarise(LIVEWT.c=sum(LIVEWT.c)) %>%
       spread(BLOCKX, LIVEWT.c) %>%
@@ -788,9 +865,22 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
     image(x=1:length(Yrs),y=1:ncol(ZZZ),ZZZ,xaxt='n',yaxt='n',ann=F)
     axis(1,1:length(Yrs),Yrs)
     axis(2,1:length(BLOCs),BLOCs[ID.sort],las=1,cex.axis=.9)
-    legend("top",paste("all blocks for vessels >=",Ves.sel.BC, "years of records and >",Min.ktch,"kg per year"),bty='n')
+    legend("top",paste("All blocks with catch"),bty='n')
     
+  
     #blocks with > bc records
+    AA=subset(a,SPECIES%in%SP & VESSEL%in%Ves.BC) %>%
+      group_by(YEAR.c,BLOCKX)%>%
+      summarise(LIVEWT.c=sum(LIVEWT.c)) %>%
+      spread(BLOCKX, LIVEWT.c) %>%
+      arrange(YEAR.c) %>%
+      data.frame()
+    BLOCs=substr(names(AA)[2:ncol(AA)],2,6)
+    Yrs=AA$YEAR.c
+    Z=as.matrix(AA[,-1])
+    ZZ=Z
+    ZZ[ZZ>0]=1
+    
     Yrs.with.ktch=colSums(ZZ,na.rm=T)
     WHICh=which(Yrs.with.ktch>BLK.sel.BC)
     Z.this=ZZ[,WHICh]
@@ -801,7 +891,6 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
       plot.new()
       legend("center","no blocks selected",bty='n',cex=2)
     }
-    
     if(length(Blks.BC)>0)
     {
       ID.sort=match(names(sort(colSums(Z.this,na.rm=TRUE))),colnames(Z.this))
@@ -811,7 +900,7 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
       image(x=1:length(Yrs),y=1:ncol(Z.this),Z.this,xaxt='n',yaxt='n',ann=F)
       axis(1,1:length(Yrs),Yrs)
       axis(2,1:ncol(Z.this),Blks.BC,las=1,cex.axis=.9)
-      legend("top",paste("blocks with >=",BLK.sel.BC, "years of records for vessels >=",Ves.sel.BC,"years of records and >",Min.ktch,"kg per year"),
+      legend("top",paste("Selected blocks (>=",BLK.sel.BC, "years of records for vessels >=",Ves.sel.BC,"years of records and >",Min.ktch,"kg per year)"),
              cex=0.75,bty='n')
       
     }
@@ -838,23 +927,7 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
     image(x=1:length(Yrs),y=1:ncol(ZZZ),ZZZ,xaxt='n',yaxt='n',ann=F)
     axis(1,1:length(Yrs),Yrs)
     axis(2,1:length(BLOCs),BLOCs[ID.sort],las=1,cex.axis=.9)
-    legend("top",paste("all blocks for vessels >=",Ves.sel.sens, "years of records"),bty='n')
-    
-    #blocks with > Sens records
-    Yrs.with.ktch=colSums(ZZ,na.rm=T)
-    WHICh=which(Yrs.with.ktch>BLK.sel.sens)
-    Z.this=ZZ[,WHICh]
-    if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
-    Blks.Sens=BLOCs[WHICh]
-    ID.sort=match(names(sort(colSums(Z.this,na.rm=TRUE))),colnames(Z.this))
-    Z.this=Z.this[,ID.sort]
-    if(!is.matrix(Z.this)) Z.this=t(as.matrix(Z.this))
-    Blks.Sens=Blks.Sens[ID.sort]
-    image(x=1:length(Yrs),y=1:ncol(Z.this),Z.this,xaxt='n',yaxt='n',ann=F)
-    axis(1,1:length(Yrs),Yrs)
-    axis(2,1:ncol(Z.this),Blks.Sens,las=1,cex.axis=.9)
-    legend("top",paste("blocks with >=",BLK.sel.sens, "years of records for vessels >=",Ves.sel.sens,"years of records of",SP),bty='n')
-    dev.off()
+    legend("top",paste("Sensitivity blocks (vessels >=",Ves.sel.sens, "years of records)"),bty='n')
     
     Drop.blks_10=Blks.BC_10=NULL
     if(what==".daily")
@@ -871,8 +944,59 @@ fn.see.all.yrs.ves.blks=function(a,SP,NM,what,Ves.sel.BC,Ves.sel.sens,BLK.sel.BC
       Blks.BC_10=substr(names(which(Yrs.with.ktch>BLK.sel.BC)),2,50)
       Drop.blks_10=unique(a$block10)[which(!unique(a$block10)%in%as.numeric(Blks.BC_10))]
     }
-    return(list(Ves.BC=Ves.BC, Ves.Sens=Ves.Sens, Blks.BC=Blks.BC,Blks.BC_10=Blks.BC_10, Blks.Sens=Blks.Sens,
-                Drop.ves=Drop.ves, Drop.blks=Drop.blks,Drop.blks_10=Drop.blks_10))
+    
+    #Cumulative catch by vessel and block
+    p.ves=dddd%>%
+      mutate(Selected=ifelse(VESSEL%in%Ves.BC,'Yes','No'))%>%
+      group_by(Selected,VESSEL)%>%
+      summarise(ton=sum(LIVEWT.c)/1000)%>%
+      ungroup()%>%
+      arrange(-ton)%>%
+      mutate(cumsum=cumsum(ton))
+    p.ves=p.ves%>%
+      mutate(VESSEL=factor(VESSEL,levels=p.ves$VESSEL))%>%
+      ggplot(aes(VESSEL,cumsum,fill=Selected))+
+      geom_bar(stat="identity")+ylab('Cumulative catch (tonnes)')+
+      theme_PA()+theme(legend.position = 'top',
+                       axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=4))
+    print(p.ves)
+    
+    if(what==".monthly")
+    {
+      p.blk=dddd%>%
+        mutate(Selected=ifelse(BLOCKX%in%Blks.BC,'Yes','No'))%>%
+        group_by(Selected,BLOCKX)%>%
+        summarise(ton=sum(LIVEWT.c)/1000)%>%
+        ungroup()%>%
+        arrange(-ton)%>%
+        mutate(cumsum=cumsum(ton))%>%
+        rename(block=BLOCKX)
+    }
+    if(what==".daily")
+    {
+        p.blk=dddd%>%
+          mutate(Selected=ifelse(block10%in%Blks.BC_10,'Yes','No'))%>%
+          group_by(Selected,block10)%>%
+          summarise(ton=sum(LIVEWT.c)/1000)%>%
+          ungroup()%>%
+          arrange(-ton)%>%
+          mutate(cumsum=cumsum(ton))%>%
+          rename(block=block10)
+      }
+    p.blk=p.blk%>%
+      mutate(block=factor(block,levels=p.blk$block))%>%
+      ggplot(aes(block,cumsum,fill=Selected))+
+      geom_bar(stat="identity")+ylab('Cumulative catch (tonnes)')+
+      theme_PA()+theme(legend.position = 'top',
+                       axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+    print(p.blk)
+    
+    
+    dev.off()
+    
+    
+    return(list(Ves.BC=Ves.BC, Ves.Sens=Ves.Sens, Blks.BC=Blks.BC,Blks.BC_10=Blks.BC_10,
+                Drop.ves=Drop.ves, Drop.blks=Drop.blks,Drop.blks_10=Drop.blks_10,Tab.sel.ves=Tab.sel.ves))
     
   }
 }

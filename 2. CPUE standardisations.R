@@ -280,16 +280,17 @@ reset.hammerheads.to.smooth.hh=FALSE  #assume that all hammerheads are smooth HH
 #Zn1-Zn2 boundary blocks
 Boundary.Blks=c(3416,3516,3616)  
 
-#Criteria for target species
+#Criteria for selecting vessels and blocks for standardisation
 MIN.ktch=100   #Minimum annual catch of target species (in kgs)
+MIN.records.yr=3 #Minimum number of records of target species per vessel per year for at least the Threshold.n.yrs
 MIN.obs.BLK=3   # Block. minimum number of years with observations for each block
 MIN.obs.BLK.sens=0  
-MIN.obs.BL10K=3 # minimum number of observation per block10
+MIN.obs.BL10K=3 # Block. minimum number of observation per block10
 Threshold.n.yrs=3   #Vessel. minimum number of years reporting the species
 Threshold.n.yrs.monthly=3 
 Threshold.n.yrs.daily=3 
 Threshold.n.yrs.sens=0  #sensitivity
-Threshold.n.vessls.per.yr=3  #keep years with a least 3 different vessels
+Threshold.n.vessls.per.yr=3  #Vessel. keep years with a least 3 different vessels. Not used
 
 
 #qualification levels   #not used
@@ -1418,9 +1419,11 @@ BLKS.not.used=VES.used=VES.not.used=
   VES.used.daily=VES.not.used.daily=BLKS.used
 if(Remove.blk.by=="blk_only")  
 {
-  for(i in nnn)
+  for(i in nnn)  
   {
     print(paste('Calculating blocks and vessels used for ---',names(Species.list)[i]))
+    NM=names(SP.list)[i]
+    
     #monthly
     if(!is.null(Species.list[[i]]))
     {
@@ -1439,15 +1442,18 @@ if(Remove.blk.by=="blk_only")
         }
       }
       dummy=fn.see.all.yrs.ves.blks(a=subset(Species.list[[i]],FINYEAR%in%finy),SP=SP.list[[i]],
-                                    NM=names(SP.list)[i],what=".monthly",
-                                    Ves.sel.BC=Ves.sel.BC,Ves.sel.sens=Threshold.n.yrs.sens,
-                                    BLK.sel.BC=BLK.sel.BC,BLK.sel.sens=MIN.obs.BLK.sens,Min.ktch=Min.ktch)
+                                    NM=NM,what=".monthly",Ves.sel.BC=Ves.sel.BC,Ves.sel.sens=Threshold.n.yrs.sens,
+                                    BLK.sel.BC=BLK.sel.BC,BLK.sel.sens=MIN.obs.BLK.sens,
+                                    Min.ktch=Min.ktch,MIN.rec=MIN.records.yr)
+      
       if(!is.null(dummy))
       {
         BLKS.used[[i]]=dummy$Blks.BC
         BLKS.not.used[[i]]=dummy$Drop.blks
         VES.used[[i]]=dummy$Ves.BC
         VES.not.used[[i]]=dummy$Drop.ves
+        write.csv(dummy$Tab.sel.ves,paste0(handl_OneDrive("Analyses/Catch and effort/Outputs/Kept_blocks_vessels/Selected and dropped vessels and blocks/"),
+                                           paste0(NM,'.monthly_annual records for selected vessels.csv',sep="")),row.names = FALSE)
       }
       
     }
@@ -1468,9 +1474,9 @@ if(Remove.blk.by=="blk_only")
         }
       }
       dummy=fn.see.all.yrs.ves.blks(a=subset(Species.list.daily[[i]],FINYEAR%in%finy),SP=SP.list[[i]],
-                                    NM=names(SP.list)[i],what=".daily",
-                                    Ves.sel.BC=Ves.sel.BC,Ves.sel.sens=Threshold.n.yrs.sens,
-                                    BLK.sel.BC=BLK.sel.BC,BLK.sel.sens=MIN.obs.BLK.sens,Min.ktch=Min.ktch)
+                                    NM=NM,what=".daily",Ves.sel.BC=Ves.sel.BC,Ves.sel.sens=Threshold.n.yrs.sens,
+                                    BLK.sel.BC=BLK.sel.BC,BLK.sel.sens=MIN.obs.BLK.sens,
+                                    Min.ktch=Min.ktch,MIN.rec=MIN.records.yr)
       if(!is.null(dummy))
       {
         BLKS.used.daily[[i]]=dummy$Blks.BC
@@ -1479,12 +1485,14 @@ if(Remove.blk.by=="blk_only")
         BLKS_10.not.used.daily[[i]]=dummy$Drop.blks_10
         VES.used.daily[[i]]=dummy$Ves.BC
         VES.not.used.daily[[i]]=dummy$Drop.ves
+        write.csv(dummy$Tab.sel.ves,paste0(handl_OneDrive("Analyses/Catch and effort/Outputs/Kept_blocks_vessels/Selected and dropped vessels and blocks/"),
+                                           paste0(NM,'.daily_annual records for selected vessels.csv',sep="")),row.names = FALSE)
       }
     }
   }
   
   #compared used and not used vessels and blocks
-  fn.fig(handl_OneDrive("Analyses/Catch and effort/Outputs/Kept_blocks_vessels/block & vessels_used & not used_proportion"),1400,2400)
+  fn.fig(handl_OneDrive("Analyses/Catch and effort/Outputs/Kept_blocks_vessels/Proportion blocks & vessels used & not used"),1400,2400)
   par(mfrow=c(length(nnn),2),mar=c(1,1,.1,.3),oma=c(2,2,1,.1),las=1,mgp=c(1,.5,0),xpd=T)
   for(i in nnn)
   {
@@ -1506,7 +1514,7 @@ if(Remove.blk.by=="blk_only")
     
     if(i==1)legend('center',c('used','not used'),fill=c("chartreuse3","brown1"),horiz = T,cex=1.25,bg="white")
   }
-  dev.off()
+  dev.off() 
 }
 
 # EFFICIENCY_EXPAND VESSEL CHARACTERISTICS FOR SELECTED VESSELS----------------------------------------------
@@ -2636,7 +2644,7 @@ if(do_cluster=="YES" & do_Stephens_McCall=="YES")
 for(i in 1:length(SP.list))
 {
   drop=names(DATA.list.LIVEWT.c.daily[[i]])[grep('Catch.',names(DATA.list.LIVEWT.c.daily[[i]]))]
-  drop=subset(drop,!drop=="Catch.Target")
+  drop=subset(drop,!drop%in%c("Catch.Target","Catch.Total"))
   if(length(drop)>0) DATA.list.LIVEWT.c.daily[[i]]=DATA.list.LIVEWT.c.daily[[i]]%>%dplyr::select(-all_of(drop))
 }
 
@@ -3210,7 +3218,7 @@ if(get.efficiency.creep)
 
 }
 
-#ACA
+
 #Explore vessel and vessel char effect on selected records for standardisation
 if(Model.run=="First")
 {
@@ -3234,13 +3242,13 @@ if(Model.run=="First")
     x=fn.show.cpue.vsl(d)
     x$p
     ggsave(paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/check vessel and chars/',NM,'_cpue by vessel_monthly.tiff'))),
-           width = 8,height = 8, dpi = 300, compression = "lzw")
+           width = 10,height = 8, dpi = 300, compression = "lzw")
     write.csv(x$d,paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/check vessel and chars/',NM,'_cpue by vessel_monthly.csv'))),
               row.names = F)
     
     ggarrange(plotlist=list(x$p1,x$p2,x$p3,x$p4,x$p5,x$p6))
     ggsave(paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/check vessel and chars/',NM,'_cpue by char_monthly.tiff'))),
-           width = 8,height = 8, dpi = 300, compression = "lzw")
+           width = 10,height = 8, dpi = 300, compression = "lzw")
     
     
     #Daily
@@ -3259,19 +3267,19 @@ if(Model.run=="First")
     x=fn.show.cpue.vsl(d)
     x$p
     ggsave(paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/check vessel and chars/',NM,'_cpue by vessel_daily.tiff'))),
-           width = 8,height = 8, dpi = 300, compression = "lzw")
+           width = 10,height = 8, dpi = 300, compression = "lzw")
     write.csv(x$d,paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/check vessel and chars/',NM,'_cpue by vessel_daily.csv'))),
               row.names = F)
     
     ggarrange(plotlist=list(x$p1,x$p2,x$p3,x$p4,x$p5,x$p6))
     ggsave(paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/check vessel and chars/',NM,'_cpue by char_daily.tiff'))),
-           width = 8,height = 8, dpi = 300, compression = "lzw")
+           width = 10,height = 8, dpi = 300, compression = "lzw")
     
     
   }
 }
 
-
+#ACA
 # CONSTRUCT STANDARDISED ABUNDANCE INDEX----------------------------------------------
 source(handl_OneDrive('Analyses/Catch and effort/Git_catch.and.effort/CPUE Construct standardised abundance index.R'))
 

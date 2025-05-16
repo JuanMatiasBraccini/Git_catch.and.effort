@@ -137,3 +137,6 @@ toc()
 #Summarise model
 summary(fit)
 
+#-------------Consider this
+#High-level wrapper functions: New users are recommended to explore using FishStatsUtils::make_settings and FishStatsUtils::fit_model to run VAST, and to explore results using plot and summary.
+#Mid-level utilities: Experienced users often run lower-level functions to accomplish basic tasks in spatial analysis, using FishStatsUtils::make_extrapolation_info, FishStatsUtils::make_spatial_info, VAST::make_data, and VAST::make_model individually.
