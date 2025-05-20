@@ -1,10 +1,10 @@
 
 # Exploratory analysis -------------------------------------------------------
-fn.choose.sp=function(d,crit,Titl)
+fn.choose.sp=function(d,crit,Titl,min.records=50)
 {
   d=d%>%filter(!SPECIES==22999)
   Tab=table(d$SPECIES)
-  Tab=Tab[Tab>50]
+  Tab=Tab[Tab>min.records]
   this.sp=names(Tab)
   d=d%>%filter(SPECIES%in%this.sp)
   
@@ -27,11 +27,13 @@ fn.choose.sp=function(d,crit,Titl)
     dplyr::select(-c(n,Shots))
   
   s3=s1%>%gather("pos","n",-SPECIES,-YR)%>%arrange(SPECIES,YR)
+  s3.name=d%>%filter(SPECIES%in%unique(s3$SPECIES))%>%distinct(SPECIES,SNAME)
   p=s3%>%
+    left_join(s3.name,by='SPECIES')%>%
     ggplot(aes(x = YR,y = n)) + 
     geom_bar(aes(fill = pos), position = "stack", stat="identity")+
-    facet_wrap(~SPECIES)+ ylab("Percentage") + labs(fill = "")+
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ 
+    facet_wrap(~SNAME)+ ylab("Percentage") + labs(fill = "")+theme_PA(strx.siz=8)+
+    theme(legend.position = 'top',axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ 
     ggtitle(Titl)
   print(p)
 }
@@ -1036,17 +1038,20 @@ Effort.data.fun=function(DATA,target,ktch)
     DATA$Catch.Total=with(DATA,ifelse(SPECIES%in%c(5001:24900,25000:31000,188000:599001),DATA[,ID],0))
     
     #reshape catch data
-    TABLE=DATA%>%group_by(MONTH,FINYEAR,BLOCKX,VESSEL,Same.return,LAT,LONG,YEAR.c)%>%
-      summarise(Catch.Target = sum(Catch.Target,na.rm=T),
-                Catch.Total = sum(Catch.Total,na.rm=T))
-    Enviro=DATA%>%group_by(MONTH,FINYEAR,BLOCKX)%>%
-      summarise(Temperature=mean(Temperature),
-                Temp.res=mean(Temp.res),
-                Freo=mean(Freo,na.rm=T),
-                SOI=mean(SOI,na.rm=T))
-    TABLE=TABLE%>%left_join(Enviro,by=c("FINYEAR","MONTH","BLOCKX"))%>%
-      arrange(FINYEAR,MONTH,BLOCKX) %>%
-      data.frame()
+    TABLE=DATA%>%
+            group_by(MONTH,FINYEAR,BLOCKX,VESSEL,Same.return,LAT,LONG,YEAR.c,Yrs.of.experience)%>%
+            summarise(Catch.Target = sum(Catch.Target,na.rm=T),
+                      Catch.Total = sum(Catch.Total,na.rm=T))
+    Enviro=DATA%>%
+            group_by(MONTH,FINYEAR,BLOCKX)%>%
+            summarise(Temperature=mean(Temperature),
+                      Temp.res=mean(Temp.res),
+                      Freo=mean(Freo,na.rm=T),
+                      SOI=mean(SOI,na.rm=T))
+    TABLE=TABLE%>%
+            left_join(Enviro,by=c("FINYEAR","MONTH","BLOCKX"))%>%
+            arrange(FINYEAR,MONTH,BLOCKX) %>%
+            data.frame()
     
     #proportion of records with target catch
     prop.with.catch=round(100*sum(TABLE$Catch.Target>0)/length(TABLE$Catch.Target),0)
@@ -1123,9 +1128,10 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
     #reshape catch data
     if(Use.Date=="NO")
     {
+      #aggregate by shot
       if(Aggregtn=="SNo") 
       {
-        TABLE=DATA%>%group_by(MONTH,FINYEAR,BLOCKX,block10,VESSEL,Same.return.SNo,date,LAT,LONG,YEAR.c,Lunar)%>%
+        TABLE=DATA%>%group_by(MONTH,FINYEAR,BLOCKX,block10,VESSEL,Same.return.SNo,date,LAT,LONG,YEAR.c,Lunar,Yrs.of.experience)%>%
           summarise(Catch.Target = sum(Catch.Target,na.rm=T),
                     Catch.Gummy=sum(Catch.Gummy,na.rm=T),
                     Catch.Whiskery=sum(Catch.Whiskery,na.rm=T),
@@ -1144,6 +1150,7 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
           arrange(Same.return.SNo,FINYEAR,MONTH,BLOCKX) %>%
           data.frame()
       }
+      
       #aggregating by trip
       if(Aggregtn=="TSNo")   
       {
@@ -1151,7 +1158,7 @@ Effort.data.fun.daily=function(DATA,target,ktch,Aggregtn)
                               Catch.Groper,Catch.Snapper,Catch.Blue_mor,Catch.Dhufish,
                               Catch.Other.shrk,Catch.Other.scalefish,
                               Catch.non_indicators,Catch.Total)~MONTH+FINYEAR+BLOCKX+VESSEL+
-                          TSNo+YEAR.c,data=DATA,sum,na.rm=T)
+                          TSNo+YEAR.c+Yrs.of.experience,data=DATA,sum,na.rm=T)
         xx=subset(DATA,select=c(BLOCKX,LAT,LONG))
         xx=xx[!duplicated(xx$BLOCKX),]
         xx$LAT=round(xx$LAT)
@@ -2567,38 +2574,40 @@ fn.check.balanced=function(d,SP,what,MN.YR,pLot)
 }
 fn.show.blk=function(dat,CEX,SRt,dat.all) 
 {
-  dat=sort(dat)
-  LAT.kept=sapply(dat, function(x) -as.numeric(substr(x, 1, 2)))
-  LONG.kept=sapply(dat, function(x) 100+as.numeric(substr(x, 3, 4)))
-  
-  Y=-36:-26; X=seq(113,129,length.out=length(Y))
-  plot(X,Y,ylab='',xlab="",col="transparent",cex.lab=1.5,cex.axis=1.25)
-  for(e in 1:length(LAT.kept))
+  if(is.null(dat)) plot.new()
+  if(!is.null(dat))
   {
-    dd.y=c(LAT.kept[e]-1,LAT.kept[e]-1,LAT.kept[e],LAT.kept[e])
-    dd.x=c(LONG.kept[e],LONG.kept[e]+1,LONG.kept[e]+1,LONG.kept[e])
-    polygon(dd.x,dd.y,col=rgb(0, 0, 1,0.25), border=rgb(0, 0, 1,0.5))
-    text(LONG.kept[e]+0.5,LAT.kept[e]-0.5,dat[e],cex=CEX,col=1,srt=SRt,font=2)
-  }
-  
-  #add not used
-  dat.all=sort(dat.all)
-  id.not=which(!dat.all%in%dat)
-  if(length(id.not)>0)
-  {
-    dat.not.used=dat.all[id.not]
-    LAT.kept=sapply(dat.not.used, function(x) -as.numeric(substr(x, 1, 2)))
-    LONG.kept=sapply(dat.not.used, function(x) 100+as.numeric(substr(x, 3, 4)))
+    dat=sort(dat)
+    LAT.kept=sapply(dat, function(x) -as.numeric(substr(x, 1, 2)))
+    LONG.kept=sapply(dat, function(x) 100+as.numeric(substr(x, 3, 4)))
+    
+    Y=-36:-26; X=seq(113,129,length.out=length(Y))
+    plot(X,Y,ylab='',xlab="",col="transparent",cex.lab=1.5,cex.axis=1.25)
     for(e in 1:length(LAT.kept))
     {
       dd.y=c(LAT.kept[e]-1,LAT.kept[e]-1,LAT.kept[e],LAT.kept[e])
       dd.x=c(LONG.kept[e],LONG.kept[e]+1,LONG.kept[e]+1,LONG.kept[e])
-      polygon(dd.x,dd.y,col=rgb(1, 0, 0,0.01), border=rgb(1, 0, 0,0.1))
-      text(LONG.kept[e]+0.5,LAT.kept[e]-0.5,dat[e],cex=CEX,col=scales::alpha(2,.5),srt=SRt,font=2)
+      polygon(dd.x,dd.y,col=rgb(0, 0, 1,0.25), border=rgb(0, 0, 1,0.5))
+      text(LONG.kept[e]+0.5,LAT.kept[e]-0.5,dat[e],cex=CEX,col=1,srt=SRt,font=2)
+    }
+    
+    #add not used
+    dat.all=sort(dat.all)
+    id.not=which(!dat.all%in%dat)
+    if(length(id.not)>0)
+    {
+      dat.not.used=dat.all[id.not]
+      LAT.kept=sapply(dat.not.used, function(x) -as.numeric(substr(x, 1, 2)))
+      LONG.kept=sapply(dat.not.used, function(x) 100+as.numeric(substr(x, 3, 4)))
+      for(e in 1:length(LAT.kept))
+      {
+        dd.y=c(LAT.kept[e]-1,LAT.kept[e]-1,LAT.kept[e],LAT.kept[e])
+        dd.x=c(LONG.kept[e],LONG.kept[e]+1,LONG.kept[e]+1,LONG.kept[e])
+        polygon(dd.x,dd.y,col=rgb(1, 0, 0,0.01), border=rgb(1, 0, 0,0.1))
+        text(LONG.kept[e]+0.5,LAT.kept[e]-0.5,dat.not.used[e],cex=CEX,col=scales::alpha(2,.5),srt=SRt,font=2)
+      }
     }
   }
-    
-
 }
 
 # SHOW EFFECT OF USING km gn d VS km g h for gummy ----------------------------------------------

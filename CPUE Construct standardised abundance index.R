@@ -2,15 +2,16 @@ ZONES=c("West","Zone1","Zone2")
 Response="catch.target"    #cpue and positive catch are calculated inside functions
 Eff.vars=c("km.gillnet.hours.c")
 Categorical=c("finyear","vessel","blockx","shots.c")
-Covariates.monthly=c("MONTH","LONG10.corner","LAT10.corner","Freo","Temp.res","SOI")
+Covariates.monthly=c("MONTH","LONG10.corner","LAT10.corner","Freo","Temp.res","SOI","Yrs.of.experience")
+if(do_Stephens_McCall=="YES") Targeting.vars=c("Step.MCal_target_group") #"Step.MCal_target_prob
 if(do_cluster=="YES") Targeting.vars=c("cluster_clara")
 if(do_pca=="YES") Targeting.vars=c("Dim.1","Dim.2","Dim.3")
 Covariates.daily=c(Covariates.monthly,"Mean.depth","Lunar","mesh","nlines.c")
-if(do_pca=="YES")Covariates.daily=c(Covariates.daily,Targeting.vars)
+if(any(do_pca=="YES"|do_cluster=="YES"|do_Stephens_McCall=="YES"))Covariates.daily=c(Covariates.daily,Targeting.vars)
 
 Predictors_monthly=c(Categorical,Covariates.monthly)
 Predictors_daily=c(Categorical,Covariates.daily)
-if(do_cluster=="YES") Predictors_daily=c(Categorical,Targeting.vars,Covariates.daily)
+
 
 #-- check data properties and degrees of freedom ----------------------------------------------
 if(Model.run=="First")

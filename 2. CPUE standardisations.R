@@ -601,7 +601,8 @@ Data.monthly.GN=Data.monthly.GN%>%
 #       in Fishcube to one of 3 species using observed proportions so don't use reapportioned for species cpue 
 
 #1. First Criteria: annual catch of at least 'Min.kg' for at least 'N.keep' years
-A=Data.monthly.GN%>%filter(SPECIES%in%Shark.species) %>%
+A=Data.monthly.GN%>%
+  filter(SPECIES%in%Shark.species) %>%
   group_by(SPECIES,FINYEAR) %>%
   summarise(Weight=round(sum(LIVEWT.c))) %>%
   spread(FINYEAR, Weight)%>%
@@ -627,27 +628,85 @@ SpiSis=SpiSis[!SpiSis%in%c(22999)]
 
 if(do.Exploratory=="YES")
 {
-  pdf(handl_OneDrive('Analyses/Catch and effort/Outputs/Species selection/Selection.pdf'))
-  fn.choose.sp(d=Data.monthly.GN%>%filter(SPECIES%in%Shark.species),
+  pdf(handl_OneDrive('Analyses/Catch and effort/Outputs/Species selection/Selection.pdf'), width=12)
+  
+  #Presence/absence
+  fn.choose.sp(d=Data.monthly.GN%>%filter(SPECIES%in%Shark.species & !FINYEAR%in%unique(Data.daily.GN$FINYEAR)),
                crit='Same.return',Titl='Monthly')
   
   fn.choose.sp(d=Data.daily.GN%>%filter(SPECIES%in%Shark.species),
                crit='Same.return.SNo',Titl='Daily')
   
+  #Pass selection criteria
   B%>%
     gather('Year','Pass',-SPECIES)%>%
     mutate(Year=as.numeric(substr(Year,2,5)),
            Pass=ifelse(!Pass==1,NA,Pass),
            Col=ifelse(SPECIES%in%SpiSis,"full","empty"))%>%
+    left_join(Data.monthly.GN%>%distinct(SPECIES,SNAME),by='SPECIES')%>%
     ggplot(aes(Year,Pass),colour=Col)+
     geom_point(aes(bg=factor(Col)),shape=21)+
-    facet_wrap(~SPECIES)+
-    ylab("Pass criteria")+
+    facet_wrap(~SNAME)+
+    ylab("Pass data selection criteria")+theme_PA(strx.siz=8)+
     theme(legend.position = "none",
           axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ 
     scale_fill_manual(breaks = c("full", "empty"),
                       values=c("green", "transparent"))+
     ggtitle(paste("Criteria:",N.keep,"years with at least",Min.kg,"kg per year"))
+  
+  #Delta log nominal cpue
+  cpue=Data.monthly.GN%>%
+            filter(SPECIES%in%SpiSis & !FINYEAR%in%unique(Data.daily.GN$FINYEAR))%>%
+            dplyr::select(Same.return,FINYEAR,SNAME,LIVEWT.c)%>%
+            spread(SNAME,LIVEWT.c,fill=0)%>%
+            left_join(Effort.monthly%>%distinct(Same.return,Km.Gillnet.Hours.c),by='Same.return')%>%
+            gather(SNAME,LIVEWT.c,-c(Same.return,FINYEAR,Km.Gillnet.Hours.c))%>%
+            mutate(cpue=LIVEWT.c/Km.Gillnet.Hours.c)%>%
+            rename(season=FINYEAR)
+  cpue.sp=unique(cpue$SNAME)
+  DLnMean_all=vector('list',length(cpue.sp))
+  for(i in 1:length(cpue.sp))DLnMean_all[[i]]=fn.delta.log(d=cpue%>%
+                                                         filter(SNAME==cpue.sp[i])%>%   
+                                                         group_by(season,Same.return)%>%
+                                                         summarise(cpue=mean(cpue))%>%
+                                                         ungroup())%>%
+                                                        mutate(SNAME=cpue.sp[i])
+  p=do.call(rbind,DLnMean_all)%>%
+                mutate(yr=as.numeric(substr(year,1,4)))%>%
+                ggplot(aes(yr,mean))+
+    geom_point()+
+    geom_line(linetype='dotted')+
+    geom_errorbar(aes(ymin=lowCL,ymax=uppCL),alpha=0.5)+
+    theme_PA(strx.siz=8)+theme(legend.position = 'top')+ylab('Delta lognormal (mean +/= 95%CI)')+
+    facet_wrap(~SNAME,scales='free_y')
+  print(p)
+
+  cpue=Data.daily.GN%>%
+    filter(SPECIES%in%SpiSis)%>%
+    dplyr::select(Same.return.SNo,FINYEAR,SNAME,LIVEWT.c)%>%
+    spread(SNAME,LIVEWT.c,fill=0)%>%
+    left_join(Effort.daily%>%distinct(Same.return.SNo,Km.Gillnet.Hours.c),by='Same.return.SNo')%>%
+    gather(SNAME,LIVEWT.c,-c(Same.return.SNo,FINYEAR,Km.Gillnet.Hours.c))%>%
+    mutate(cpue=LIVEWT.c/Km.Gillnet.Hours.c)%>%
+    rename(season=FINYEAR)
+  cpue.sp=unique(cpue$SNAME)
+  DLnMean_all=vector('list',length(cpue.sp))
+  for(i in 1:length(cpue.sp))DLnMean_all[[i]]=fn.delta.log(d=cpue%>%
+                                                             filter(SNAME==cpue.sp[i])%>%   
+                                                             group_by(season,Same.return.SNo)%>%
+                                                             summarise(cpue=mean(cpue))%>%
+                                                             ungroup())%>%
+                                                      mutate(SNAME=cpue.sp[i])
+  p=do.call(rbind,DLnMean_all)%>%
+    mutate(yr=as.numeric(substr(year,1,4)))%>%
+    ggplot(aes(yr,mean))+
+    geom_point()+
+    geom_line(linetype='dotted')+
+    geom_errorbar(aes(ymin=lowCL,ymax=uppCL),alpha=0.5)+
+    theme_PA(strx.siz=8)+theme(legend.position = 'top')+ylab('Delta lognormal (mean +/= 95%CI)')+
+    facet_wrap(~SNAME,scales='free_y')
+  print(p)
+  
   dev.off()
 }
 
@@ -737,8 +796,8 @@ SP.list=as.list(SpiSis)
 #remove these species; not enough positive record data to estimate glm coefficients    
 SP.list=SP.list[-match(c("School Shark"),names(SP.list))]
 
-#remove these as many different species mixed up
-SP.list=SP.list[-match(c("Wobbegong","Common Sawshark"),names(SP.list))]  
+#remove these as different species mixed up and not fishing core area for sawsharks and hammerheads
+SP.list=SP.list[-match(c("Wobbegong","Common Sawshark","Hammerhead Sharks"),names(SP.list))]  
 
 SpiSis=SpiSis[match(names(SP.list),names(SpiSis))]
 
@@ -753,6 +812,7 @@ nnn=1:length(SP.list)
 
 # DEFINE TARGET SPECIES INDEX ----------------------------------------------
 Tar.sp=match(TARGETS,SP.list)
+Non.Tar.sp=nnn[which(!nnn%in%Tar.sp)]
 
 # EFFECTIVE AREA (90% of catch) AND RASTER -----------------------------------------------------------------------
 fn.scale=function(x,scaler) ((x/max(x,na.rm=T))^0.5)*scaler
@@ -1089,11 +1149,11 @@ Freo=Freo%>%
   mutate(Freo_lag6=lag(Freo,6),
          Freo_lag12=lag(Freo,12))
 
-#Monthly
+      #Monthly
 Data.monthly.GN=Data.monthly.GN%>%left_join(SOI,by=c("YEAR.c"="Year","MONTH"="Month"))%>%
   left_join(Freo,by=c("YEAR.c"="Year","MONTH"="Month")) 
 
-#Daily
+      #Daily
 Data.daily.GN=Data.daily.GN%>%left_join(SOI,by=c("YEAR.c"="Year","MONTH"="Month"))%>%
   left_join(Freo,by=c("YEAR.c"="Year","MONTH"="Month")) %>%
   mutate(Lunar=lunar.illumination(date),
@@ -2785,8 +2845,6 @@ if(!exists('BLKS.used.indi'))
 }
 hndl.kept=handl_OneDrive("Analyses/Catch and effort/Outputs/Kept_blocks_vessels/")
 HndL=paste(hndl.kept,'QL_balanced_design/',sep="")
-
-
 for(s in Tar.sp)
 {
   #monthly
@@ -2794,21 +2852,27 @@ for(s in Tar.sp)
                       what="monthly",MN.YR=Min.Vess.yr,pLot=T)
   BLKS.used[[s]]=a$this.blks
   VES.used[[s]]=a$this.ves
-  write.csv(BLKS.used[[s]],paste(hndl.kept,"blocks_used_",names(SP.list)[s],"_monthly.csv",sep=""))
   
   #daily
   a=fn.check.balanced(d=Store_nom_cpues_daily[[s]]$QL_dat,SP=names(SP.list)[s],
                       what="daily",MN.YR=Min.Vess.yr.d,pLot=T)
   BLKS.used.daily[[s]]=a$this.blks
   VES.used.daily[[s]]=a$this.ves
+}
+
+#export blocks and vessels used
+for(s in nnn)
+{
+  write.csv(BLKS.used[[s]],paste(hndl.kept,"blocks_used_",names(SP.list)[s],"_monthly.csv",sep=""))
+  write.csv(VES.used[[s]],paste(hndl.kept,"vessels_used_",names(SP.list)[s],"_monthly.csv",sep=""))
   write.csv(BLKS.used.daily[[s]],paste(hndl.kept,"blocks_used_",names(SP.list)[s],"_daily.csv",sep=""))
+  write.csv(VES.used.daily[[s]],paste(hndl.kept,"vessels_used_",names(SP.list)[s],"_daily.csv",sep=""))
 }
 
 #show blocks kept
 CEX=.85
 SRt=45
-
-fn.fig(paste(hndl.kept,"block_used_map",sep=""),2400, 2400)    
+fn.fig(paste(hndl.kept,"block_used_map_indicators",sep=""),2400, 2400)    
 par(mfrow=c(4,2),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
 for(s in Tar.sp)
 {
@@ -2819,6 +2883,23 @@ for(s in Tar.sp)
   #Daily
   fn.show.blk(dat=BLKS.used.daily[[s]],CEX=CEX,SRt=SRt,dat.all=BLKS.used.daily.indi[[s]])
   if(s==Tar.sp[1])mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
+  legend("topright",names(SP.list)[s],bty='n',cex=1.5)
+}
+mtext("Longitude",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
+mtext("Latitude",side=2,line=-0.75,font=1,las=0,cex=1.5,outer=T)
+dev.off()
+
+fn.fig(paste(hndl.kept,"block_used_map_non_indicators",sep=""),2400, 2400)    
+par(mfrow=n2mfrow(length(Non.Tar.sp)*2),mar=c(1,3,1.5,.6),oma=c(2.5,1,.1,.3),las=1,mgp=c(1.9,.7,0))
+for(s in Non.Tar.sp) 
+{
+  #Monthly
+  fn.show.blk(dat=BLKS.used[[s]],CEX=CEX,SRt=SRt,dat.all=BLKS.used.indi[[s]])
+  if(s==min(Non.Tar.sp))mtext("Monthly returns",side=3,line=0,font=1,las=0,cex=1.5)
+  
+  #Daily
+  fn.show.blk(dat=BLKS.used.daily[[s]],CEX=CEX,SRt=SRt,dat.all=BLKS.used.daily.indi[[s]])
+  if(s==min(Non.Tar.sp))mtext("Daily logbooks",side=3,line=0,font=1,las=0,cex=1.5)
   legend("topright",names(SP.list)[s],bty='n',cex=1.5)
 }
 mtext("Longitude",side=1,line=1.2,font=1,las=0,cex=1.5,outer=T)
@@ -3279,10 +3360,10 @@ if(Model.run=="First")
   }
 }
 
-#ACA
+
 # CONSTRUCT STANDARDISED ABUNDANCE INDEX----------------------------------------------
 source(handl_OneDrive('Analyses/Catch and effort/Git_catch.and.effort/CPUE Construct standardised abundance index.R'))
-
+#ACA
 # INFLUENCE PLOTS ---------------------------------------------------------
 # Bentley et al 2012; not useful for delta-MC method. check https://github.com/trophia/influ/blob/master/influ.R
 if(do.influence=="YES")
