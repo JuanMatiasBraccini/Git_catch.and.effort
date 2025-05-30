@@ -12,6 +12,171 @@ if(any(do_pca=="YES"|do_cluster=="YES"|do_Stephens_McCall=="YES"))Covariates.dai
 Predictors_monthly=c(Categorical,Covariates.monthly)
 Predictors_daily=c(Categorical,Covariates.daily)
 
+#-- Further exploration of predictors ----------------------------------------------
+library(ggcorrplot)
+fun.futher.explore=function(d,dis.ves,dis.blk)
+{
+  d=d%>%
+    mutate(cpue=Catch.Target/Km.Gillnet.Hours.c,
+           Yrs.of.experience=factor(as.character(Yrs.of.experience),levels=1:max(d$Yrs.of.experience)))
+  Ymax=quantile(d$cpue,probs=.99)
+  #experience
+  p_experience=d%>%
+              ggplot(aes(x=Yrs.of.experience,y=cpue,fill=Yrs.of.experience))+
+            geom_boxplot()+ ggtitle('With 0 catch')+
+            coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
+  p_experience.no.zero=d%>%
+            filter(cpue>0)%>%
+            ggplot(aes(x=Yrs.of.experience,y=cpue,fill=Yrs.of.experience))+
+            geom_boxplot()+ ggtitle('Postive catch only')+
+            coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
+  
+  Mean.cpue=d%>%
+    group_by(FINYEAR)%>%
+    summarise(cpue=mean(cpue))%>%
+    ungroup()
+  
+  #SOI
+  p_SOI_cont=d%>%
+    filter(!is.na(SOI))%>%
+    ggplot(aes(x=SOI,y=cpue,color=LAT))+
+    geom_point()+ ggtitle('With 0 catch')+
+    coord_cartesian(ylim = c(0,Ymax))+theme_PA()
+  
+  scale_soi=max(d$SOI,na.rm = T)
+  P_SOI_time=d%>%
+    filter(!is.na(SOI))%>%
+    ggplot(aes(x=FINYEAR,y=SOI,fill=FINYEAR))+
+    geom_boxplot()+ ggtitle('With 0 catch')+
+    theme_PA()+theme(legend.position = 'none',axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+    geom_point(data=Mean.cpue%>%
+                 mutate(SOI=scale_soi*(cpue/max(Mean.cpue$cpue))),
+               aes(x=FINYEAR,y=SOI),size=3,alpha=0.8)+scale_y_continuous(sec.axis = sec_axis(~.*1,name="CPUE"))
+  
+  
+  #Freo
+  p_Freo_cont=d%>%
+    filter(!is.na(Freo))%>%
+    ggplot(aes(x=Freo,y=cpue,color=LAT))+
+    geom_point()+ ggtitle('With 0 catch')+
+    coord_cartesian(ylim = c(0,Ymax))+theme_PA()
+
+  p_Freo=d%>%
+    filter(!is.na(Freo))%>%
+    mutate(Freo=cut(Freo,breaks =quantile(d$Freo)))%>%
+    ggplot(aes(x=Freo,y=cpue))+
+    geom_boxplot()+ ggtitle('With 0 catch')+
+    coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
+  
+  scale_freo=max(d$Freo,na.rm = T)
+  P_Fre_time=d%>%
+    filter(!is.na(Freo))%>%
+    ggplot(aes(x=FINYEAR,y=Freo,fill=FINYEAR))+
+    geom_boxplot()+ ggtitle('With 0 catch')+
+    theme_PA()+theme(legend.position = 'none',axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+    geom_point(data=Mean.cpue%>%
+                mutate(Freo=scale_freo*(cpue/max(Mean.cpue$cpue))),
+              aes(x=FINYEAR,y=Freo),size=3,alpha=0.8)+scale_y_continuous(sec.axis = sec_axis(~.*1,name="CPUE"))
+  
+  #temp
+  corr <- round(cor(d%>%dplyr::select(LAT,LONG,Temperature,Temp.res)%>%mutate(LAT=abs(LAT))), 1)
+  p.corr.temp=ggcorrplot(corr)
+  d=d%>%
+    mutate(Temp.res=cut(Temp.res,breaks =quantile(d$Temp.res)))
+  p_Temp.res=d%>%
+    mutate(LAT=abs(LAT))%>%
+                filter(BLOCKX%in%dis.blk& !is.na(Temp.res))%>%
+                ggplot(aes(x=Temp.res,y=cpue,fill=Temp.res))+
+                geom_boxplot()+ ggtitle('With 0 catch')+
+    facet_grid(LAT~LONG)+
+                coord_cartesian(ylim = c(0,Ymax))+theme_PA()+
+    theme(legend.position = 'none',axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  p_Temp.res.no.zero=d%>%
+    mutate(LAT=abs(LAT))%>%
+              filter(BLOCKX%in%dis.blk & !is.na(Temp.res))%>%
+              filter(cpue>0)%>%
+              ggplot(aes(x=Temp.res,y=cpue,fill=Temp.res))+
+              geom_boxplot()+ ggtitle('Postive catch only')+
+    facet_grid(LAT~LONG)+
+              coord_cartesian(ylim = c(0,Ymax))+theme_PA()+
+    theme(legend.position = 'none',axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  
+  #vessel
+  d1=d%>%
+    mutate(yr=as.numeric(substr(FINYEAR,1,4)))%>%
+    filter(VESSEL%in%dis.ves)%>%
+    group_by(yr,VESSEL)%>%
+    summarise(cpue=mean(cpue))%>%ungroup
+  p_vessel=d1%>%
+    ggplot(aes(yr,cpue, color = VESSEL))+ 
+    geom_line() +
+    geom_point() +
+    ylab('Mean kg/km gn h') +
+    theme_PA(leg.siz=10)+theme(legend.title = element_blank(),
+                     legend.position = 'top')+
+    guides(color=guide_legend(nrow=ceiling(length(unique(d1$VESSEL))/10),byrow=TRUE))+
+    geom_line(data=d%>%filter(VESSEL%in%dis.ves)%>%
+                mutate(yr=as.numeric(substr(FINYEAR,1,4)))%>%
+                group_by(yr)%>%
+                summarise(cpue=mean(cpue))%>%
+                mutate(VESSEL='average'),
+              aes(yr,cpue),linewidth=3,alpha=.3,color='black')+
+    geom_vline(xintercept = 1988,linewidth=1.5)+
+    geom_vline(xintercept = 1997,linewidth=1.5)+
+    geom_text(data=data.frame(yr=1988.5,cpue=max(d1$cpue),label='JASDGDLF',VESSEL='average'),aes(label=label))+
+    geom_text(data=data.frame(yr=1997.5,cpue=max(d1$cpue),label='WCDGDLF',VESSEL='average'),aes(label=label))
+  
+  p.list=list(p_SOI_cont,P_SOI_time,p_Freo_cont,p_Freo,P_Fre_time,p_Temp.res,p_Temp.res.no.zero,p_vessel)
+  
+  #targeting
+  if('Step.MCal_target_prob'%in%names(d))
+  {
+    d=d%>%
+      mutate(,
+             Step.MCal_target_prob=cut(Step.MCal_target_prob,breaks = seq(0,1,.1)),
+             Step.MCal_target_group=factor(Step.MCal_target_group,levels=c(0,1)))
+    p_target_prob=d%>%
+      ggplot(aes(x=Step.MCal_target_prob,y=cpue,fill=Step.MCal_target_prob))+
+      geom_boxplot()+ ggtitle('With 0 catch')+
+      coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
+    p_target_prob.no.zero=d%>%
+      filter(cpue>0)%>%
+      ggplot(aes(x=Step.MCal_target_prob,y=cpue,fill=Step.MCal_target_prob))+
+      geom_boxplot()+ ggtitle('Postive catch only')+
+      coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
+    p_target_group=d%>%
+      ggplot(aes(x=Step.MCal_target_group,y=cpue,fill=Step.MCal_target_group))+
+      geom_boxplot()+ ggtitle('With 0 catch')+
+      coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
+    p_target_group.no.zero=d%>%
+      filter(cpue>0)%>%
+      ggplot(aes(x=Step.MCal_target_group,y=cpue,fill=Step.MCal_target_group))+
+      geom_boxplot()+ ggtitle('Postive catch only')+
+      coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
+   
+    p.list$p_target_prob=p_target_prob
+    p.list$p_target_prob.no.zero=p_target_prob.no.zero
+    p.list$p_target_group=p_target_group
+    p.list$p_target_group.no.zero=p_target_group.no.zero
+  }
+  return(p.list)
+}
+if(Model.run=="First")
+{
+  for(i in nnn)
+  {
+    if(!is.null(DATA.list.LIVEWT.c[[i]]))
+    {
+      NM=names(DATA.list.LIVEWT.c)[i]
+      pdf(paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/Final exploration before standardisation/',NM,'.pdf'))),
+          width=12)
+      fun.futher.explore(d=DATA.list.LIVEWT.c[[i]],dis.blk=BLKS.used[[i]],dis.ves=VES.used[[i]])
+      dev.off()
+    }
+      
+    
+  }
+}
 
 #-- check data properties and degrees of freedom ----------------------------------------------
 if(Model.run=="First")

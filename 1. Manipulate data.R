@@ -187,6 +187,9 @@ if(do.sql.extraction)
   SQL.data.mapping_monthly=sqlFetch(channel,"MonthlyMappings")
   close(channel)
   
+  #Extract fishing methods
+  FishingMethod <- sqlQuery(conn1, query="SELECT * FROM [dbo].[rsFishingMethod]")
+  
   #Extract fish conditions
   fish.conditions <- sqlQuery(conn1, query="SELECT * FROM [dbo].[rsSpeciesCondition]")
   #fish.conditions <- sqlQuery(conn, query="SELECT * FROM Research.[vwSpeciesCondition]")
