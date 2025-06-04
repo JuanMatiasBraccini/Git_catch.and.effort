@@ -1159,6 +1159,23 @@ Data.daily.GN=Data.daily.GN%>%left_join(SOI,by=c("YEAR.c"="Year","MONTH"="Month"
   mutate(Lunar=lunar.illumination(date),
          Lunar.phase=lunar.phase(date,name=T))
 
+    #show example of lunar data
+if(Model.run=="First") 
+{
+  Data.daily.GN%>%
+    filter(FINYEAR=='2010-11')%>%
+    distinct(date,MONTH,Lunar,Lunar.phase)%>%
+    arrange(date)%>%
+    ggplot(aes(date,Lunar,color=Lunar.phase))+
+    geom_point()+
+    facet_wrap(~MONTH,scales='free_x')+theme_PA()+xlab('')+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  ggsave(handl_OneDrive('Analyses/Catch and effort/Outputs/Exploratory/Lunar phase example.tiff'),
+         width = 10,height = 6, dpi = 300, compression = "lzw")
+  
+}
+
+
 #Replace 0 depth with mean of block10
 Eff.daily=Eff.daily %>% 
   group_by(block10) %>%
@@ -3019,9 +3036,7 @@ if(explore.Oceanographic)
     labs(x = "Long", y = "Lat", fill = "Value") +
     geom_raster(aes(fill = Temperature))+
     facet_wrap(vars(year))
-  #ggsave("C:/Matias/Analyses/Catch and effort/Outputs/Temperature/Spatio_temporal.tiff", width = 12,height = 10,compression = "lzw")
-  
-  
+
   SST%>%
     filter(Lat<(-29) & Lat>=(-31))%>%
     group_by(year,month)%>%

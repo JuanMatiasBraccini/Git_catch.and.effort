@@ -14,23 +14,39 @@ Predictors_daily=c(Categorical,Covariates.daily)
 
 #-- Further exploration of predictors ----------------------------------------------
 library(ggcorrplot)
-fun.futher.explore=function(d,dis.ves,dis.blk)
+fun.futher.explore=function(d,dis.ves,dis.blk,data.set)
 {
   d=d%>%
     mutate(cpue=Catch.Target/Km.Gillnet.Hours.c,
            Yrs.of.experience=factor(as.character(Yrs.of.experience),levels=1:max(d$Yrs.of.experience)))
   Ymax=quantile(d$cpue,probs=.99)
+  
+  #LAT LONG
+  p_lat.long=d%>%
+    mutate(LAT=factor(abs(LAT)),
+           LONG=factor(LONG))%>%
+    ggplot(aes(x=LONG,y=cpue,fill=LONG))+
+    geom_boxplot()+ facet_wrap(~LAT)+ggtitle('With 0 catch')+
+    coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
+  
+  #month
+  p_month=d%>%
+    mutate(MONTH=factor(MONTH,levels=1:12),
+           LAT=abs(LAT))%>%
+    filter(BLOCKX%in%dis.blk& !is.na(MONTH))%>%
+    ggplot(aes(x=MONTH,y=cpue,fill=MONTH))+
+    geom_boxplot()+ ggtitle('With 0 catch')+
+    facet_grid(LAT~LONG)+
+    coord_cartesian(ylim = c(0,Ymax))+theme_PA()+
+    theme(legend.position = 'none',axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  
+  
   #experience
   p_experience=d%>%
               ggplot(aes(x=Yrs.of.experience,y=cpue,fill=Yrs.of.experience))+
             geom_boxplot()+ ggtitle('With 0 catch')+
             coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
-  p_experience.no.zero=d%>%
-            filter(cpue>0)%>%
-            ggplot(aes(x=Yrs.of.experience,y=cpue,fill=Yrs.of.experience))+
-            geom_boxplot()+ ggtitle('Postive catch only')+
-            coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
-  
+
   Mean.cpue=d%>%
     group_by(FINYEAR)%>%
     summarise(cpue=mean(cpue))%>%
@@ -63,7 +79,7 @@ fun.futher.explore=function(d,dis.ves,dis.blk)
 
   p_Freo=d%>%
     filter(!is.na(Freo))%>%
-    mutate(Freo=cut(Freo,breaks =quantile(d$Freo)))%>%
+    mutate(Freo=cut(Freo,breaks =quantile(d$Freo,na.rm = T)))%>%
     ggplot(aes(x=Freo,y=cpue))+
     geom_boxplot()+ ggtitle('With 0 catch')+
     coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
@@ -81,6 +97,21 @@ fun.futher.explore=function(d,dis.ves,dis.blk)
   #temp
   corr <- round(cor(d%>%dplyr::select(LAT,LONG,Temperature,Temp.res)%>%mutate(LAT=abs(LAT))), 1)
   p.corr.temp=ggcorrplot(corr)
+  
+  p_temp.res_cont=d%>%
+                  mutate(yr.mon=as.numeric(substr(FINYEAR,1,4))+(MONTH/13),
+                         LONG=floor(LONG),
+                         LAT=abs(floor(LAT)))%>%
+                  filter(BLOCKX%in%dis.blk & !is.na(Temp.res))%>%
+                  group_by(yr.mon,BLOCKX,LONG,LAT)%>%
+                  summarise(Temp.res=mean(Temp.res))%>%
+                  ungroup()%>%
+                  ggplot(aes(x=yr.mon,y=Temp.res))+
+                  geom_line()+ 
+                  facet_grid(LAT~LONG)+
+                  theme_PA()+
+                  theme(legend.position = 'none',axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+    
   d=d%>%
     mutate(Temp.res=cut(Temp.res,breaks =quantile(d$Temp.res)))
   p_Temp.res=d%>%
@@ -92,12 +123,12 @@ fun.futher.explore=function(d,dis.ves,dis.blk)
                 coord_cartesian(ylim = c(0,Ymax))+theme_PA()+
     theme(legend.position = 'none',axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
   p_Temp.res.no.zero=d%>%
-    mutate(LAT=abs(LAT))%>%
+              mutate(LAT=abs(LAT))%>%
               filter(BLOCKX%in%dis.blk & !is.na(Temp.res))%>%
               filter(cpue>0)%>%
               ggplot(aes(x=Temp.res,y=cpue,fill=Temp.res))+
               geom_boxplot()+ ggtitle('Postive catch only')+
-    facet_grid(LAT~LONG)+
+              facet_grid(LAT~LONG)+
               coord_cartesian(ylim = c(0,Ymax))+theme_PA()+
     theme(legend.position = 'none',axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
   
@@ -120,44 +151,84 @@ fun.futher.explore=function(d,dis.ves,dis.blk)
                 group_by(yr)%>%
                 summarise(cpue=mean(cpue))%>%
                 mutate(VESSEL='average'),
-              aes(yr,cpue),linewidth=3,alpha=.3,color='black')+
-    geom_vline(xintercept = 1988,linewidth=1.5)+
-    geom_vline(xintercept = 1997,linewidth=1.5)+
-    geom_text(data=data.frame(yr=1988.5,cpue=max(d1$cpue),label='JASDGDLF',VESSEL='average'),aes(label=label))+
-    geom_text(data=data.frame(yr=1997.5,cpue=max(d1$cpue),label='WCDGDLF',VESSEL='average'),aes(label=label))
-  
-  p.list=list(p_SOI_cont,P_SOI_time,p_Freo_cont,p_Freo,P_Fre_time,p_Temp.res,p_Temp.res.no.zero,p_vessel)
-  
-  #targeting
-  if('Step.MCal_target_prob'%in%names(d))
+              aes(yr,cpue),linewidth=3,alpha=.3,color='black')
+  if(data.set=='monthly')
   {
+    p_vessel=p_vessel+
+      geom_vline(xintercept = 1988,linewidth=1.5)+
+      geom_vline(xintercept = 1997,linewidth=1.5)+
+      geom_text(data=data.frame(yr=1988.5,cpue=max(d1$cpue),label='JASDGDLF',VESSEL='average'),aes(label=label))+
+      geom_text(data=data.frame(yr=1997.5,cpue=max(d1$cpue),label='WCDGDLF',VESSEL='average'),aes(label=label))
+  }
+  
+  
+  p.list=list(p_lat.long,p_month,p_experience,P_SOI_time,P_Fre_time,
+              p.corr.temp,p_temp.res_cont,p_Temp.res,p_vessel)
+  
+  
+  if(data.set=="daily")
+  {
+    #shots.c
+    p_shots=d%>%
+      mutate(shots.c=factor(shots.c))%>%
+      ggplot(aes(x=shots.c,y=cpue,fill=shots.c))+
+      geom_boxplot()+ ggtitle('With 0 catch')+
+      coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
+    
+    #lunar 
+    p_lunar=d%>%
+            mutate(Lunar=cut(Lunar,breaks = seq(0,1,.1)))%>%
+            ggplot(aes(Lunar,cpue,fill=Lunar))+
+            geom_boxplot()+ ggtitle('With 0 catch')+
+            coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
+    
+    #Mean.depth 
+    p_depth=d%>%
+      mutate(Mean.depth=cut(Mean.depth,breaks = seq(min(d$Mean.depth,na.rm=T),max(d$Mean.depth,na.rm=T),10)))%>%
+      filter(!is.na(Mean.depth))%>%
+      ggplot(aes(Mean.depth,cpue,fill=Mean.depth))+
+      geom_boxplot()+ ggtitle('With 0 catch')+
+      coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
+    
+    
+    #mesh 
+    p_mesh=d%>%
+      filter(!is.na(mesh))%>%
+      mutate(mesh=factor(mesh))%>%
+      ggplot(aes(mesh,cpue,fill=mesh))+
+      geom_boxplot()+ ggtitle('With 0 catch')+
+      coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
+    
+    #lines 
+    p_lines=d%>%
+      filter(!is.na(nlines.c))%>%
+      mutate(nlines.c=factor(nlines.c))%>%
+      ggplot(aes(nlines.c,cpue,fill=nlines.c))+
+      geom_boxplot()+ ggtitle('With 0 catch')+
+      coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
+          
+    #targeting
     d=d%>%
       mutate(,
              Step.MCal_target_prob=cut(Step.MCal_target_prob,breaks = seq(0,1,.1)),
              Step.MCal_target_group=factor(Step.MCal_target_group,levels=c(0,1)))
     p_target_prob=d%>%
+      filter(!is.na(Step.MCal_target_prob))%>%
       ggplot(aes(x=Step.MCal_target_prob,y=cpue,fill=Step.MCal_target_prob))+
       geom_boxplot()+ ggtitle('With 0 catch')+
-      coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
-    p_target_prob.no.zero=d%>%
-      filter(cpue>0)%>%
-      ggplot(aes(x=Step.MCal_target_prob,y=cpue,fill=Step.MCal_target_prob))+
-      geom_boxplot()+ ggtitle('Postive catch only')+
       coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
     p_target_group=d%>%
       ggplot(aes(x=Step.MCal_target_group,y=cpue,fill=Step.MCal_target_group))+
       geom_boxplot()+ ggtitle('With 0 catch')+
       coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
-    p_target_group.no.zero=d%>%
-      filter(cpue>0)%>%
-      ggplot(aes(x=Step.MCal_target_group,y=cpue,fill=Step.MCal_target_group))+
-      geom_boxplot()+ ggtitle('Postive catch only')+
-      coord_cartesian(ylim = c(0,Ymax))+theme_PA()+theme(legend.position = 'none')
-   
+    
+    p.list$p_shots=p_shots
+    p.list$p_lunar=p_lunar
+    p.list$p_lines = p_lines
+    p.list$p_mesh =p_mesh 
+    p.list$p_depth =p_depth 
     p.list$p_target_prob=p_target_prob
-    p.list$p_target_prob.no.zero=p_target_prob.no.zero
     p.list$p_target_group=p_target_group
-    p.list$p_target_group.no.zero=p_target_group.no.zero
   }
   return(p.list)
 }
@@ -168,19 +239,28 @@ if(Model.run=="First")
     if(!is.null(DATA.list.LIVEWT.c[[i]]))
     {
       NM=names(DATA.list.LIVEWT.c)[i]
+      print(paste('Exploratory stuff for monthly----',NM))
       pdf(paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/Final exploration before standardisation/',NM,'.pdf'))),
           width=12)
-      fun.futher.explore(d=DATA.list.LIVEWT.c[[i]],dis.blk=BLKS.used[[i]],dis.ves=VES.used[[i]])
+      print(fun.futher.explore(d=DATA.list.LIVEWT.c[[i]],dis.blk=BLKS.used[[i]],dis.ves=VES.used[[i]],data.set='monthly'))
       dev.off()
     }
-      
-    
+    if(!is.null(DATA.list.LIVEWT.c.daily[[i]]))
+    {
+      NM=names(DATA.list.LIVEWT.c)[i]
+      print(paste('Exploratory stuff for daily----',NM))
+      pdf(paste0(handl_OneDrive(paste0('Analyses/Catch and effort/Outputs/Exploratory/Final exploration before standardisation/',NM,'_daily.pdf'))),
+          width=12)
+      print(fun.futher.explore(d=DATA.list.LIVEWT.c.daily[[i]],dis.blk=BLKS.used.daily[[i]],dis.ves=VES.used.daily[[i]],data.set='daily'))
+      dev.off()
+    } 
   }
 }
 
 #-- check data properties and degrees of freedom ----------------------------------------------
 if(Model.run=="First")
 {
+  library(summarytools)
   Prop.deg.free.m=Prop.deg.free.d=Prop.deg.free.d_n=Store_nom_cpues_monthly
   for(s in Tar.sp)
   {
@@ -229,13 +309,14 @@ add.CITES.term=TRUE  #CITES listing term for smooth HH
 #remove predictors identified as highly correlated
 cNSTNT=Categorical[!Categorical=="block10"] 
 cNSTNT.daily=Categorical[!Categorical=="blockx"]
-if(do_cluster=="YES") cNSTNT.daily=c(Categorical[!Categorical=="blockx"],Targeting.vars)
+if(any(c(do_cluster,do_pca,do_Stephens_McCall)=='YES')) cNSTNT.daily=c(cNSTNT.daily,Targeting.vars)
 
-#extract best model   
+#define best model   
 Best.Model=vector('list',length(SP.list)) 
 names(Best.Model)=names(SP.list)
 Best.Model.daily=Best.Model.daily.gam=Best.Model_delta=Best.Model.daily.gam_delta=Best.Model.daily_delta=
   Store.Best.Model=Store.Best.Model.daily=Best.Model
+
 if(Def.mod.Str=="YES")     
 {
   hndl.modl.sel=handl_OneDrive("Analyses/Catch and effort/Outputs/Model Selection/")
@@ -258,7 +339,8 @@ if(Def.mod.Str=="YES")
                        Shots="cpue~finyear+blockx+shots.c",
                        Month="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')",
                        Temp.res="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')+s(temp.res)",
-                       Vessel="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(vessel,bs='re')")
+                       Vessel="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(vessel,bs='re')",
+                       Experience="cpue~finyear+blockx+shots.c+s(month,k=12,bs='cc')+s(temp.res)+s(vessel,bs='re')+s(Yrs.of.experience)") #ACA
             Family='tw'
             FILE=paste(names(DATA.list.LIVEWT.c.daily)[s],"_GAM_monthly",sep="")
             colnames(d)=tolower(colnames(d))
