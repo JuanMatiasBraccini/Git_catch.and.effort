@@ -205,6 +205,11 @@ get.efficiency.creep=FALSE #cannot match ves vars with catch return (need vessel
 
 #Define is testing model structure (i.e. selection of model terms)
 Def.mod.Str="NO"
+do.monthly.def.str=TRUE
+
+#Control if excluding firt year of monthly data for gummy and sandbar
+Exclude.yr.gummy=TRUE  #very small sample size
+Exclude.yr.sandbar=TRUE
 
 #Control what approach used for standardisation
 Use.Tweedie=TRUE
@@ -1159,9 +1164,38 @@ Data.daily.GN=Data.daily.GN%>%left_join(SOI,by=c("YEAR.c"="Year","MONTH"="Month"
   mutate(Lunar=lunar.illumination(date),
          Lunar.phase=lunar.phase(date,name=T))
 
-    #show example of lunar data
+    #show example of temperature, temp.res and lunar data
 if(Model.run=="First") 
 {
+  Data.daily.GN%>%
+    filter((LAT==(-29) & LONG==114) | (LAT==(-30) & LONG==114) |
+             (LAT==(-33) & LONG==114) | (LAT==(-34) & LONG==114))%>%
+    distinct(date,YEAR.c,LAT,LONG,Temperature)%>%
+    mutate(YEAR.c=as.character(YEAR.c),
+           LAT=abs(LAT))%>%
+    arrange(date)%>%
+    ggplot(aes(date,Temperature,color=YEAR.c))+
+    geom_line()+
+    facet_grid(LAT~LONG)+theme_PA()+xlab('')+
+    theme(legend.position = 'none',axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  ggsave(handl_OneDrive('Analyses/Catch and effort/Outputs/Exploratory/example_Temperature.tiff'),
+         width = 8,height = 8, dpi = 300, compression = "lzw")
+  
+  Data.daily.GN%>%
+    filter((LAT==(-29) & LONG==114) | (LAT==(-30) & LONG==114) |
+             (LAT==(-33) & LONG==114) | (LAT==(-34) & LONG==114))%>%
+    distinct(date,YEAR.c,LAT,LONG,Temp.res)%>%
+    mutate(YEAR.c=as.character(YEAR.c),
+           LAT=abs(LAT))%>%
+    arrange(date)%>%
+    ggplot(aes(date,Temp.res,color=YEAR.c))+
+    geom_line()+geom_hline(yintercept=0, linetype="dashed",color = "black")+
+    facet_grid(LAT~LONG)+theme_PA()+xlab('')+
+    theme(legend.position = 'none',axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  ggsave(handl_OneDrive('Analyses/Catch and effort/Outputs/Exploratory/example_Temp.res.tiff'),
+         width = 8,height = 8, dpi = 300, compression = "lzw")
+  
+  
   Data.daily.GN%>%
     filter(FINYEAR=='2010-11')%>%
     distinct(date,MONTH,Lunar,Lunar.phase)%>%
@@ -1170,7 +1204,7 @@ if(Model.run=="First")
     geom_point()+
     facet_wrap(~MONTH,scales='free_x')+theme_PA()+xlab('')+
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-  ggsave(handl_OneDrive('Analyses/Catch and effort/Outputs/Exploratory/Lunar phase example.tiff'),
+  ggsave(handl_OneDrive('Analyses/Catch and effort/Outputs/Exploratory/example_Lunar phase.tiff'),
          width = 10,height = 6, dpi = 300, compression = "lzw")
   
 }
@@ -3734,8 +3768,8 @@ if(do.spatial.cpiui)
           {
             d=DATA.list.LIVEWT.c[[s]]%>%
               filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]] & zone==zns[z])
-            if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
-            if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
+            if(Exclude.yr.gummy) if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
+            if(Exclude.yr.sandbar) if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
             Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
             Continuous=Covariates.monthly
             colnames(d)=tolower(colnames(d))
