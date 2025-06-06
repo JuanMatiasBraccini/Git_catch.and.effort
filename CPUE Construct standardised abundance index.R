@@ -938,22 +938,26 @@ if(Def.mod.Str=="NO")
     for(s in nnn) Best.Model[[s]]=formula(cpue~finyear + blockx + s(vessel,bs='re') + s(month,k=12,bs='cc'))
     Best.Model['Bronze Whaler']=list(NULL)  #no species code 
     Best.Model$`Tiger Shark`=formula(cpue~finyear + blockx + vessel + s(month,k=12,bs='cc'))
-    Best.Model$`Dusky Whaler`=Best.Model$`Whiskery Shark`=formula(cpue~finyear + blockx + s(vessel,bs='re'))
+    Best.Model$`Dusky Whaler`=Best.Model$`Gummy Shark`=Best.Model$`Whiskery Shark`=formula(cpue~finyear + blockx + s(vessel,bs='re'))
     
     #Daily
     for(s in nnn) Best.Model.daily[[s]]=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                                  s(long10.corner,lat10.corner)+s(mean.depth))
+                                                      s(long10.corner,lat10.corner)+s(mean.depth))
+    
     if("Greynurse Shark"%in%names(Best.Model.daily)) Best.Model.daily['Greynurse Shark']=list(NULL)  #protected
     if("Smooth Hammerhead Shark"%in%names(Best.Model.daily))if(add.CITES.term) Best.Model.daily$"Smooth Hammerhead Shark"=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+s(long10.corner,lat10.corner)+s(mean.depth)+cites)
-    #add targeting to target species
+    
     Best.Model.daily$`Sandbar Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                               s(long10.corner,lat10.corner)+s(mean.depth)+cluster_clara)
-    Best.Model.daily$`Whiskery Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                                s(long10.corner,lat10.corner)+s(mean.depth)+cluster_clara)
-    Best.Model.daily$`Gummy Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                             s(long10.corner,lat10.corner)+cluster_clara)
-    Best.Model.daily$`Dusky Whaler`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+
-                                              s(long10.corner,lat10.corner)+s(mean.depth)+cluster_clara)
+                                               s(long10.corner,lat10.corner)+s(mean.depth)+step.mcal_target_group)
+    
+    Best.Model.daily$`Whiskery Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+s(long10.corner,lat10.corner)+
+                                                s(mean.depth)+step.mcal_target_group+shots.c+mesh) #new shots.c+mesh
+    
+    Best.Model.daily$`Gummy Shark`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+s(long10.corner,lat10.corner)+
+                                             step.mcal_target_group+mesh) #new +mesh
+    
+    Best.Model.daily$`Dusky Whaler`=formula(cpue~finyear+s(vessel,bs='re')+s(month,k=12,bs='cc')+s(long10.corner,lat10.corner)+
+                                              s(mean.depth)+step.mcal_target_group+shots.c+mesh) #new shots.c+mesh
     
     
   }
@@ -1039,7 +1043,7 @@ if(Def.mod.Str=="NO")
   }
 }
 
-
+#ACA
 # Export table of term levels ----------------------------------------------
 if(Model.run=="First")
 {
