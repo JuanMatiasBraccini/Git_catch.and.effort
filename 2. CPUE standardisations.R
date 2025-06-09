@@ -3411,7 +3411,7 @@ if(Model.run=="First")
 
 
 # CONSTRUCT STANDARDISED ABUNDANCE INDEX----------------------------------------------
-#ACA
+#note: standard run takes ~ 10 secs per species
 source(handl_OneDrive('Analyses/Catch and effort/Git_catch.and.effort/CPUE Construct standardised abundance index.R'))
 
 # INFLUENCE PLOTS ---------------------------------------------------------
@@ -3519,7 +3519,25 @@ if(do.influence=="YES")
   }
 }
 
+# Compare all different ways of calculating cpues -----------------------------------------------------------------------
+if(Model.run=="First")
+{
+  dis=c("Whiskery Shark","Gummy Shark","Dusky Whaler","Sandbar Shark")
+  for(d in 1:length(dis))
+  {
+    NM=dis[d]
+    fn.plot.all.indices(sp=NM)
+    ggsave(handl_OneDrive(paste('Analyses/Catch and effort/Outputs/Compare all index types/',
+                                NM,'.jpeg',sep='')),width=10,height= 10)  
+    
+  }
+  do.dis=FALSE
+  if(do.dis) source(handl_OneDrive('Analyses/Catch and effort/Git_catch.and.effort/compare cpue series.R'))
+  
+}  
+
 # CONSTRUCT SPATIAL STANDARDISED INDEX ---------------------------------------------------------
+#ACA
 do.spatial.cpiui=FALSE
 if(do.spatial.cpiui)
 {
@@ -3890,6 +3908,168 @@ if(do.spatial.cpiui)
     stopCluster(cl)
     
   } 
+}
+
+
+# EXPORT INDICES -----------------------------------------------------------------------
+setwd(handl_OneDrive("Analyses/Data_outs"))
+Sel.vars=c("finyear","response","CV","lower.CL","upper.CL","SE")
+nams.Sel.vars=c("Finyear","Mean","CV","LOW.CI","UP.CI","SE")
+
+Nms.sp=ifelse(Nms.sp=="Bronze whaler","Copper shark",Nms.sp)
+Nms.sp=ifelse(Nms.sp=="Hammerhead sharks","Hammerheads",Nms.sp)
+
+#1. Target species 
+#1.1. Absolute scale 
+  #zones combined with NO efficiency creep
+for (s in Tar.sp)
+{
+  a=subset(Pred[[s]],select=Sel.vars)   
+  names(a)=nams.Sel.vars
+  if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly_no.creep.csv",sep=""),row.names=F) 
+  
+  a=subset(Pred.daily[[s]],select=Sel.vars)   
+  names(a)=nams.Sel.vars
+  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.daily_no.creep.csv",sep=""),row.names=F) 
+  
+  rm(a)
+}
+  #zones combined with efficiency creep
+for (s in Tar.sp)
+{
+  a=subset(Pred.creep[[s]],select=Sel.vars)   
+  names(a)=nams.Sel.vars
+  if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly.csv",sep=""),row.names=F) 
+  
+  a=subset(Pred.daily.creep[[s]],select=Sel.vars)   
+  names(a)=nams.Sel.vars
+  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.daily.csv",sep=""),row.names=F) 
+  rm(a)
+}
+  #Spatial
+if(do.spatial.cpiui)
+{
+  #4.22.12.3 by zones with NO efficiency creep
+  for (s in 1:length(Tar.sp))
+  {
+    Zn=names(Zone_preds.monthly[[s]])
+    for(z in 1:length(Zn))
+    {
+      #Standardised
+      a=subset(Zone_preds.monthly[[s]][[z]]$Preds,select=Sel.vars)   
+      names(a)=nams.Sel.vars
+      ii=Tar.sp[s]
+      if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
+      
+      a=subset(Zone_preds.daily[[s]][[z]]$Preds,select=Sel.vars)    
+      names(a)=nams.Sel.vars
+      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
+      
+      rm(a)
+    }
+  }
+  
+  #4.22.12.4 by zones with efficiency creep
+  for (s in 1:length(Tar.sp))
+  {
+    Zn=names(Zone_preds.monthly[[s]])
+    for(z in 1:length(Zn))
+    {
+      #Standardised
+      a=subset(Zone_preds.monthly[[s]][[z]]$Preds.creep,select=Sel.vars)   
+      names(a)=nams.Sel.vars
+      ii=Tar.sp[s]
+      if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly",Zn[z],".csv",sep=""),row.names=F) 
+      
+      a=subset(Zone_preds.daily[[s]][[z]]$Preds.creep,select=Sel.vars)   
+      names(a)=nams.Sel.vars
+      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily",Zn[z],".csv",sep=""),row.names=F) 
+      
+      rm(a)
+    }
+  }
+}
+
+#1.2.Relative scale   
+  #zones combined with efficiency creep
+for (s in Tar.sp)
+{
+  a=subset(Pred.normlzd[[s]],select=Sel.vars)   
+  names(a)=nams.Sel.vars
+  if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
+  
+  a=subset(Pred.daily.normlzd[[s]],select=Sel.vars)   
+  names(a)=nams.Sel.vars
+  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
+  rm(a)
+}
+  #spatial
+if(do.spatial.cpiui)
+{
+  #4.22.12.6 by zones with efficiency creep
+  for (s in 1:length(Tar.sp))
+  {
+    Zn=names(Zone_preds.monthly[[s]])
+    for(z in 1:length(Zn))
+    {
+      a=subset(Zone_preds.monthly[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
+      names(a)=nams.Sel.vars
+      ii=Tar.sp[s]
+      if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_relative.csv",sep=""),row.names=F) 
+      
+      a=subset(Zone_preds.daily[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
+      names(a)=nams.Sel.vars
+      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_relative.csv",sep=""),row.names=F) 
+      
+      rm(a)
+    }
+  }
+}
+
+
+#2. Other species zones combined with efficiency creep  
+Sel.vars.other=c("finyear","response","CV","lower.CL","upper.CL","SE")
+  #absolute scale with creep
+for (s in nnn[-sort(Tar.sp)])
+{
+  nmx=Nms.sp[s]
+  if(nmx=="Wobbegong") nmx="Wobbegongs"
+  if(nmx=="Common sawshark") nmx="Sawsharks"
+  if(!is.null(Pred.creep[[s]]))
+  {
+    a=subset(Pred.creep[[s]],select=Sel.vars.other)   
+    names(a)=nams.Sel.vars
+    if(xport_monthly) write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.monthly.csv",sep=""),row.names=F) 
+  }
+  
+  if(!is.null(Pred.daily.creep[[s]]))
+  {
+    a=subset(Pred.daily.creep[[s]],select=Sel.vars.other)   
+    names(a)=nams.Sel.vars
+    write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.daily.csv",sep=""),row.names=F) 
+  }
+  rm(a,nmx)
+}
+  #relative
+for (s in nnn[-sort(Tar.sp)])
+{
+  nmx=Nms.sp[s]
+  if(nmx=="Wobbegong") nmx="Wobbegongs"
+  if(nmx=="Common sawshark") nmx="Sawsharks"
+  if(!is.null(Pred.normlzd[[s]]))
+  {
+    a=subset(Pred.normlzd[[s]],select=Sel.vars.other)   
+    names(a)=nams.Sel.vars
+    if(xport_monthly) write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
+  }
+  
+  if(!is.null(Pred.daily.normlzd[[s]]))
+  {
+    a=subset(Pred.daily.normlzd[[s]],select=Sel.vars.other)   
+    names(a)=nams.Sel.vars
+    write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
+  }
+  rm(a,nmx)
 }
 
 
@@ -4348,182 +4528,6 @@ if(Explore.why.dusky.sandbar.uncertain)
 }
 
 
-
-# Compare all different ways of calculating cpues -----------------------------------------------------------------------
-if(Model.run=="First")
-{
-  dis=c("Whiskery Shark","Gummy Shark","Dusky Whaler","Sandbar Shark")
-  for(d in 1:length(dis))
-  {
-    NM=dis[d]
-    fn.plot.all.indices(sp=NM)
-    ggsave(handl_OneDrive(paste('Analyses/Catch and effort/Outputs/Compare all index types/',
-                                NM,'.tiff',sep='')),width=10,height= 10,compression="lzw")  
-    
-  }
-}  
-
-
-# EXPORT INDICES -----------------------------------------------------------------------
-setwd(handl_OneDrive("Analyses/Data_outs"))
-Sel.vars=c("finyear","response","CV","lower.CL","upper.CL","SE")
-nams.Sel.vars=c("Finyear","Mean","CV","LOW.CI","UP.CI","SE")
-
-Nms.sp=ifelse(Nms.sp=="Bronze whaler","Copper shark",Nms.sp)
-Nms.sp=ifelse(Nms.sp=="Hammerhead sharks","Hammerheads",Nms.sp)
-
-#1. Target species 
-#Absolute scale 
-#zones combined with NO efficiency creep
-for (s in Tar.sp)
-{
-  a=subset(Pred[[s]],select=Sel.vars)   
-  names(a)=nams.Sel.vars
-  if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly_no.creep.csv",sep=""),row.names=F) 
-  
-  a=subset(Pred.daily[[s]],select=Sel.vars)   
-  names(a)=nams.Sel.vars
-  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.daily_no.creep.csv",sep=""),row.names=F) 
-  
-  rm(a)
-}
-#zones combined with efficiency creep
-for (s in Tar.sp)
-{
-  a=subset(Pred.creep[[s]],select=Sel.vars)   
-  names(a)=nams.Sel.vars
-  if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly.csv",sep=""),row.names=F) 
-  
-  a=subset(Pred.daily.creep[[s]],select=Sel.vars)   
-  names(a)=nams.Sel.vars
-  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.daily.csv",sep=""),row.names=F) 
-  rm(a)
-}
-#spatial
-if(do.spatial.cpiui)
-{
-  #4.22.12.3 by zones with NO efficiency creep
-  for (s in 1:length(Tar.sp))
-  {
-    Zn=names(Zone_preds.monthly[[s]])
-    for(z in 1:length(Zn))
-    {
-      #Standardised
-      a=subset(Zone_preds.monthly[[s]][[z]]$Preds,select=Sel.vars)   
-      names(a)=nams.Sel.vars
-      ii=Tar.sp[s]
-      if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
-      
-      a=subset(Zone_preds.daily[[s]][[z]]$Preds,select=Sel.vars)    
-      names(a)=nams.Sel.vars
-      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
-      
-      rm(a)
-    }
-  }
-  
-  #4.22.12.4 by zones with efficiency creep
-  for (s in 1:length(Tar.sp))
-  {
-    Zn=names(Zone_preds.monthly[[s]])
-    for(z in 1:length(Zn))
-    {
-      #Standardised
-      a=subset(Zone_preds.monthly[[s]][[z]]$Preds.creep,select=Sel.vars)   
-      names(a)=nams.Sel.vars
-      ii=Tar.sp[s]
-      if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly",Zn[z],".csv",sep=""),row.names=F) 
-      
-      a=subset(Zone_preds.daily[[s]][[z]]$Preds.creep,select=Sel.vars)   
-      names(a)=nams.Sel.vars
-      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily",Zn[z],".csv",sep=""),row.names=F) 
-      
-      rm(a)
-    }
-  }
-}
-
-#Relative scale   
-#zones combined with efficiency creep
-for (s in Tar.sp)
-{
-  a=subset(Pred.normlzd[[s]],select=Sel.vars)   
-  names(a)=nams.Sel.vars
-  if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
-  
-  a=subset(Pred.daily.normlzd[[s]],select=Sel.vars)   
-  names(a)=nams.Sel.vars
-  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
-  rm(a)
-}
-#spatial
-if(do.spatial.cpiui)
-{
-  #4.22.12.6 by zones with efficiency creep
-  for (s in 1:length(Tar.sp))
-  {
-    Zn=names(Zone_preds.monthly[[s]])
-    for(z in 1:length(Zn))
-    {
-      a=subset(Zone_preds.monthly[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
-      names(a)=nams.Sel.vars
-      ii=Tar.sp[s]
-      if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_relative.csv",sep=""),row.names=F) 
-      
-      a=subset(Zone_preds.daily[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
-      names(a)=nams.Sel.vars
-      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.daily.",Zn[z],"_relative.csv",sep=""),row.names=F) 
-      
-      rm(a)
-    }
-  }
-}
-
-
-#2. Other species zones combined with efficiency creep  
-Sel.vars.other=c("finyear","response","CV","lower.CL","upper.CL","SE")
-#absolute scale with creep
-for (s in nnn[-sort(Tar.sp)])
-{
-  nmx=Nms.sp[s]
-  if(nmx=="Wobbegong") nmx="Wobbegongs"
-  if(nmx=="Common sawshark") nmx="Sawsharks"
-  if(!is.null(Pred.creep[[s]]))
-  {
-    a=subset(Pred.creep[[s]],select=Sel.vars.other)   
-    names(a)=nams.Sel.vars
-    if(xport_monthly) write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.monthly.csv",sep=""),row.names=F) 
-  }
-  
-  if(!is.null(Pred.daily.creep[[s]]))
-  {
-    a=subset(Pred.daily.creep[[s]],select=Sel.vars.other)   
-    names(a)=nams.Sel.vars
-    write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.daily.csv",sep=""),row.names=F) 
-  }
-  rm(a,nmx)
-}
-#relative
-for (s in nnn[-sort(Tar.sp)])
-{
-  nmx=Nms.sp[s]
-  if(nmx=="Wobbegong") nmx="Wobbegongs"
-  if(nmx=="Common sawshark") nmx="Sawsharks"
-  if(!is.null(Pred.normlzd[[s]]))
-  {
-    a=subset(Pred.normlzd[[s]],select=Sel.vars.other)   
-    names(a)=nams.Sel.vars
-    if(xport_monthly) write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
-  }
-  
-  if(!is.null(Pred.daily.normlzd[[s]]))
-  {
-    a=subset(Pred.daily.normlzd[[s]],select=Sel.vars.other)   
-    names(a)=nams.Sel.vars
-    write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
-  }
-  rm(a,nmx)
-}
 
 
 # Create CPUE stand paper figures -----------------------------------------------------------------------

@@ -3231,73 +3231,147 @@ bubble.plot=function(x,y,z,scaler,Xlab,Ylab)
 # Compare all different ways of calculating cpues -----------------------------------------------------------------------
 fn.plot.all.indices=function(sp)
 {
-  d1=Unstandardised.creep[[match(sp, names(Unstandardised.creep))]]%>%
-    mutate(method='Unstandardised with creep',
+  #Data sets
+    #Monthly
+  d1=Unstandardised[[match(sp, names(Unstandardised))]]%>%
+    mutate(method='Unstandardised',
+           lower.CL=lower.CL/mean(response),
+           upper.CL=upper.CL/mean(response),
            mean=response/mean(response),
-           year=as.numeric(substr(finyear,1,4)))%>%
-    dplyr::select(year,method,mean)%>%
+           year=as.numeric(substr(finyear,1,4))-0.1)%>%
+    dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
     mutate(period='1.monthly')
+  
   d2=Raw.index[[match(sp, names(Raw.index))]]%>%
-    mutate(method='raw',
+    mutate(method='Raw',
+           lower.CL=lowCL/mean(mean),
+           upper.CL=uppCL/mean(mean),
            mean=mean/mean(mean),
-           year=as.numeric(substr(FINYEAR,1,4)))%>%
-    dplyr::select(year,method,mean)%>%
+           year=as.numeric(substr(FINYEAR,1,4))-0.15)%>%
+    dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
     mutate(period='1.monthly')
+  
   d3=Store_nom_cpues_monthly[[match(sp, names(Store_nom_cpues_monthly))]]$CPUE.All$km.gillnet.hours.c%>%
     rename(year=season)%>%
     group_by(method)%>%
     mutate(mean1=mean(mean))%>%
     ungroup()%>%
-    mutate(mean=mean/mean1)%>%
-    dplyr::select(year,method,mean)%>%
+    mutate(lower.CL=lowCL/mean1,
+           upper.CL=uppCL/mean1,
+           mean=mean/mean1)%>%
+    dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
     mutate(period='1.monthly')
   
-  d4=Pred[[match(sp, names(Pred))]]%>%
-    mutate(method='standardised with creep',
-           mean=response/mean(response),
-           year=as.numeric(substr(finyear,1,4)))%>%
-    dplyr::select(year,method,mean)%>%
-    mutate(period='1.monthly')
-  
-  d1.daily=Unstandardised.daily.creep[[match(sp, names(Unstandardised.daily.creep))]]%>%
-    mutate(method='Unstandardised with creep',
-           mean=response/mean(response),
-           year=as.numeric(substr(finyear,1,4)))%>%
-    dplyr::select(year,method,mean)%>%
-    mutate(period='2.daily')
-  d2.daily=Raw.index.daily[[match(sp, names(Raw.index.daily))]]%>%
-    mutate(method='raw',
+  d4=Effective[[match(sp, names(Effective))]]%>%
+    mutate(method='Effective',
+           lower.CL=lowCL/mean(mean),
+           upper.CL=uppCL/mean(mean),
            mean=mean/mean(mean),
-           year=as.numeric(substr(FINYEAR,1,4)))%>%
-    dplyr::select(year,method,mean)%>%
+           year=as.numeric(substr(finyear,1,4)))%>%
+    dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
+    mutate(period='1.monthly')
+  
+  d5=Pred[[match(sp, names(Pred))]]%>%
+    mutate(method='Standardised',
+           lower.CL=lower.CL/mean(response),
+           upper.CL=upper.CL/mean(response),
+           mean=response/mean(response),
+           year=0.15+as.numeric(substr(finyear,1,4)))%>%
+    dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
+    mutate(period='1.monthly')
+  
+  mn=Pred[[match(sp, names(Pred))]]$response
+  d6=Pred.creep[[match(sp, names(Pred.creep))]]%>%
+    mutate(method='Standardised with creep',
+           lower.CL=lower.CL/mean(mn),
+           upper.CL=upper.CL/mean(mn),
+           mean=response/mean(mn),
+           year=0.1+as.numeric(substr(finyear,1,4)))%>%
+    dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
+    mutate(period='1.monthly')
+  
+    #Daily
+  d1.daily=Unstandardised.daily[[match(sp, names(Unstandardised.daily))]]%>%
+    mutate(method='Unstandardised',
+           lower.CL=lower.CL/mean(response),
+           upper.CL=upper.CL/mean(response),
+           mean=response/mean(response),
+           year=as.numeric(substr(finyear,1,4))-0.1)%>%
+    dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
     mutate(period='2.daily')
+  
+  d2.daily=Raw.index.daily[[match(sp, names(Raw.index.daily))]]%>%
+    mutate(method='Raw',
+           lower.CL=lowCL/mean(mean),
+           upper.CL=uppCL/mean(mean),
+           mean=mean/mean(mean),
+           year=as.numeric(substr(FINYEAR,1,4))-0.15)%>%
+    dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
+    mutate(period='2.daily')
+  
   d3.daily=Store_nom_cpues_daily[[match(sp, names(Store_nom_cpues_daily))]]$CPUE.All$km.gillnet.hours.c%>%
     rename(year=season)%>%
     group_by(method)%>%
     mutate(mean1=mean(mean))%>%
     ungroup()%>%
-    mutate(mean=mean/mean1)%>%
-    dplyr::select(year,method,mean)%>%
+    mutate(lower.CL=lowCL/mean1,
+           upper.CL=uppCL/mean1,
+           mean=mean/mean1)%>%
+    dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
     mutate(period='2.daily')
   
-  d4.daily=Pred.daily[[match(sp, names(Pred.daily))]]%>%
-    mutate(method='standardised with creep',
-           mean=response/mean(response),
+  d4.daily=Effective_daily[[match(sp, names(Effective_daily))]]%>%
+    mutate(method='Effective',
+           lower.CL=lowCL/mean(mean),
+           upper.CL=uppCL/mean(mean),
+           mean=mean/mean(mean),
            year=as.numeric(substr(finyear,1,4)))%>%
-    dplyr::select(year,method,mean)%>%
+    dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
+    mutate(period='2.daily')
+  
+  d5.daily=Pred.daily[[match(sp, names(Pred.daily))]]%>%
+    mutate(method='Standardised',
+           lower.CL=lower.CL/mean(response),
+           upper.CL=upper.CL/mean(response),
+           mean=response/mean(response),
+           year=0.15+as.numeric(substr(finyear,1,4)))%>%
+    dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
     mutate(period='2.daily')
   
   
-  p1=rbind(d1,d2,d3,d4)%>%
-    ggplot(aes(year,mean,color=method))+
-    geom_point(size=2.5)+geom_line()+
-    facet_wrap(~period)+
-    theme(legend.position = 'top')+ylab('Normalised cpue')
-  p2=rbind(d1.daily,d2.daily,d3.daily,d4.daily)%>%
-    ggplot(aes(year,mean,color=method))+
-    geom_point(size=2.5)+geom_line()+
-    facet_wrap(~period)+
-    theme(legend.position = 'top')+ylab('Normalised cpue')
-  p=ggarrange(p1,p2,ncol=1)
-  print(p)
+  d6.daily=Pred.daily.creep[[match(sp, names(Pred.daily.creep))]]%>%
+    mutate(method='Standardised with creep',
+           lower.CL=lower.CL/mean(response),
+           upper.CL=upper.CL/mean(response),
+           mean=response/mean(response),
+           year=0.1+as.numeric(substr(finyear,1,4)))%>%
+    dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
+    mutate(period='2.daily')
+  
+
+  #plots
+  LVLS=c("Raw","Mean","Nominal","DLnMean","LnMean","Effective","Unstandardised","Standardised","Standardised with creep")
+  p1=rbind(d1,d2,d3,d4,d5,d6)%>%
+        mutate(method=factor(method,levels=LVLS))%>%
+        ggplot(aes(year,mean,color=method))+
+        geom_line(alpha=0.35,linetype='dashed')+
+        geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2,alpha=0.35)+
+        geom_point(size=2.5)+ylim(0,NA)+
+        ggtitle('Monthly')+theme_PA()+ylab('')+xlab('')+
+        theme(legend.position = 'top',legend.title = element_blank())
+  
+  p2=rbind(d1.daily,d2.daily,d3.daily,d4.daily,d5.daily,d6.daily)%>%
+        mutate(method=factor(method,levels=LVLS))%>%
+        ggplot(aes(year,mean,color=method))+
+        geom_line(alpha=0.35,linetype='dashed')+
+        geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2,alpha=0.35)+
+        geom_point(size=2.5)+ylim(0,NA)+
+        ggtitle('Daily')+theme_PA()+ylab('')+xlab('')+
+        theme(legend.position = 'top',legend.title = element_blank())
+  
+  p=ggarrange(p1,p2,ncol=1,common.legend = T)
+  annotate_figure(p,
+                  left = textGrob("Relative CPUE (+/- 95% CI)", rot = 90, vjust = 1, gp = gpar(cex = 1.3)),
+                  bottom = textGrob("Financial year", gp = gpar(cex = 1.3)))
+  return(p)
 }
