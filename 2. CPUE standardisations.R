@@ -65,6 +65,7 @@ library(tictoc)
 library(ggcorrplot)
 library(correlation)
 library(ggrepel)
+library(rlist)
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240,dplyr.summarise.inform = FALSE)   
 
@@ -215,6 +216,9 @@ Exclude.yr.sandbar=TRUE
 Use.Tweedie=TRUE
 Use.Delta=FALSE
 Use.Qualif.level=FALSE
+
+#Control if doing spatial standardisation
+do.spatial.cpiui=TRUE
 
 #Control if doing Stephens and McCall
 do_Stephens_McCall="YES"
@@ -3519,7 +3523,7 @@ if(do.influence=="YES")
   }
 }
 
-# Compare all different ways of calculating cpues -----------------------------------------------------------------------
+# COMPARE ALL DIFFERENT WAYS OF CALCULATING CPUES -----------------------------------------------------------------------
 if(Model.run=="First")
 {
   dis=c("Whiskery Shark","Gummy Shark","Dusky Whaler","Sandbar Shark")
@@ -3537,379 +3541,10 @@ if(Model.run=="First")
 }  
 
 # CONSTRUCT SPATIAL STANDARDISED INDEX ---------------------------------------------------------
+#note: standard run takes ~ 7 secs per species
+if(do.spatial.cpiui) source(handl_OneDrive('Analyses/Catch and effort/Git_catch.and.effort/CPUE Construct standardised abundance index_spatial.R'))
+on.exit(stopCluster(cl))
 #ACA
-do.spatial.cpiui=FALSE
-if(do.spatial.cpiui)
-{
-  if(Use.Delta)  
-  { system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))  
-  {
-    if(Use.Qualif.level)
-    {
-      #Monthly
-      DAT=subset(Store_nom_cpues_monthly[[s]]$QL_dat,vessel%in%VES.used[[s]])
-      DAT=subset(DAT,blockx%in%BLKS.used[[s]])
-      ZonEs=unique(DAT$zone)
-      if(names(SP.list)[s]=="Sandbar Shark") ZonEs=subset(ZonEs,!ZonEs=="Zone2")   #no enough observations in zone2
-      pred.temp=vector('list',length(ZonEs))
-      names(pred.temp)=ZonEs
-      pred.temp.crip=pred.temp.nrm=pred.temp
-      
-      for(z in 1:length(ZonEs))
-      {
-        #1. Fit model to zone data
-        model=fn.stand(d=subset(DAT,zone==ZonEs[z]),Response="catch.target",RESPNS="LNcpue",PREDS=Predictors_monthly,
-                       efrt="km.gillnet.hours.c",Formula=Best.Model[[s]],Formula.gam=NULL)
-        
-        #2. Predict for selected blocks
-        d=model$DATA
-        Pred.1=pred.fun(MOD=model$res,biascor="YES",PRED="finyear",Pred.type="link")
-        
-        #3. Apply creep
-        Pred.1.c=Pred.1
-        add.crp=Eff.creep$effort.creep[match(Pred.1.c$finyear,Eff.creep$finyear)]
-        Pred.1.c$response=Pred.1.c$response*(1-add.crp)
-        Pred.1.c$lower.CL=Pred.1.c$lower.CL*(1-add.crp)
-        Pred.1.c$upper.CL=Pred.1.c$upper.CL*(1-add.crp)
-        
-        #4.Normalize
-        Pred.1.c.norm=Pred.1.c
-        Mn=mean(Pred.1.c.norm$response)
-        Pred.1.c.norm$response=Pred.1.c.norm$response/Mn
-        Pred.1.c.norm$lower.CL=Pred.1.c.norm$lower.CL/Mn
-        Pred.1.c.norm$upper.CL=Pred.1.c.norm$upper.CL/Mn
-        
-        #5.Store
-        pred.temp[[z]]=Pred.1
-        pred.temp.crip[[z]]=Pred.1.c
-        pred.temp.nrm[[z]]=Pred.1.c.norm
-        rm(d,Pred.1,Pred.1.c,Pred.1.c.norm)
-      }
-      Pred.zone[[s]]=pred.temp
-      Pred.zone.creep[[s]]=pred.temp.crip
-      Pred.zone.nrmlzd[[s]]=pred.temp.nrm
-      
-      
-      #Daily
-      DAT=subset(Store_nom_cpues_daily[[s]]$QL_dat,vessel%in%VES.used.daily[[s]])
-      DAT=subset(DAT,blockx%in%BLKS.used.daily[[s]])
-      ZonEs=unique(DAT$zone)
-      if(names(SP.list)[s]=="Sandbar Shark") ZonEs=subset(ZonEs,!ZonEs=="Zone2")   #no enough observations in zone2
-      pred.temp=vector('list',length(ZonEs))
-      names(pred.temp)=ZonEs
-      pred.temp.crip=pred.temp.nrm=pred.temp
-      
-      for(z in 1:length(ZonEs))
-      {
-        #1. Fit model to zone data
-        model=fn.stand(d=subset(DAT,zone==ZonEs[z]),Response="catch.target",RESPNS="LNcpue",
-                       PREDS=Predictors_daily,efrt="km.gillnet.hours.c",
-                       Formula=NULL,Formula.gam=Best.Model.daily.gam[[s]])
-        
-        #2. Predict for selected blocks
-        d=model$DATA
-        Pred.1=pred.fun(MOD=model$res.gam,biascor="YES",PRED="finyear",Pred.type="link")
-        
-        #3. Apply creep
-        Pred.1.c=Pred.1
-        add.crp=Eff.creep$effort.creep[match(Pred.1.c$finyear,Eff.creep$finyear)]
-        Pred.1.c$response=Pred.1.c$response*(1-add.crp)
-        Pred.1.c$lower.CL=Pred.1.c$lower.CL*(1-add.crp)
-        Pred.1.c$upper.CL=Pred.1.c$upper.CL*(1-add.crp)
-        
-        #4.Normalize
-        Pred.1.c.norm=Pred.1.c
-        Mn=mean(Pred.1.c.norm$response)
-        Pred.1.c.norm$response=Pred.1.c.norm$response/Mn
-        Pred.1.c.norm$lower.CL=Pred.1.c.norm$lower.CL/Mn
-        Pred.1.c.norm$upper.CL=Pred.1.c.norm$upper.CL/Mn
-        
-        #5.Store
-        pred.temp[[z]]=Pred.1
-        pred.temp.crip[[z]]=Pred.1.c
-        pred.temp.nrm[[z]]=Pred.1.c.norm
-        rm(d,Pred.1,Pred.1.c,Pred.1.c.norm)
-      }
-      Pred.daily.zone[[s]]=pred.temp
-      Pred.daily.zone.creep[[s]]=pred.temp.crip
-      Pred.daily.zone.nrmlzd[[s]]=pred.temp.nrm
-      
-    }
-    
-    #monthly
-    system.time({Zone_preds.monthly=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm')) %dopar%
-      {
-        zns=sort(unique(DATA.list.LIVEWT.c[[s]]$zone))
-        if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #no enough observations 
-        if(names(SP.list)[s]=="Gummy Shark") zns=subset(zns,!zns=="Zone1")   #no enough observations 
-        out=vector('list',length(zns))
-        names(out)=zns
-        for(z in 1:length(zns))
-        {
-          #1. Fit models
-          DAT=DATA.list.LIVEWT.c[[s]]%>%filter(VESSEL%in%VES.used[[s]] & zone==zns[z] &
-                                                 BLOCKX%in%BLKS.used[[s]])
-          colnames(DAT)=tolower(colnames(DAT))
-          #select years with a min number of vessels
-          DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT)) 
-          #Binomial
-          DAT.bi=DAT%>%mutate(catch.target=ifelse(catch.target>0,1,0))
-          Bi=fn.stand.delta(d=DAT.bi,Response="catch.target",PREDS=Predictors_monthly,
-                            efrt="km.gillnet.hours.c",Formula=Best.Model_delta[[s]]$bi,
-                            Formula.gam=NULL,Family="binomial")
-          #Positive catch
-          DAT=DAT%>%filter(catch.target>0)
-          Pos=fn.stand.delta(d=DAT,Response="catch.target",PREDS=Predictors_monthly,
-                             efrt="km.gillnet.hours.c",Formula=Best.Model_delta[[s]]$pos,
-                             Formula.gam=NULL,Family="gaussian")
-          
-          #2.Make predictions
-          Preds=fn.MC.delta.cpue(BiMOD=Bi$res,
-                                 MOD=Pos$res,
-                                 BiData=Bi$DATA%>%mutate(LNeffort=LN.effort),
-                                 PosData=Pos$DATA,
-                                 niter=Niter,
-                                 pred.term='finyear',
-                                 ALL.terms=Predictors_monthly)
-          #3.Calculate CV
-          Preds=Preds%>%mutate(CV=SD/response)
-          
-          #4.Apply creep
-          Preds.creep=Preds
-          yrs=unique(DAT$finyear)
-          Preds.creep=subset(Preds.creep,finyear%in%yrs)
-          add.crp=Eff.creep$effort.creep[match(Preds.creep$finyear,Eff.creep$finyear)]
-          Preds.creep=Preds.creep%>%
-            mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
-                   upper.CL=upper.CL-(response-response*(1-add.crp)),
-                   response=response*(1-add.crp))
-          
-          #5.Normalised
-          Preds.nrmlzd=Preds.creep
-          Mn=mean(Preds.nrmlzd$response)
-          Preds.nrmlzd=Preds.nrmlzd%>%
-            mutate(response=response/Mn,
-                   lower.CL=lower.CL/Mn,
-                   upper.CL=upper.CL/Mn) 
-          out[[z]]=list(Preds=Preds,Preds.creep=Preds.creep,Preds.nrmlzd=Preds.nrmlzd)
-          rm(DAT)
-        }
-        return(out)
-      }
-    })   
-    names(Zone_preds.monthly)=names(SP.list)[Tar.sp]
-    
-    #daily
-    system.time({Zone_preds.daily=foreach(s=Tar.sp,.packages=c('dplyr','mvtnorm','mgcv')) %dopar%
-      {
-        zns=sort(unique(DATA.list.LIVEWT.c.daily[[s]]$zone))
-        if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #no enough observations 
-        if(names(SP.list)[s]=="Gummy Shark") zns=subset(zns,!zns=="Zone1")   #no enough observations 
-        out=vector('list',length(zns))
-        names(out)=zns
-        for(z in 1:length(zns))
-        {
-          #1. Fit models
-          DAT=DATA.list.LIVEWT.c.daily[[s]]%>%filter(VESSEL%in%VES.used.daily[[s]] & zone==zns[z]
-                                                     & BLOCKX%in%BLKS.used.daily[[s]])
-          colnames(DAT)=tolower(colnames(DAT))
-          #select years with a min number of vessels
-          DAT=subset(DAT,finyear%in%fn.sel.yrs.used.glm(DAT))
-          DAT=DAT%>% mutate(nlines.c=ifelse(nlines.c>2,'>2',nlines.c),
-                            mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
-          
-          ##
-          #Binomial
-          DAT.bi=DAT%>%mutate(catch.target=ifelse(catch.target>0,1,0))
-          Bi=fn.stand.delta(d=DAT.bi,Response="catch.target",PREDS=Predictors_daily,
-                            efrt="km.gillnet.hours.c",Formula=NULL,
-                            Formula.gam=Best.Model.daily.gam_delta[[s]]$bi,Family="binomial")
-          #Positive catch
-          DAT=DAT%>%filter(catch.target>0)
-          Pos=fn.stand.delta(d=DAT,Response="catch.target",PREDS=Predictors_daily,
-                             efrt="km.gillnet.hours.c",Formula=NULL,
-                             Formula.gam=Best.Model.daily.gam_delta[[s]]$pos,Family="gaussian")
-          
-          #2.Make predictions
-          Preds=fn.MC.delta.cpue(BiMOD=Bi$res.gam,
-                                 MOD=Pos$res.gam,
-                                 BiData=Bi$DATA%>%mutate(LNeffort=LN.effort),
-                                 PosData=Pos$DATA,
-                                 niter=Niter,
-                                 pred.term='finyear',
-                                 ALL.terms=c(Predictors_daily,'long10.corner','lat10.corner'))
-          
-          #3.Calculate CV
-          Preds=Preds%>%mutate(CV=SD/response)
-          
-          #4.Apply creep
-          Preds.creep=Preds
-          yrs=unique(DAT$finyear)
-          Preds.creep=subset(Preds.creep,finyear%in%yrs)
-          add.crp=Eff.creep$effort.creep[match(Preds.creep$finyear,Eff.creep$finyear)]
-          Preds.creep=Preds.creep%>%
-            mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
-                   upper.CL=upper.CL-(response-response*(1-add.crp)),
-                   response=response*(1-add.crp))
-          
-          #5.Normalised
-          Preds.nrmlzd=Preds.creep
-          Mn=mean(Preds.nrmlzd$response)
-          Preds.nrmlzd=Preds.nrmlzd%>%
-            mutate(response=response/Mn,
-                   lower.CL=lower.CL/Mn,
-                   upper.CL=upper.CL/Mn) 
-          out[[z]]=list(Preds=Preds,Preds.creep=Preds.creep,Preds.nrmlzd=Preds.nrmlzd)
-          rm(DAT)
-        }
-        return(out)
-      }
-    })   
-    names(Zone_preds.daily)=names(SP.list)[Tar.sp]
-    stopCluster(cl)
-    
-  }})
-  }
-  if(Use.Tweedie)  
-  {
-    #monthly
-    system.time({Zone_preds.monthly=foreach(s=Tar.sp,.packages=c('dplyr','mgcv','emmeans')) %do%
-      {
-        if(!is.null(BLKS.used[[s]]))
-        {
-          zns=sort(unique(DATA.list.LIVEWT.c[[s]]$zone))
-          if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #no enough observations 
-          if(names(SP.list)[s]=="Gummy Shark") zns=subset(zns,zns=="Zone2")   #no enough observations 
-          out=vector('list',length(zns))
-          names(out)=zns
-          for(z in 1:length(zns))
-          {
-            d=DATA.list.LIVEWT.c[[s]]%>%
-              filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]] & zone==zns[z])
-            if(Exclude.yr.gummy) if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
-            if(Exclude.yr.sandbar) if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
-            Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
-            Continuous=Covariates.monthly
-            colnames(d)=tolower(colnames(d))
-            Terms=tolower(Terms)
-            Continuous=tolower(Continuous)
-            Factors=Terms[!Terms%in%Continuous]
-            Terms=all.vars(Best.Model[[s]])[-1]
-            d <- d%>%
-              dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
-              mutate(cpue=catch.target/km.gillnet.hours.c)
-            d <- makecategorical(Factors[Factors%in%Terms],d)
-            
-            #1. Fit model
-            mod<-bam(Best.Model[[s]],data=d,family='tw',method="fREML",discrete=TRUE)
-            
-            
-            #2.Make predictions
-            Preds=pred.fun(mod=mod,biascor="NO",PRED="finyear")
-            
-            #3.Calculate CV
-            Preds=Preds%>%mutate(CV=SD/response)
-            
-            #4.Apply creep
-            Preds.creep=Preds
-            yrs=unique(d$finyear)
-            Preds.creep=subset(Preds.creep,finyear%in%yrs)
-            add.crp=Eff.creep$effort.creep[match(Preds.creep$finyear,Eff.creep$finyear)]
-            Preds.creep=Preds.creep%>%
-              mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
-                     upper.CL=upper.CL-(response-response*(1-add.crp)),
-                     response=response*(1-add.crp))
-            
-            #5.Normalised
-            Preds.nrmlzd=Preds.creep
-            Mn=mean(Preds.nrmlzd$response)
-            Preds.nrmlzd=Preds.nrmlzd%>%
-              mutate(response=response/Mn,
-                     lower.CL=lower.CL/Mn,
-                     upper.CL=upper.CL/Mn) 
-            
-            out[[z]]=list(Preds=Preds,Preds.creep=Preds.creep,Preds.nrmlzd=Preds.nrmlzd)
-            rm(d,mod)
-          }
-          return(out)
-        }
-      }
-    })   
-    names(Zone_preds.monthly)=names(SP.list)[Tar.sp]
-    
-    #daily
-    system.time({Zone_preds.daily=foreach(s=Tar.sp,.packages=c('dplyr','mgcv','emmeans')) %do%
-      {
-        if(!is.null(BLKS.used.daily[[s]]))
-        {
-          zns=sort(unique(DATA.list.LIVEWT.c.daily[[s]]$zone))
-          if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #no enough observations 
-          if(names(SP.list)[s]=="Gummy Shark") zns=subset(zns,zns=="Zone2")   #no enough observations 
-          
-          out=vector('list',length(zns))
-          names(out)=zns
-          
-          for(z in 1:length(zns))
-          {
-            d=DATA.list.LIVEWT.c.daily[[s]]%>%
-              filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]] & zone==zns[z])
-            d=d%>%filter(!FINYEAR=="2006-07")
-            Terms=Predictors_daily
-            Continuous=Covariates.daily
-            colnames(d)=tolower(colnames(d))
-            Terms=tolower(Terms)
-            Continuous=tolower(Continuous)
-            Factors=Terms[!Terms%in%Continuous]
-            Terms=all.vars(Best.Model.daily[[s]])[-1]
-            d <- d%>%
-              dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
-              mutate(cpue=catch.target/km.gillnet.hours.c)
-            d <- makecategorical(Factors[Factors%in%Terms],d)
-            
-            #1. Fit model
-            mod<-bam(Best.Model.daily[[s]],data=d,family='tw',method="fREML",discrete=TRUE) 
-            
-            #2.Make predictions
-            Preds=pred.fun(mod=mod,biascor="NO",PRED="finyear")
-            
-            #3.Calculate CV
-            Preds=Preds%>%mutate(CV=SD/response)
-            
-            #4.Apply creep
-            Preds.creep=Preds
-            yrs=unique(d$finyear)
-            Preds.creep=subset(Preds.creep,finyear%in%yrs)
-            add.crp=Eff.creep$effort.creep[match(Preds.creep$finyear,Eff.creep$finyear)]
-            Preds.creep=Preds.creep%>%
-              mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
-                     upper.CL=upper.CL-(response-response*(1-add.crp)),
-                     response=response*(1-add.crp))
-            
-            #5.Normalised
-            Preds.nrmlzd=Preds.creep
-            Mn=mean(Preds.nrmlzd$response)
-            Preds.nrmlzd=Preds.nrmlzd%>%
-              mutate(response=response/Mn,
-                     lower.CL=lower.CL/Mn,
-                     upper.CL=upper.CL/Mn) 
-            
-            out[[z]]=list(Preds=Preds,Preds.creep=Preds.creep,Preds.nrmlzd=Preds.nrmlzd)
-            
-            rm(d,mod)
-          }
-          
-          return(out)
-        }
-      }
-    })
-    names(Zone_preds.daily)=names(SP.list)[Tar.sp]
-    
-    
-    stopCluster(cl)
-    
-  } 
-}
-
 
 # EXPORT INDICES -----------------------------------------------------------------------
 setwd(handl_OneDrive("Analyses/Data_outs"))
@@ -3920,7 +3555,9 @@ Nms.sp=ifelse(Nms.sp=="Bronze whaler","Copper shark",Nms.sp)
 Nms.sp=ifelse(Nms.sp=="Hammerhead sharks","Hammerheads",Nms.sp)
 
 #1. Target species 
+
 #1.1. Absolute scale 
+
   #zones combined with NO efficiency creep
 for (s in Tar.sp)
 {
@@ -3949,7 +3586,7 @@ for (s in Tar.sp)
   #Spatial
 if(do.spatial.cpiui)
 {
-  #4.22.12.3 by zones with NO efficiency creep
+  #by zones with NO efficiency creep
   for (s in 1:length(Tar.sp))
   {
     Zn=names(Zone_preds.monthly[[s]])
@@ -3969,7 +3606,7 @@ if(do.spatial.cpiui)
     }
   }
   
-  #4.22.12.4 by zones with efficiency creep
+  #by zones with efficiency creep
   for (s in 1:length(Tar.sp))
   {
     Zn=names(Zone_preds.monthly[[s]])
@@ -3991,6 +3628,7 @@ if(do.spatial.cpiui)
 }
 
 #1.2.Relative scale   
+
   #zones combined with efficiency creep
 for (s in Tar.sp)
 {
@@ -4029,7 +3667,8 @@ if(do.spatial.cpiui)
 
 #2. Other species zones combined with efficiency creep  
 Sel.vars.other=c("finyear","response","CV","lower.CL","upper.CL","SE")
-  #absolute scale with creep
+
+  #2.1. Absolute scale with creep
 for (s in nnn[-sort(Tar.sp)])
 {
   nmx=Nms.sp[s]
@@ -4050,7 +3689,7 @@ for (s in nnn[-sort(Tar.sp)])
   }
   rm(a,nmx)
 }
-  #relative
+  #2.2. Relative scale
 for (s in nnn[-sort(Tar.sp)])
 {
   nmx=Nms.sp[s]

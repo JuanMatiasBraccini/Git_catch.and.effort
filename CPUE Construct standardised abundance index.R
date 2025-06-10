@@ -804,7 +804,7 @@ if(Def.mod.Str=="YES")     #takes 45 mins
           
         }
       })
-      stopCluster(cl)
+      
       names(Model.structure)=names(SP.list)[Tar.sp]
       
       #calculate AIC and deviance explained per term
@@ -1044,7 +1044,7 @@ if(Def.mod.Str=="NO")
 }
 
 
-# Export table of term levels ----------------------------------------------
+#-- Export table of term levels ----------------------------------------------
 if(Model.run=="First")
 {
   fn.table.terms=function(d,PREDS)
@@ -1151,6 +1151,7 @@ if(Model.run=="First")
 
 
 #-- Run standardisation on selected model  ----------------------------------------------
+
 if(Use.Qualif.level)
 {
   #monthly
@@ -1627,6 +1628,7 @@ if(Use.Delta)
 }
 if(Use.Tweedie)    
 {
+  
   #monthly  
   tic()
   Stand.out=foreach(s=nnn,.packages=c('dplyr','mgcv')) %dopar%
@@ -1653,7 +1655,9 @@ if(Use.Tweedie)
         Continuous=tolower(Continuous)
         Factors=Terms[!Terms%in%Continuous]
         Terms=all.vars(Best.Model[[s]])[-1]
-        d <- d[,c('catch.target','km.gillnet.hours.c',Terms)]%>%
+        ddiss=c('catch.target','km.gillnet.hours.c',Terms)
+        if(!'zone'%in%ddiss) ddiss=c(ddiss,'zone')
+        d <- d[,ddiss]%>%
                 mutate(cpue=catch.target/km.gillnet.hours.c)
         d <- makecategorical(Factors[Factors%in%Terms],d)
         mod<-bam(Best.Model[[s]],data=d,family='tw',method="fREML",discrete=TRUE)
@@ -1699,7 +1703,9 @@ if(Use.Tweedie)
         Continuous=tolower(Continuous)
         Factors=Terms[!Terms%in%Continuous]
         Terms=all.vars(Best.Model.daily[[s]])[-1]
-        d <- d[,c('catch.target','km.gillnet.hours.c',Terms)]%>%
+        ddiss=c('catch.target','km.gillnet.hours.c',Terms)
+        if(!'zone'%in%ddiss) ddiss=c(ddiss,'zone')
+        d <- d[,ddiss]%>%
           mutate(cpue=catch.target/km.gillnet.hours.c)
         d <- makecategorical(Factors[Factors%in%Terms],d)
         mod<-bam(Best.Model.daily[[s]],data=d,family='tw',method="fREML",discrete=TRUE)
@@ -2491,7 +2497,7 @@ if(Model.run=="First")
     
   }
   
-  stopCluster(cl)
+  
 }  
 
 
@@ -2632,7 +2638,7 @@ if(Model.run=="First")  #takes 4 mins
         }
       }
     })
-    stopCluster(cl)
+    
     names(dummy1)=names(gam.list)
     gam.list=dummy1
     
@@ -2840,7 +2846,7 @@ if(Model.run=="First")  #takes 4 mins
     Tab.Dev.Exp=rbind(do.call(rbind,Dev.monthly),do.call(rbind,Dev.daily))
     colnames(Tab.Dev.Exp)=NULL
     
-    stopCluster(cl)
+    
   }
   
   fn.word.table(WD=getwd(),TBL=as.matrix(Tab.Dev.Exp),Doc.nm="ANOVA_table",caption=NA,paragph=NA,
@@ -3838,7 +3844,7 @@ if(Use.Tweedie)
     
     names(Pred.Tweedie.sens)=names(Pred.daily.Tweedie.sens)=names(SP.list)
     
-    stopCluster(cl)
+    
     
     
     #3. Display annual indices  
@@ -3925,7 +3931,7 @@ if(Use.Delta)
       }
     })
     names(Pred.daily.tar.glm)=names(SP.list)[Tar.sp]
-    stopCluster(cl)
+    
     
     #relative glm and gam standardised
     fn.fig("Figure.Annual_Index_glm_gam.stand",1200, 2400)    
@@ -4234,7 +4240,7 @@ if(plot.cpue.paper.figures=="YES")
       })
       
       names(Pred.month)=names(Pred.month.daily)=names(SP.list)[Tar.sp]
-      stopCluster(cl)
+      
       
       fn.fig("Figure.Monthly effects",2000, 2400)    
       par(mfrow=c(4,2),mar=c(1,2,1.5,2),oma=c(2.5,2.5,.1,.2),las=1,mgp=c(1.9,.7,0))
@@ -4435,7 +4441,7 @@ if(plot.cpue.paper.figures=="YES")
       
       
       names(Pred.spatial.monthly)=names(Pred.spatial.daily)=names(SP.list)[Tar.sp]
-      stopCluster(cl)
+      
       
       South.WA.lat=c(-36,-25); South.WA.long=c(112,129)
       data(worldLLhigh)
@@ -4699,4 +4705,4 @@ if(plot.cpue.paper.figures=="YES")
   }
 }
 
-stopCluster(cl) 
+
