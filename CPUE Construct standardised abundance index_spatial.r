@@ -1,3 +1,223 @@
+#-- Select model structure ----------------------------------------------
+add.CITES.term=TRUE  #CITES listing term for smooth HH
+#remove predictors identified as highly correlated
+cNSTNT=Categorical[!Categorical=="block10"] 
+cNSTNT.daily=Categorical[!Categorical=="blockx"]
+if(any(c(do_cluster,do_pca,do_Stephens_McCall)=='YES')) cNSTNT.daily=c(cNSTNT.daily,Targeting.vars)
+
+#define best model   
+Best.Model.zone=vector('list',length(SP.list)) 
+names(Best.Model.zone)=names(SP.list)
+Best.Model.zone.daily=Best.Model.zone
+
+if(Def.mod.Str=="YES")     #takes 25 mins 
+{
+  hndl.modl.sel=handl_OneDrive("Analyses/Catch and effort/Outputs/Model Selection/")
+  if(Use.Tweedie)       
+  {
+    tic()
+    #1. Indicator species   
+    foreach(s=Tar.sp,.packages=c('dplyr','mgcv','doParallel')) %do%
+    {
+      zns=sort(unique(DATA.list.LIVEWT.c[[s]]$zone))
+      if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #outside core area so not enough observations, issues with deg. freedom 
+      if(names(SP.list)[s]=="Gummy Shark") zns=subset(zns,!zns=="West")  
+        
+      for(z in 1:length(zns))
+      {
+            #1.1. Monthly
+            if(do.monthly.def.str)
+            {
+              d=DATA.list.LIVEWT.c[[s]]%>%  
+                filter(VESSEL%in%VES.used.zone[[s]][[z]] & BLOCKX%in%BLKS.used.zone[[s]][[z]] & zone==zns[z])%>%
+                mutate(SHOTS.c=ifelse(SHOTS.c>2,2,SHOTS.c))
+              if(Exclude.yr.gummy) if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
+              if(Exclude.yr.sandbar) if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
+              Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
+              Continuous=Covariates.monthly
+              Fmula=list(Year.block="cpue~finyear + blockx",
+                         Month=     "cpue~finyear + blockx + s(month,k=12,bs='cc')",
+                         Shots=     "cpue~finyear + blockx + s(month,k=12,bs='cc') + shots.c",
+                         Vessel=    "cpue~finyear + blockx + s(month,k=12,bs='cc') + shots.c + s(vessel,bs='re')") 
+              Family='tw'
+              FILE=paste(names(DATA.list.LIVEWT.c.daily)[s],'_',zns[z],"_GAM_monthly",sep="")
+              colnames(d)=tolower(colnames(d))
+              Terms=tolower(Terms)
+              Continuous=tolower(Continuous)
+              Factors=Terms[!Terms%in%Continuous]
+              d=d%>%
+                dplyr::select(c(catch.target,km.gillnet.hours.c,all_of(Terms)))%>%
+                mutate(cpue=catch.target/km.gillnet.hours.c)
+              d <- makecategorical(Factors,d)
+              MODS=foreach(i=1:length(Fmula),.packages=c('dplyr','mgcv','doParallel')) %dopar%
+                {
+                  mod<-gam(formula(Fmula[[i]]),data=d,family=Family,select=TRUE,method="REML")
+                  return(mod)
+                }
+              names(MODS)=names(Fmula)
+              pdf(paste(hndl.modl.sel,FILE,".pdf",sep=''))
+              mod.sumery=vector('list',length(MODS))
+              Explained.dev=Preds=mod.sumery
+              for(x in 1:length(MODS))
+              {
+                plot(MODS[[x]],all.terms = TRUE, shade = TRUE,shade.col = "orange",scale=0,
+                     pages=1,rug=FALSE)
+                mtext(Fmula[[x]],side=3, line = 2, adj = 0.65,col='brown',cex=.8)
+                mod.sumery[[x]]=tidy(MODS[[x]])
+                Preds[[x]]=pred.fun(mod=MODS[[x]],biascor="YES",PRED="finyear")%>%mutate(Model=names(MODS)[x])
+                if(nrow(mod.sumery[[x]])>0)
+                {
+                  grid.newpage()
+                  class(mod.sumery[[x]]) <- "data.frame"
+                  grid.table(mod.sumery[[x]])
+                }
+                Explained.dev[[x]]=summary(MODS[[x]])$dev.expl*100  
+              }
+              #Model prediction by each term
+              print(do.call(rbind,Preds)%>%
+                      mutate(year=as.numeric(substr(finyear,1,4)))%>%
+                      ggplot(aes(year,response,color=Model))+
+                      geom_line(alpha=0.35,linetype='dashed')+
+                      geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2,alpha=0.35)+
+                      geom_point(size=2)+
+                      theme_PA()+theme(legend.position = 'top')+
+                      ylab('CPUE (+/- 95% CI)')+xlab('Financial year'))
+              
+              #explained deviance by each term
+              Explained.dev=data.frame(Model=names(Fmula),
+                                       Percent.deviance.explained.by.model=do.call(rbind,Explained.dev))%>%
+                mutate(Percent.explained.by.term=Percent.deviance.explained.by.model-lag(Percent.deviance.explained.by.model,1))
+              grid.newpage()
+              class(Explained.dev) <- "data.frame"
+              grid.table(Explained.dev)
+              dev.off()
+            }
+            
+            #1.2. Daily
+            d=DATA.list.LIVEWT.c.daily[[s]]%>%
+              filter(VESSEL%in%VES.used.zone.daily[[s]][[z]] & BLOCKX%in%BLKS.used.zone.daily[[s]][[z]] & zone==zns[z])%>%
+              mutate(shots.c=ifelse(shots.c>2,2,shots.c),
+                     nlines.c=ifelse(nlines.c>3,3,nlines.c),
+                     mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
+            Terms=Predictors_daily
+            Continuous=Covariates.daily
+            Fmula=list(Year=      "cpue~finyear",
+                       Shots=     "cpue~finyear+shots.c",
+                       Mesh=      "cpue~finyear+shots.c+mesh",
+                       Nlines=    "cpue~finyear+shots.c+mesh+nlines.c",
+                       Targeting= "cpue~finyear+shots.c+mesh+nlines.c+step.mcal_target_group",
+                       Month=     "cpue~finyear+shots.c+mesh+nlines.c+step.mcal_target_group+s(month,k=12,bs='cc')",
+                       Depth=     "cpue~finyear+shots.c+mesh+nlines.c+step.mcal_target_group+s(month,k=12,bs='cc')+s(mean.depth)",
+                       Lunar=     "cpue~finyear+shots.c+mesh+nlines.c+step.mcal_target_group+s(month,k=12,bs='cc')+s(mean.depth)+s(lunar,k=5,bs='cc')",
+                       Vessel=    "cpue~finyear+shots.c+mesh+nlines.c+step.mcal_target_group+s(month,k=12,bs='cc')+s(mean.depth)+s(lunar,k=5,bs='cc')+s(vessel,bs='re')",
+                       Lat.long=  "cpue~finyear+shots.c+mesh+nlines.c+step.mcal_target_group+s(month,k=12,bs='cc')+s(mean.depth)+s(lunar,k=5,bs='cc')+s(vessel,bs='re')+s(long10.corner,lat10.corner)")
+            Family='tw'
+            FILE=paste(names(DATA.list.LIVEWT.c.daily)[s],'_',zns[z],"_GAM_daily",sep="")
+            colnames(d)=tolower(colnames(d))
+            Terms=tolower(Terms)
+            Continuous=tolower(Continuous)
+            Factors=Terms[!Terms%in%Continuous]
+            d=d%>%
+              dplyr::select(c(catch.target,km.gillnet.hours.c,Terms))%>%
+              mutate(cpue=catch.target/km.gillnet.hours.c)
+            d <- makecategorical(Factors,d)
+            MODS=foreach(i=1:length(Fmula),.packages=c('dplyr','mgcv')) %dopar%
+              {
+                mod<-gam(formula(Fmula[[i]]),data=d,family=Family,select=TRUE,method="REML")
+                return(mod)
+              }
+            names(MODS)=names(Fmula)
+            pdf(paste(hndl.modl.sel,FILE,".pdf",sep=''))
+            mod.sumery=vector('list',length(MODS))
+            Explained.dev=Preds=mod.sumery
+            for(x in 1:length(MODS))
+            {
+              plot(MODS[[x]],all.terms = TRUE, shade = TRUE,shade.col = "orange",scale=0,
+                   pages=1,rug=FALSE)
+              mtext(Fmula[[x]],side=3, line = 2, adj = 0.65,col='brown',cex=.8)
+              mod.sumery[[x]]=tidy(MODS[[x]])
+              Preds[[x]]=pred.fun(mod=MODS[[x]],biascor="YES",PRED="finyear")%>%mutate(Model=names(MODS)[x])
+              if(nrow(mod.sumery[[x]])>0)
+              {
+                grid.newpage()
+                class(mod.sumery[[x]]) <- "data.frame"
+                grid.table(mod.sumery[[x]])
+              }
+              Explained.dev[[x]]=summary(MODS[[x]])$dev.expl*100  
+            }
+            
+            #Model prediction by each term
+            print(do.call(rbind,Preds)%>%
+                    mutate(year=as.numeric(substr(finyear,1,4)))%>%
+                    ggplot(aes(year,response,color=Model))+
+                    geom_line(alpha=0.35,linetype='dashed')+
+                    geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2,alpha=0.35)+
+                    geom_point(size=2)+
+                    theme_PA()+theme(legend.position = 'top')+
+                    ylab('CPUE (+/- 95% CI)')+xlab('Financial year'))
+            
+            #explained deviance by each term
+            Explained.dev=data.frame(Model=names(Fmula),
+                                     Percent.deviance.explained.by.model=do.call(rbind,Explained.dev))%>%
+              mutate(Percent.explained.by.term=Percent.deviance.explained.by.model-lag(Percent.deviance.explained.by.model,1))
+            grid.newpage()
+            class(Explained.dev) <- "data.frame"
+            grid.table(Explained.dev)
+            dev.off()
+            
+          }
+    }
+    toc()
+  }
+}
+if(Def.mod.Str=="NO")   
+{
+  if(Use.Tweedie)
+  {
+    for(s in Tar.sp)
+    {
+      #Monthly
+      zns=sort(unique(DATA.list.LIVEWT.c[[s]]$zone))
+      if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #outside core area so not enough observations, issues with deg. freedom 
+      if(names(SP.list)[s]=="Gummy Shark") zns=subset(zns,!zns=="West")  
+      
+      dummy=vector('list',length(zns))
+      names(dummy)=zns
+      for(z in 1:length(zns))
+      {
+        dummy[[z]]=formula(cpue~finyear + blockx + s(vessel,bs='re') + s(month,k=12,bs="cc"))
+        if(names(SP.list)[s]=="Gummy Shark" & zns[z]=='Zone2')  dummy[[z]]=formula(cpue~finyear + blockx + s(vessel,bs='re'))
+      }
+      Best.Model.zone[[s]]=dummy
+      
+      #Daily
+      for(z in 1:length(zns))
+      {
+        dummy[[z]]=formula(cpue ~ finyear + s(vessel, bs = "re") + s(month, bs = "cc") + 
+                             s(long10.corner, lat10.corner) + s(mean.depth) + step.mcal_target_group)
+        if(names(SP.list)[s]=="Gummy Shark" & zns[z]=='Zone1') dummy[[z]]=formula(cpue ~ finyear + s(month, bs = "cc") + 
+                                                                                    s(long10.corner, lat10.corner) + s(mean.depth) + step.mcal_target_group+shots.c+mesh+nlines.c)
+        if(names(SP.list)[s]=="Gummy Shark" & zns[z]=='Zone2')  dummy[[z]]=formula(cpue ~ finyear + s(vessel, bs = "re") + s(month, bs = "cc") + 
+                                                                                     s(long10.corner, lat10.corner)+mesh)
+        if(names(SP.list)[s]=="Dusky Whaler" & zns[z]=='Zone1')  dummy[[z]]=formula(cpue ~ finyear + s(month, bs = "cc") + 
+                                                                                     s(long10.corner, lat10.corner) + s(mean.depth) +shots.c+mesh)
+        if(names(SP.list)[s]=="Dusky Whaler" & zns[z]=='West')  dummy[[z]]=formula(cpue ~ finyear + s(vessel, bs = "re") + s(month, bs = "cc") + 
+                                                                                     s(long10.corner, lat10.corner) + s(mean.depth)+ step.mcal_target_group +mesh+nlines.c)
+        if(names(SP.list)[s]=="Whiskery Shark" & zns[z]=='West')  dummy[[z]]=formula(cpue ~ finyear + s(month, bs = "cc") + 
+                                                                                       s(long10.corner, lat10.corner) + s(mean.depth) + step.mcal_target_group + mesh)
+        if(names(SP.list)[s]=="Whiskery Shark" & zns[z]=='Zone1')  dummy[[z]]=formula(cpue ~ finyear  + s(month, bs = "cc") + 
+                                                                                        s(long10.corner, lat10.corner) + s(mean.depth) + step.mcal_target_group+shots.c+mesh)
+        if(names(SP.list)[s]=="Sandbar Shark" & zns[z]=='West')  dummy[[z]]=formula(cpue ~ finyear + s(vessel, bs = "re") + s(month, bs = "cc") + 
+                                                                                       s(long10.corner, lat10.corner) + s(mean.depth) + step.mcal_target_group+mesh)
+        if(names(SP.list)[s]=="Sandbar Shark" & zns[z]=='Zone1')  dummy[[z]]=formula(cpue ~ finyear  + s(month, bs = "cc") + 
+                                                                                        s(long10.corner, lat10.corner) + s(mean.depth) + step.mcal_target_group+shots.c+mesh)
+      }
+      Best.Model.zone.daily[[s]]=dummy
+    }
+  }
+}
+
+#-- Run standardisation on selected model and plot indices  ----------------------------------------------
 if(Use.Delta)  
 {
   system.time({for(s in match(TARGETS[-match(17001,TARGETS)],SP.list))  
@@ -230,155 +450,147 @@ if(Use.Delta)
 }
 if(Use.Tweedie)  
 {
-  #Get index
-    #monthly  3 secs per species
+  #1. Get index
+    #1.1 monthly  3 secs per species
   tic()
   Zone_preds.monthly=foreach(s=Tar.sp,.packages=c('dplyr','mgcv','emmeans')) %dopar%
   {
-      if(!is.null(BLKS.used[[s]]))
-      {
-        zns=sort(unique(DATA.list.LIVEWT.c[[s]]$zone))
-        if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #not enough observations, issues with deg. freedom 
-        if(names(SP.list)[s]=="Gummy Shark") zns=subset(zns,!zns=="West")    
-        out=vector('list',length(zns))
-        names(out)=zns
-        for(z in 1:length(zns))
-        {
-          d=DATA.list.LIVEWT.c[[s]]%>%
-            filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]] & zone==zns[z])%>%
-            mutate(SHOTS.c=ifelse(SHOTS.c>2,2,SHOTS.c))
-          
-          #remove first years with very few positive catch observation
-          if(Exclude.yr.gummy) if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
-          if(Exclude.yr.sandbar) if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1986-87','1987-88','1988-89'))
-          
-          Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
-          Continuous=Covariates.monthly
-          colnames(d)=tolower(colnames(d))
-          Terms=tolower(Terms)
-          Continuous=tolower(Continuous)
-          Factors=Terms[!Terms%in%Continuous]
-          Terms=all.vars(Best.Model[[s]])[-1]
-          d <- d%>%
-            dplyr::select(c(catch.target,km.gillnet.hours.c,all_of(Terms)))%>%
-            mutate(cpue=catch.target/km.gillnet.hours.c)
-          d <- makecategorical(Factors[Factors%in%Terms],d)
-          
-          #1. Fit model
-          mod<-bam(Best.Model[[s]],data=d,family='tw',method="fREML",discrete=TRUE)
-          
-          
-          #2.Predict year effect (considering log bias corr if required)
-          Preds=pred.fun(mod=mod,biascor="NO",PRED="finyear")
-          
-          #3.Calculate CV
-          Preds=Preds%>%mutate(CV=SD/response)
-          
-          #4.Apply creep
-          Preds.creep=Preds
-          yrs=unique(d$finyear)
-          Preds.creep=subset(Preds.creep,finyear%in%yrs)
-          add.crp=Eff.creep$effort.creep[match(Preds.creep$finyear,Eff.creep$finyear)]
-          Preds.creep=Preds.creep%>%
-            mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
-                   upper.CL=upper.CL-(response-response*(1-add.crp)),
-                   response=response*(1-add.crp))
-          
-          #5.Normalised
-          Preds.nrmlzd=Preds.creep
-          Mn=mean(Preds.nrmlzd$response)
-          Preds.nrmlzd=Preds.nrmlzd%>%
-            mutate(response=response/Mn,
-                   lower.CL=lower.CL/Mn,
-                   upper.CL=upper.CL/Mn) 
-          
-          out[[z]]=list(Preds=Preds,Preds.creep=Preds.creep,Preds.nrmlzd=Preds.nrmlzd)
-          rm(d,mod)
-        }
-        return(out)
-      }
+    zns=sort(unique(DATA.list.LIVEWT.c[[s]]$zone))
+    if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #outside core area so not enough observations, issues with deg. freedom 
+    if(names(SP.list)[s]=="Gummy Shark") zns=subset(zns,!zns=="West")    
+    out=vector('list',length(zns))
+    names(out)=zns
+    for(z in 1:length(zns))
+    {
+      d=DATA.list.LIVEWT.c[[s]]%>%
+        filter(VESSEL%in%VES.used.zone[[s]][[z]] & BLOCKX%in%BLKS.used.zone[[s]][[z]] & zone==zns[z])%>%
+        mutate(SHOTS.c=ifelse(SHOTS.c>2,2,SHOTS.c))
+      
+      #remove first years with very few positive catch observation
+      if(Exclude.yr.gummy) if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
+      if(Exclude.yr.sandbar) if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1985-86','1986-87','1987-88','1988-89'))
+      
+      Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
+      Continuous=Covariates.monthly
+      colnames(d)=tolower(colnames(d))
+      Terms=tolower(Terms)
+      Continuous=tolower(Continuous)
+      Factors=Terms[!Terms%in%Continuous]
+      Terms=all.vars(Best.Model.zone[[s]][[z]])[-1]
+      d <- d%>%
+        dplyr::select(c(catch.target,km.gillnet.hours.c,all_of(Terms)))%>%
+        mutate(cpue=catch.target/km.gillnet.hours.c)
+      d <- makecategorical(Factors[Factors%in%Terms],d)
+      
+      #1. Fit model
+      mod<-bam(Best.Model.zone[[s]][[z]],data=d,family='tw',method="fREML",discrete=TRUE)
+      
+      
+      #2.Predict year effect (considering log bias corr if required)
+      Preds=pred.fun(mod=mod,biascor="NO",PRED="finyear")
+      
+      #3.Calculate CV
+      Preds=Preds%>%mutate(CV=SD/response)
+      
+      #4.Apply creep
+      Preds.creep=Preds
+      yrs=unique(d$finyear)
+      Preds.creep=subset(Preds.creep,finyear%in%yrs)
+      add.crp=Eff.creep$effort.creep[match(Preds.creep$finyear,Eff.creep$finyear)]
+      Preds.creep=Preds.creep%>%
+        mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+               upper.CL=upper.CL-(response-response*(1-add.crp)),
+               response=response*(1-add.crp))
+      
+      #5.Normalised
+      Preds.nrmlzd=Preds.creep
+      Mn=mean(Preds.nrmlzd$response)
+      Preds.nrmlzd=Preds.nrmlzd%>%
+        mutate(response=response/Mn,
+               lower.CL=lower.CL/Mn,
+               upper.CL=upper.CL/Mn) 
+      
+      out[[z]]=list(Preds=Preds,Preds.creep=Preds.creep,Preds.nrmlzd=Preds.nrmlzd)
+      rm(d,mod)
     }
+    return(out)  
+  }
   toc()   
   names(Zone_preds.monthly)=names(SP.list)[Tar.sp]
   
-    #daily  4 secs per species
+    #1.2 daily  4 secs per species
   tic()
   Zone_preds.daily=foreach(s=Tar.sp,.packages=c('dplyr','mgcv','emmeans')) %dopar%
   {
-      if(!is.null(BLKS.used.daily[[s]]))
-      {
-        zns=sort(unique(DATA.list.LIVEWT.c.daily[[s]]$zone))
-        if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #not enough observations, issues with deg. freedom 
-        if(names(SP.list)[s]=="Gummy Shark") zns=subset(zns,!zns=="West")    
-        
-        out=vector('list',length(zns))
-        names(out)=zns
-        
-        for(z in 1:length(zns))
-        {
-          d=DATA.list.LIVEWT.c.daily[[s]]%>%
-            filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]] & zone==zns[z])%>%
-            mutate(shots.c=ifelse(shots.c>2,2,shots.c),
-                   nlines.c=ifelse(nlines.c>3,3,nlines.c),
-                   mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
-          
-          #remove first year of transition from Monthly to Daily returns due to effort misreporting
-          d=d%>%filter(!FINYEAR=="2006-07")
-          
-          Terms=Predictors_daily
-          Continuous=Covariates.daily
-          colnames(d)=tolower(colnames(d))
-          Terms=tolower(Terms)
-          Continuous=tolower(Continuous)
-          Factors=Terms[!Terms%in%Continuous]
-          Terms=all.vars(Best.Model.daily[[s]])[-1]
-          d <- d%>%
-            dplyr::select(c(catch.target,km.gillnet.hours.c,all_of(Terms)))%>%
-            mutate(cpue=catch.target/km.gillnet.hours.c)
-          d <- makecategorical(Factors[Factors%in%Terms],d)
-          
-          #1. Fit model
-          mod<-bam(Best.Model.daily[[s]],data=d,family='tw',method="fREML",discrete=TRUE) 
-          
-          #2.Predict year effect (considering log bias corr if required)
-          Preds=pred.fun(mod=mod,biascor="NO",PRED="finyear")
-          
-          #3.Calculate CV
-          Preds=Preds%>%mutate(CV=SD/response)
-          
-          #4.Apply creep
-          Preds.creep=Preds
-          yrs=unique(d$finyear)
-          Preds.creep=subset(Preds.creep,finyear%in%yrs)
-          add.crp=Eff.creep$effort.creep[match(Preds.creep$finyear,Eff.creep$finyear)]
-          Preds.creep=Preds.creep%>%
-            mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
-                   upper.CL=upper.CL-(response-response*(1-add.crp)),
-                   response=response*(1-add.crp))
-          
-          #5.Normalised
-          Preds.nrmlzd=Preds.creep
-          Mn=mean(Preds.nrmlzd$response)
-          Preds.nrmlzd=Preds.nrmlzd%>%
-            mutate(response=response/Mn,
-                   lower.CL=lower.CL/Mn,
-                   upper.CL=upper.CL/Mn) 
-          
-          out[[z]]=list(Preds=Preds,Preds.creep=Preds.creep,Preds.nrmlzd=Preds.nrmlzd)
-          
-          rm(d,mod)
-        }
-        
-        return(out)
-      }
+    zns=sort(unique(DATA.list.LIVEWT.c.daily[[s]]$zone))
+    if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #not enough observations, issues with deg. freedom 
+    if(names(SP.list)[s]=="Gummy Shark") zns=subset(zns,!zns=="West")    
+    
+    out=vector('list',length(zns))
+    names(out)=zns
+    
+    for(z in 1:length(zns))
+    {
+      d=DATA.list.LIVEWT.c.daily[[s]]%>%
+        filter(VESSEL%in%VES.used.zone.daily[[s]][[z]] & BLOCKX%in%BLKS.used.zone.daily[[s]][[z]] & zone==zns[z])%>%
+        mutate(shots.c=ifelse(shots.c>2,2,shots.c),
+               nlines.c=ifelse(nlines.c>3,3,nlines.c),
+               mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
+      
+      #remove first year of transition from Monthly to Daily returns due to effort misreporting
+      d=d%>%filter(!FINYEAR=="2006-07")
+      
+      Terms=Predictors_daily
+      Continuous=Covariates.daily
+      colnames(d)=tolower(colnames(d))
+      Terms=tolower(Terms)
+      Continuous=tolower(Continuous)
+      Factors=Terms[!Terms%in%Continuous]
+      Terms=all.vars(Best.Model.zone.daily[[s]][[z]])[-1]
+      d <- d%>%
+        dplyr::select(c(catch.target,km.gillnet.hours.c,all_of(Terms)))%>%
+        mutate(cpue=catch.target/km.gillnet.hours.c)
+      d <- makecategorical(Factors[Factors%in%Terms],d)
+      
+      #1. Fit model
+      mod<-bam(Best.Model.zone.daily[[s]][[z]],data=d,family='tw',method="fREML",discrete=TRUE) 
+      
+      #2.Predict year effect (considering log bias corr if required)
+      Preds=pred.fun(mod=mod,biascor="NO",PRED="finyear")
+      
+      #3.Calculate CV
+      Preds=Preds%>%mutate(CV=SD/response)
+      
+      #4.Apply creep
+      Preds.creep=Preds
+      yrs=unique(d$finyear)
+      Preds.creep=subset(Preds.creep,finyear%in%yrs)
+      add.crp=Eff.creep$effort.creep[match(Preds.creep$finyear,Eff.creep$finyear)]
+      Preds.creep=Preds.creep%>%
+        mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+               upper.CL=upper.CL-(response-response*(1-add.crp)),
+               response=response*(1-add.crp))
+      
+      #5.Normalised
+      Preds.nrmlzd=Preds.creep
+      Mn=mean(Preds.nrmlzd$response)
+      Preds.nrmlzd=Preds.nrmlzd%>%
+        mutate(response=response/Mn,
+               lower.CL=lower.CL/Mn,
+               upper.CL=upper.CL/Mn) 
+      
+      out[[z]]=list(Preds=Preds,Preds.creep=Preds.creep,Preds.nrmlzd=Preds.nrmlzd)
+      
+      rm(d,mod)
     }
+    
+    return(out)
+  }
   toc()
   names(Zone_preds.daily)=names(SP.list)[Tar.sp]
   
   
-  
-  
-  #Plot index
+  #2. Plot index
   fn.plot.spatial.indices=function(sp,Pred1,Pred2,Pred.spatial,Pred1.daily,Pred2.daily,Pred.spatial.daily) 
   {
     #Monthly
@@ -387,7 +599,7 @@ if(Use.Tweedie)
              lower.CL=lower.CL/mean(response),
              upper.CL=upper.CL/mean(response),
              mean=response/mean(response),
-             year=0.15+as.numeric(substr(finyear,1,4)))%>%
+             year=as.numeric(substr(finyear,1,4)))%>%
       dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
       mutate(period='1.monthly')
     
@@ -397,7 +609,7 @@ if(Use.Tweedie)
              lower.CL=lower.CL/mean(mn),
              upper.CL=upper.CL/mean(mn),
              mean=response/mean(mn),
-             year=0.1+as.numeric(substr(finyear,1,4)))%>%
+             year=0.05+as.numeric(substr(finyear,1,4)))%>%
       dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
       mutate(period='1.monthly')
     
@@ -410,7 +622,7 @@ if(Use.Tweedie)
                      lower.CL=lower.CL/mean(response),
                      upper.CL=upper.CL/mean(response),
                      mean=response/mean(response),
-                     year=-0.1+as.numeric(substr(finyear,1,4)))%>%
+                     year=-0.05+as.numeric(substr(finyear,1,4)))%>%
               dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
               mutate(period='1.monthly')
     }
@@ -437,7 +649,7 @@ if(Use.Tweedie)
              lower.CL=lower.CL/mean(response),
              upper.CL=upper.CL/mean(response),
              mean=response/mean(response),
-             year=0.15+as.numeric(substr(finyear,1,4)))%>%
+             year=as.numeric(substr(finyear,1,4)))%>%
       dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
       mutate(period='2.daily')
     
@@ -446,7 +658,7 @@ if(Use.Tweedie)
              lower.CL=lower.CL/mean(response),
              upper.CL=upper.CL/mean(response),
              mean=response/mean(response),
-             year=0.1+as.numeric(substr(finyear,1,4)))%>%
+             year=0.05+as.numeric(substr(finyear,1,4)))%>%
       dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
       mutate(period='2.daily')
     
@@ -460,7 +672,7 @@ if(Use.Tweedie)
                lower.CL=lower.CL/mean(response),
                upper.CL=upper.CL/mean(response),
                mean=response/mean(response),
-               year=-0.1+as.numeric(substr(finyear,1,4)))%>%
+               year=-0.05+as.numeric(substr(finyear,1,4)))%>%
         dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
         mutate(period='2.daily')
     }
@@ -521,14 +733,134 @@ if(Use.Tweedie)
                              Pred1.daily=Pred.daily,
                              Pred2.daily=Pred.daily.creep,
                              Pred.spatial.daily=Zone_preds.daily)
-      
-
-    ggsave(handl_OneDrive(paste('Analyses/Catch and effort/Outputs/Compare all index types/Spatial/',
-                                NM,'.jpeg',sep='')),width=10,height= 10)  
-    
+    ggsave(handl_OneDrive(paste('Analyses/Catch and effort/Outputs/Compare all index types/',
+                                NM,'_Spatial.jpeg',sep='')),width=10,height= 10)
   }
 }
 
+#-- Compare approaches for deriving spatial index  ----------------------------------------------
+compare.spatial.approach=FALSE  #ACA, not working
+if(compare.spatial.approach)
+{
+  #Single model with zone interaction
+  Best.Model.single.model=Best.Model
+  Best.Model.single.model$`Gummy Shark`=formula(cpue ~  blockx + s(vessel, bs = "re")+interaction(zone, finyear))
+  Best.Model.single.model$`Whiskery Shark`=formula(cpue ~  blockx + s(vessel, bs = "re")+interaction(zone, finyear))
+  Best.Model.single.model$`Dusky Whaler`=formula(cpue ~  blockx + s(vessel, bs = "re")+interaction(zone, finyear))
+  Best.Model.single.model$`Sandbar Shark`=formula(cpue ~  blockx + s(vessel, bs = "re") + s(month, k = 12, bs = "cc")+interaction(zone, finyear))
+  
+  Zone_preds.monthly_single_model=foreach(s=Tar.sp,.packages=c('dplyr','mgcv','emmeans')) %dopar%
+  {
+       d=DATA.list.LIVEWT.c[[s]]%>%
+        filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]])%>%
+        mutate(SHOTS.c=ifelse(SHOTS.c>2,2,SHOTS.c))
+      
+      #remove first years with very few positive catch observation
+      if(Exclude.yr.gummy) if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
+      if(Exclude.yr.sandbar) if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1985-86','1986-87','1987-88','1988-89'))
+      
+      Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
+      Continuous=Covariates.monthly
+      colnames(d)=tolower(colnames(d))
+      Terms=tolower(Terms)
+      Continuous=tolower(Continuous)
+      Factors=c("zone",Terms[!Terms%in%Continuous])
+      Terms=all.vars(Best.Model.single.model[[s]])[-1]
+      d <- d%>%
+        mutate(year=as.integer(substr(finyear,1,4)))%>%
+        dplyr::select(c(year,catch.target,km.gillnet.hours.c,all_of(Terms)))%>%
+        mutate(cpue=catch.target/km.gillnet.hours.c)
+      d <- makecategorical(Factors[Factors%in%Terms],d)
+      
+      #1. Fit model
+      mod<-bam(Best.Model.single.model[[s]],data=d,family='tw',method="fREML",discrete=TRUE)
 
-
+      #2.Predict year effect (considering log bias corr if required)
+      Preds=summary(emmeans(mod, ~ finyear | zone, type="response", rg.limit = 2e5,data=d))
+      Preds%>%
+        mutate(year=as.numeric(substr(finyear,1,4)))%>%
+        ggplot(aes(year,response,color=zone))+
+        geom_line(alpha=0.35,linetype='dashed')+
+        geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2,alpha=0.35)+
+        geom_point(size=2.5)+ylim(0,5)+
+        theme_PA()+ylab('')+xlab('')+
+        theme(legend.position = 'top',legend.title = element_blank())
+   
+      return(list(Preds=Preds))
+    }
+  names(Zone_preds.monthly_single_model)=names(SP.list)[Tar.sp]
+  
+  
+  
+  Zone_preds.daily_single_model=foreach(s=Tar.sp,.packages=c('dplyr','mgcv','emmeans')) %dopar%
+  {
+      zns=sort(unique(DATA.list.LIVEWT.c.daily[[s]]$zone))
+      if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #not enough observations, issues with deg. freedom 
+      if(names(SP.list)[s]=="Gummy Shark") zns=subset(zns,!zns=="West")    
+      
+      out=vector('list',length(zns))
+      names(out)=zns
+      
+      for(z in 1:length(zns))
+      {
+        d=DATA.list.LIVEWT.c.daily[[s]]%>%
+          filter(VESSEL%in%VES.used.zone.daily[[s]][[z]] & BLOCKX%in%BLKS.used.zone.daily[[s]][[z]] & zone==zns[z])%>%
+          mutate(shots.c=ifelse(shots.c>2,2,shots.c),
+                 nlines.c=ifelse(nlines.c>3,3,nlines.c),
+                 mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
+        
+        #remove first year of transition from Monthly to Daily returns due to effort misreporting
+        d=d%>%filter(!FINYEAR=="2006-07")
+        
+        Terms=Predictors_daily
+        Continuous=Covariates.daily
+        colnames(d)=tolower(colnames(d))
+        Terms=tolower(Terms)
+        Continuous=tolower(Continuous)
+        Factors=Terms[!Terms%in%Continuous]
+        Terms=all.vars(Best.Model.zone.daily[[s]][[z]])[-1]
+        d <- d%>%
+          dplyr::select(c(catch.target,km.gillnet.hours.c,all_of(Terms)))%>%
+          mutate(cpue=catch.target/km.gillnet.hours.c)
+        d <- makecategorical(Factors[Factors%in%Terms],d)
+        
+        #1. Fit model
+        mod<-bam(Best.Model.zone.daily[[s]][[z]],data=d,family='tw',method="fREML",discrete=TRUE) 
+        
+        #2.Predict year effect (considering log bias corr if required)
+        Preds=pred.fun(mod=mod,biascor="NO",PRED="finyear")
+        
+        #3.Calculate CV
+        Preds=Preds%>%mutate(CV=SD/response)
+        
+        #4.Apply creep
+        Preds.creep=Preds
+        yrs=unique(d$finyear)
+        Preds.creep=subset(Preds.creep,finyear%in%yrs)
+        add.crp=Eff.creep$effort.creep[match(Preds.creep$finyear,Eff.creep$finyear)]
+        Preds.creep=Preds.creep%>%
+          mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+                 upper.CL=upper.CL-(response-response*(1-add.crp)),
+                 response=response*(1-add.crp))
+        
+        #5.Normalised
+        Preds.nrmlzd=Preds.creep
+        Mn=mean(Preds.nrmlzd$response)
+        Preds.nrmlzd=Preds.nrmlzd%>%
+          mutate(response=response/Mn,
+                 lower.CL=lower.CL/Mn,
+                 upper.CL=upper.CL/Mn) 
+        
+        out[[z]]=list(Preds=Preds,Preds.creep=Preds.creep,Preds.nrmlzd=Preds.nrmlzd)
+        
+        rm(d,mod)
+      }
+      
+      return(out)
+    }
+  names(Zone_preds.daily_single_model)=names(SP.list)[Tar.sp]
+  
+  
+  #Zone_preds.monthly Zone_preds.daily
+}
  

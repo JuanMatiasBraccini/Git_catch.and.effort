@@ -1532,8 +1532,10 @@ names(BLKS.used)=names(SP.list)
 BLKS.not.used=VES.used=VES.not.used=
   BLKS.used.daily=BLKS.not.used.daily=BLKS_10.used.daily=BLKS_10.not.used.daily=
   VES.used.daily=VES.not.used.daily=BLKS.used
+BLKS.used.zone=VES.used.zone=BLKS.used.zone.daily=VES.used.zone.daily=BLKS.used
 if(Remove.blk.by=="blk_only")  
 {
+  #1. Overall 
   for(i in nnn)  
   {
     print(paste('Calculating blocks and vessels used for ---',names(Species.list)[i]))
@@ -1630,6 +1632,89 @@ if(Remove.blk.by=="blk_only")
     if(i==1)legend('center',c('used','not used'),fill=c("chartreuse3","brown1"),horiz = T,cex=1.25,bg="white")
   }
   dev.off() 
+  
+  #2. By zone (target species only)
+  for(i in Tar.sp)  
+  {
+    NM=names(SP.list)[i]
+    zns=sort(unique(Species.list[[i]]$zone))
+    if(names(SP.list)[i]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #outside core area so not enough observations, issues with deg. freedom 
+    if(names(SP.list)[i]=="Gummy Shark") zns=subset(zns,!zns=="West")  
+    
+    out.dummy.Blks=vector('list',length(zns))
+    names(out.dummy.Blks)=zns
+    out.dummy.Ves=out.dummy.Ves.daily=out.dummy.Blks.daily=out.dummy.Blks
+    
+    #monthly
+    for(z in 1:length(zns))
+    {
+      print(paste('Calculating blocks and vessels used by zone for ---',NM, zns[z]))
+      DD=Species.list[[i]]%>%filter(zone==zns[z])
+      if(!is.null(DD))
+      {
+        finy=sort(unique(DD$FINYEAR))
+        Ves.sel.BC=Threshold.n.yrs.monthly
+        BLK.sel.BC=MIN.obs.BLK
+        Min.ktch=MIN.ktch*1
+        if(length(SP.list[[i]])<3)
+        {
+          if(SP.list[[i]][1]%in%Indicator.sp)
+          {
+            Ves.sel.BC=Threshold.n.yrs.monthly
+            BLK.sel.BC=MIN.obs.BLK
+            Min.ktch=MIN.ktch 
+            if(18007%in%SP.list[[i]]) finy=finy[-match(c("1985-86","1986-87","1987-88"),finy)]
+          }
+        }
+        dummy=fn.see.all.yrs.ves.blks(a=subset(DD,FINYEAR%in%finy),SP=SP.list[[i]],
+                                      NM=paste0(NM,'_',zns[z]),what=".monthly",Ves.sel.BC=Ves.sel.BC,
+                                      Ves.sel.sens=Threshold.n.yrs.sens,
+                                      BLK.sel.BC=BLK.sel.BC,BLK.sel.sens=MIN.obs.BLK.sens,
+                                      Min.ktch=Min.ktch,MIN.rec=MIN.records.yr)
+        if(!is.null(dummy)) 
+        {
+          out.dummy.Blks[[z]]=dummy$Blks.BC
+          out.dummy.Ves[[z]]=dummy$Ves.BC
+        }
+      }
+    }
+    BLKS.used.zone[[i]]=out.dummy.Blks
+    VES.used.zone[[i]]=out.dummy.Ves 
+
+    #Daily
+    for(z in 1:length(zns))
+    {
+      print(paste('Calculating daily blocks and vessels used by zone for ---',NM, zns[z]))
+      DD=Species.list.daily[[i]]%>%filter(zone==zns[z])  
+      if(!is.null(DD))
+      {
+        Ves.sel.BC=Threshold.n.yrs.daily
+        BLK.sel.BC=MIN.obs.BLK
+        Min.ktch=MIN.ktch*1 
+        finy=unique(DD$FINYEAR)
+        if(length(SP.list[[i]])<3)
+        {
+          if(SP.list[[i]][1]%in%Indicator.sp)
+          {
+            Ves.sel.BC=Threshold.n.yrs.daily
+            BLK.sel.BC=MIN.obs.BLK
+            Min.ktch=MIN.ktch 
+          }
+        }
+        dummy=fn.see.all.yrs.ves.blks(a=subset(DD,FINYEAR%in%finy),SP=SP.list[[i]],
+                                      NM=paste0(NM,'_',zns[z]),what=".daily",Ves.sel.BC=Ves.sel.BC,Ves.sel.sens=Threshold.n.yrs.sens,
+                                      BLK.sel.BC=BLK.sel.BC,BLK.sel.sens=MIN.obs.BLK.sens,
+                                      Min.ktch=Min.ktch,MIN.rec=MIN.records.yr)
+        if(!is.null(dummy))
+        {
+          out.dummy.Blks.daily[[z]]=dummy$Blks.BC
+          out.dummy.Ves.daily[[z]]=dummy$Ves.BC
+        }
+      }
+    }
+    BLKS.used.zone.daily[[i]]=out.dummy.Blks.daily
+    VES.used.zone.daily[[i]]=out.dummy.Ves.daily
+  }
 }
 
 # EFFICIENCY_EXPAND VESSEL CHARACTERISTICS FOR SELECTED VESSELS----------------------------------------------
@@ -3545,7 +3630,7 @@ if(Model.run=="First")
 if(do.spatial.cpiui) source(handl_OneDrive('Analyses/Catch and effort/Git_catch.and.effort/CPUE Construct standardised abundance index_spatial.R'))
 on.exit(stopCluster(cl))
 #ACA
-
+#ACA xport_monthly before exporting montly, compare current one in folder with new one
 # EXPORT INDICES -----------------------------------------------------------------------
 setwd(handl_OneDrive("Analyses/Data_outs"))
 Sel.vars=c("finyear","response","CV","lower.CL","upper.CL","SE")
