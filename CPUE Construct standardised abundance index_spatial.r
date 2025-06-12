@@ -469,6 +469,8 @@ if(Use.Tweedie)
       #remove first years with very few positive catch observation
       if(Exclude.yr.gummy) if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
       if(Exclude.yr.sandbar) if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1985-86','1986-87','1987-88','1988-89'))
+      if(names(DATA.list.LIVEWT.c)[s]=="Whiskery Shark" & zns[z]=="West")d=d%>%filter(!FINYEAR%in%c('1975-76'))
+      
       
       Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
       Continuous=Covariates.monthly
@@ -503,12 +505,15 @@ if(Use.Tweedie)
                response=response*(1-add.crp))
       
       #5.Normalised
-      Preds.nrmlzd=Preds.creep
+      Preds.nrmlzd=Preds
       Mn=mean(Preds.nrmlzd$response)
       Preds.nrmlzd=Preds.nrmlzd%>%
         mutate(response=response/Mn,
                lower.CL=lower.CL/Mn,
-               upper.CL=upper.CL/Mn) 
+               upper.CL=upper.CL/Mn)%>%
+        mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+               upper.CL=upper.CL-(response-response*(1-add.crp)),
+               response=response*(1-add.crp)) 
       
       out[[z]]=list(Preds=Preds,Preds.creep=Preds.creep,Preds.nrmlzd=Preds.nrmlzd)
       rm(d,mod)
@@ -572,13 +577,16 @@ if(Use.Tweedie)
                response=response*(1-add.crp))
       
       #5.Normalised
-      Preds.nrmlzd=Preds.creep
+      Preds.nrmlzd=Preds
       Mn=mean(Preds.nrmlzd$response)
       Preds.nrmlzd=Preds.nrmlzd%>%
         mutate(response=response/Mn,
                lower.CL=lower.CL/Mn,
-               upper.CL=upper.CL/Mn) 
-      
+               upper.CL=upper.CL/Mn)%>%
+        mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+               upper.CL=upper.CL-(response-response*(1-add.crp)),
+               response=response*(1-add.crp)) 
+
       out[[z]]=list(Preds=Preds,Preds.creep=Preds.creep,Preds.nrmlzd=Preds.nrmlzd)
       
       rm(d,mod)
@@ -595,7 +603,7 @@ if(Use.Tweedie)
   {
     #Monthly
     d5=Pred1[[match(sp, names(Pred1))]]%>%
-      mutate(method='Standardised',
+      mutate(method='Single zone',
              lower.CL=lower.CL/mean(response),
              upper.CL=upper.CL/mean(response),
              mean=response/mean(response),
@@ -605,7 +613,7 @@ if(Use.Tweedie)
     
     mn=Pred1[[match(sp, names(Pred1))]]$response
     d6=Pred2[[match(sp, names(Pred2))]]%>%
-      mutate(method='Standardised with creep',
+      mutate(method='Single zone with creep',
              lower.CL=lower.CL/mean(mn),
              upper.CL=upper.CL/mean(mn),
              mean=response/mean(mn),
@@ -633,9 +641,7 @@ if(Use.Tweedie)
     {
       d8[[x]]=d8[[x]]%>%
         mutate(method=paste(names(d8)[x],'with creep'),
-               lower.CL=lower.CL/mean(response),
-               upper.CL=upper.CL/mean(response),
-               mean=response/mean(response),
+               mean=response,
                year=-0.15+as.numeric(substr(finyear,1,4)))%>%
         dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
         mutate(period='1.monthly')
@@ -645,7 +651,7 @@ if(Use.Tweedie)
     
     #Daily
     d5.daily=Pred1.daily[[match(sp, names(Pred1.daily))]]%>%
-      mutate(method='Standardised',
+      mutate(method='Single zone',
              lower.CL=lower.CL/mean(response),
              upper.CL=upper.CL/mean(response),
              mean=response/mean(response),
@@ -654,7 +660,7 @@ if(Use.Tweedie)
       mutate(period='2.daily')
     
     d6.daily=Pred2.daily[[match(sp, names(Pred2.daily))]]%>%
-      mutate(method='Standardised with creep',
+      mutate(method='Single zone with creep',
              lower.CL=lower.CL/mean(response),
              upper.CL=upper.CL/mean(response),
              mean=response/mean(response),
@@ -694,10 +700,13 @@ if(Use.Tweedie)
     
     
     #plots
-    LVLS=c("Standardised","Standardised with creep",
+    LVLS=c("Single zone","Single zone with creep",
            "West","West with creep",
            "Zone1","Zone1 with creep",
-           "Zone2","Zone2 with creep")
+           "Zone2", "Zone2 with creep")
+    Kls=c('grey50','grey10','chartreuse3','forestgreen','firebrick4','brown1','cyan3','blue4')
+    
+    
     p1=rbind(d5,d6,d7,d8)%>%
       mutate(method=factor(method,levels=LVLS))%>%
       ggplot(aes(year,mean,color=method))+
@@ -705,7 +714,8 @@ if(Use.Tweedie)
       geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2,alpha=0.35)+
       geom_point(size=2.5)+ylim(0,NA)+
       ggtitle('Monthly')+theme_PA()+ylab('')+xlab('')+
-      theme(legend.position = 'top',legend.title = element_blank())
+      theme(legend.position = 'top',legend.title = element_blank())+
+      scale_color_manual(values=Kls)
     
     p2=rbind(d5.daily,d6.daily,d7.daily,d8.daily)%>%
       mutate(method=factor(method,levels=LVLS))%>%
@@ -714,7 +724,8 @@ if(Use.Tweedie)
       geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2,alpha=0.35)+
       geom_point(size=2.5)+ylim(0,NA)+
       ggtitle('Daily')+theme_PA()+ylab('')+xlab('')+
-      theme(legend.position = 'top',legend.title = element_blank())
+      theme(legend.position = 'top',legend.title = element_blank())+
+      scale_color_manual(values=Kls)
     
     p=ggarrange(p1,p2,ncol=1,common.legend = T)
     annotate_figure(p,
@@ -727,37 +738,43 @@ if(Use.Tweedie)
   {
     NM=names(Zone_preds.monthly)[d]
     fn.plot.spatial.indices(sp=NM,
-                             Pred1=Pred,
-                             Pred2=Pred.creep,
-                             Pred.spatial=Zone_preds.monthly,
-                             Pred1.daily=Pred.daily,
-                             Pred2.daily=Pred.daily.creep,
-                             Pred.spatial.daily=Zone_preds.daily)
+                            Pred1=Pred,
+                            Pred2=Pred.creep,
+                            Pred.spatial=Zone_preds.monthly,
+                            Pred1.daily=Pred.daily,
+                            Pred2.daily=Pred.daily.creep,
+                            Pred.spatial.daily=Zone_preds.daily)
     ggsave(handl_OneDrive(paste('Analyses/Catch and effort/Outputs/Compare all index types/',
                                 NM,'_Spatial.jpeg',sep='')),width=10,height= 10)
   }
 }
 
 #-- Compare approaches for deriving spatial index  ----------------------------------------------
-compare.spatial.approach=FALSE  #ACA, not working
+compare.spatial.approach=FALSE  
 if(compare.spatial.approach)
 {
   #Single model with zone interaction
+    #Monthly
   Best.Model.single.model=Best.Model
-  Best.Model.single.model$`Gummy Shark`=formula(cpue ~  blockx + s(vessel, bs = "re")+interaction(zone, finyear))
-  Best.Model.single.model$`Whiskery Shark`=formula(cpue ~  blockx + s(vessel, bs = "re")+interaction(zone, finyear))
-  Best.Model.single.model$`Dusky Whaler`=formula(cpue ~  blockx + s(vessel, bs = "re")+interaction(zone, finyear))
-  Best.Model.single.model$`Sandbar Shark`=formula(cpue ~  blockx + s(vessel, bs = "re") + s(month, k = 12, bs = "cc")+interaction(zone, finyear))
-  
+  Best.Model.single.model$`Gummy Shark`=formula(cpue ~ blockx + s(vessel, bs = "re") + znyr)
+  Best.Model.single.model$`Whiskery Shark`=formula(cpue ~ blockx + s(vessel, bs = "re") + znyr)
+  Best.Model.single.model$`Dusky Whaler`=formula(cpue ~ blockx + s(vessel, bs = "re") + znyr)
+  Best.Model.single.model$`Sandbar Shark`=formula(cpue ~  blockx + s(vessel, bs = "re") + s(month, k = 12, bs = "cc")+znyr)
   Zone_preds.monthly_single_model=foreach(s=Tar.sp,.packages=c('dplyr','mgcv','emmeans')) %dopar%
   {
        d=DATA.list.LIVEWT.c[[s]]%>%
         filter(VESSEL%in%VES.used[[s]] & BLOCKX%in%BLKS.used[[s]])%>%
         mutate(SHOTS.c=ifelse(SHOTS.c>2,2,SHOTS.c))
       
+       if(names(SP.list)[s]=="Sandbar Shark") d=subset(d,!zone=="Zone2")   #not enough observations, issues with deg. freedom 
+       if(names(SP.list)[s]=="Gummy Shark") d=subset(d,!zone=="West")    
+       
+       
       #remove first years with very few positive catch observation
       if(Exclude.yr.gummy) if(names(DATA.list.LIVEWT.c)[s]=="Gummy Shark")d=d%>%filter(!FINYEAR%in%c('1975-76'))
       if(Exclude.yr.sandbar) if(names(DATA.list.LIVEWT.c)[s]=="Sandbar Shark")d=d%>%filter(!FINYEAR%in%c('1985-86','1986-87','1987-88','1988-89'))
+      
+      d=d%>%mutate(znyr = interaction(zone, FINYEAR, drop = TRUE))
       
       Terms=Predictors_monthly[!Predictors_monthly%in%c("block10")]
       Continuous=Covariates.monthly
@@ -776,91 +793,192 @@ if(compare.spatial.approach)
       mod<-bam(Best.Model.single.model[[s]],data=d,family='tw',method="fREML",discrete=TRUE)
 
       #2.Predict year effect (considering log bias corr if required)
-      Preds=summary(emmeans(mod, ~ finyear | zone, type="response", rg.limit = 2e5,data=d))
-      Preds%>%
-        mutate(year=as.numeric(substr(finyear,1,4)))%>%
-        ggplot(aes(year,response,color=zone))+
-        geom_line(alpha=0.35,linetype='dashed')+
-        geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2,alpha=0.35)+
-        geom_point(size=2.5)+ylim(0,5)+
-        theme_PA()+ylab('')+xlab('')+
-        theme(legend.position = 'top',legend.title = element_blank())
+      Preds=summary(emmeans(mod, 'znyr', type="response", rg.limit = 2e5,data=d))
+      #Preds=summary(emmeans(mod, ~ finyear | zone, type="response", rg.limit = 2e5,data=d))
+      Preds=Preds%>%
+        mutate(zone=sub("\\..*", "", znyr),
+               finyear=sub(".*\\.", "", znyr))
    
-      return(list(Preds=Preds))
+      return(Preds)
     }
   names(Zone_preds.monthly_single_model)=names(SP.list)[Tar.sp]
   
-  
+    #Daily
+  Best.Model.daily.single.model=Best.Model.daily
+  Best.Model.daily.single.model$`Gummy Shark`=formula(cpue ~  s(vessel, bs = "re") + s(month, bs = "cc") + 
+                                                        block10 + step.mcal_target_group + 
+                                                        mesh + znyr)
+  Best.Model.daily.single.model$`Whiskery Shark`=formula(cpue ~  s(vessel, bs = "re") + s(month, bs = "cc") + 
+                                                           block10 + s(mean.depth) + step.mcal_target_group + 
+                                                           shots.c + mesh + znyr)
+  Best.Model.daily.single.model$`Dusky Whaler`=formula(cpue ~ s(vessel, bs = "re") + s(month, bs = "cc") + 
+                                                         block10 + s(mean.depth) + step.mcal_target_group + 
+                                                          shots.c + mesh+ znyr)
+  Best.Model.daily.single.model$`Sandbar Shark`=formula(cpue ~ s(vessel, bs = "re") + s(month, bs = "cc") + 
+                                                          block10 + s(mean.depth) + step.mcal_target_group+ znyr)
   
   Zone_preds.daily_single_model=foreach(s=Tar.sp,.packages=c('dplyr','mgcv','emmeans')) %dopar%
   {
-      zns=sort(unique(DATA.list.LIVEWT.c.daily[[s]]$zone))
-      if(names(SP.list)[s]=="Sandbar Shark") zns=subset(zns,!zns=="Zone2")   #not enough observations, issues with deg. freedom 
-      if(names(SP.list)[s]=="Gummy Shark") zns=subset(zns,!zns=="West")    
-      
-      out=vector('list',length(zns))
-      names(out)=zns
-      
-      for(z in 1:length(zns))
-      {
-        d=DATA.list.LIVEWT.c.daily[[s]]%>%
-          filter(VESSEL%in%VES.used.zone.daily[[s]][[z]] & BLOCKX%in%BLKS.used.zone.daily[[s]][[z]] & zone==zns[z])%>%
-          mutate(shots.c=ifelse(shots.c>2,2,shots.c),
-                 nlines.c=ifelse(nlines.c>3,3,nlines.c),
-                 mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
-        
-        #remove first year of transition from Monthly to Daily returns due to effort misreporting
-        d=d%>%filter(!FINYEAR=="2006-07")
-        
-        Terms=Predictors_daily
-        Continuous=Covariates.daily
-        colnames(d)=tolower(colnames(d))
-        Terms=tolower(Terms)
-        Continuous=tolower(Continuous)
-        Factors=Terms[!Terms%in%Continuous]
-        Terms=all.vars(Best.Model.zone.daily[[s]][[z]])[-1]
-        d <- d%>%
-          dplyr::select(c(catch.target,km.gillnet.hours.c,all_of(Terms)))%>%
-          mutate(cpue=catch.target/km.gillnet.hours.c)
-        d <- makecategorical(Factors[Factors%in%Terms],d)
-        
-        #1. Fit model
-        mod<-bam(Best.Model.zone.daily[[s]][[z]],data=d,family='tw',method="fREML",discrete=TRUE) 
-        
-        #2.Predict year effect (considering log bias corr if required)
-        Preds=pred.fun(mod=mod,biascor="NO",PRED="finyear")
-        
-        #3.Calculate CV
-        Preds=Preds%>%mutate(CV=SD/response)
-        
-        #4.Apply creep
-        Preds.creep=Preds
-        yrs=unique(d$finyear)
-        Preds.creep=subset(Preds.creep,finyear%in%yrs)
-        add.crp=Eff.creep$effort.creep[match(Preds.creep$finyear,Eff.creep$finyear)]
-        Preds.creep=Preds.creep%>%
-          mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
-                 upper.CL=upper.CL-(response-response*(1-add.crp)),
-                 response=response*(1-add.crp))
-        
-        #5.Normalised
-        Preds.nrmlzd=Preds.creep
-        Mn=mean(Preds.nrmlzd$response)
-        Preds.nrmlzd=Preds.nrmlzd%>%
-          mutate(response=response/Mn,
-                 lower.CL=lower.CL/Mn,
-                 upper.CL=upper.CL/Mn) 
-        
-        out[[z]]=list(Preds=Preds,Preds.creep=Preds.creep,Preds.nrmlzd=Preds.nrmlzd)
-        
-        rm(d,mod)
-      }
-      
-      return(out)
+    d=DATA.list.LIVEWT.c.daily[[s]]%>%
+      filter(VESSEL%in%VES.used.daily[[s]] & BLOCKX%in%BLKS.used.daily[[s]])%>%
+      mutate(shots.c=ifelse(shots.c>2,2,shots.c),
+             nlines.c=ifelse(nlines.c>3,3,nlines.c),
+             mesh=ifelse(!mesh%in%c(165,178),'other',mesh))
+    
+    if(names(SP.list)[s]=="Sandbar Shark") d=subset(d,!zone=="Zone2")   #not enough observations, issues with deg. freedom 
+    if(names(SP.list)[s]=="Gummy Shark") d=subset(d,!zone=="West")    
+    
+    #remove first year of transition from Monthly to Daily returns due to effort misreporting
+    d=d%>%filter(!FINYEAR=="2006-07")
+    d=d%>%mutate(znyr = interaction(zone, FINYEAR, drop = TRUE))
+    Terms=Predictors_daily
+    Continuous=Covariates.daily
+    colnames(d)=tolower(colnames(d))
+    Terms=tolower(Terms)
+    Continuous=tolower(Continuous)
+    Factors=c(Terms[!Terms%in%Continuous],'zone')
+    Terms=c(all.vars(Best.Model.daily.single.model[[s]])[-1],'zone')
+    d <- d%>%
+      dplyr::select(c(catch.target,km.gillnet.hours.c,all_of(Terms)))%>%
+      mutate(cpue=catch.target/km.gillnet.hours.c)
+    d <- makecategorical(Factors[Factors%in%Terms],d)
+    
+    #1. Fit model
+    mod<-bam(Best.Model.daily.single.model[[s]],data=d,family='tw',method="fREML",discrete=TRUE) 
+    
+    #2.Predict year effect (considering log bias corr if required)
+    Preds=summary(emmeans(mod, 'znyr', type="response", rg.limit = 2e5,data=d))
+    Preds=Preds%>%
+      mutate(zone=sub("\\..*", "", znyr),
+             finyear=sub(".*\\.", "", znyr))
+    return(Preds)
     }
   names(Zone_preds.daily_single_model)=names(SP.list)[Tar.sp]
   
+  #Compare 2 approaches for spatial cpue
+  fn.plot.spatial.indices2=function(sp,Pred,Pred.spatial,Pred.spatial_single,
+                                    Pred.daily,Pred.spatial.daily,Pred.spatial.daily_single) 
+  {
+    #Monthly
+    d5=Pred[[match(sp, names(Pred))]]%>%
+      mutate(method='Single zone',
+             lower.CL=lower.CL/mean(response),
+             upper.CL=upper.CL/mean(response),
+             mean=response/mean(response),
+             year=as.numeric(substr(finyear,1,4)))%>%
+      dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
+      mutate(period='1.monthly')
+    
+    dd=Pred.spatial[[match(sp, names(Pred.spatial))]]
+    d7=list.map(dd,Preds)
+    for(x in 1:length(d7))
+    {
+      d7[[x]]=d7[[x]]%>%
+        mutate(method=names(d7)[x],
+               lower.CL=lower.CL/mean(response),
+               upper.CL=upper.CL/mean(response),
+               mean=response/mean(response),
+               year=-0.1+as.numeric(substr(finyear,1,4)))%>%
+        dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
+        mutate(period='1.monthly')
+    }
+    d7=do.call(rbind,d7)
+    
+    d8=Pred.spatial_single[[match(sp, names(Pred.spatial_single))]]%>%
+      mutate(method=paste0(zone,'_single modl'),
+             period='1.monthly',
+             year=0.1+as.numeric(substr(finyear,1,4)))%>%
+      group_by(method,period)%>%
+      mutate(Mn=mean(response))%>%
+      mutate(lower.CL=lower.CL/Mn,
+             upper.CL=upper.CL/Mn,
+             mean=response/Mn)%>%
+      dplyr::select(year,method,mean,lower.CL,upper.CL,period)
+    
+    
+    #Daily
+    d5.daily=Pred.daily[[match(sp, names(Pred.daily))]]%>%
+      mutate(method='Single zone',
+             lower.CL=lower.CL/mean(response),
+             upper.CL=upper.CL/mean(response),
+             mean=response/mean(response),
+             year=as.numeric(substr(finyear,1,4)))%>%
+      dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
+      mutate(period='2.daily')
+    
+    dd=Pred.spatial.daily[[match(sp, names(Pred.spatial.daily))]]
+    d7.daily=list.map(dd,Preds)
+    for(x in 1:length(d7.daily))
+    {
+      d7.daily[[x]]=d7.daily[[x]]%>%
+        mutate(method=names(d7.daily)[x],
+               lower.CL=lower.CL/mean(response),
+               upper.CL=upper.CL/mean(response),
+               mean=response/mean(response),
+               year=-0.1+as.numeric(substr(finyear,1,4)))%>%
+        dplyr::select(year,method,mean,lower.CL,upper.CL)%>%
+        mutate(period='2.daily')
+    }
+    d7.daily=do.call(rbind,d7.daily)
+    
+    d8.daily=Pred.spatial.daily_single[[match(sp, names(Pred.spatial.daily_single))]]%>%
+      mutate(method=paste0(zone,'_single modl'),
+             period='2.daily',
+             year=0.1+as.numeric(substr(finyear,1,4)))%>%
+      group_by(method,period)%>%
+      mutate(Mn=mean(response))%>%
+      mutate(lower.CL=lower.CL/Mn,
+             upper.CL=upper.CL/Mn,
+             mean=response/Mn)%>%
+      dplyr::select(year,method,mean,lower.CL,upper.CL,period)
+    
+    
+    #plots
+    LVLS=c("Single zone",
+           "West","West_single modl","Zone1","Zone1_single modl","Zone2",
+           "Zone2_single modl")
+    Kls=c('grey50','chartreuse3','forestgreen','firebrick4','brown1','cyan3','blue4')
+    names(Kls)=LVLS  
+    p1=rbind(d5,d7,d8)%>%
+      mutate(method=factor(method,levels=LVLS))%>%
+      ggplot(aes(year,mean,color=method))+
+      geom_line(alpha=0.35,linetype='dashed')+
+      geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2,alpha=0.35)+
+      geom_point(size=2.5)+ylim(0,NA)+
+      ggtitle('Monthly')+theme_PA()+ylab('')+xlab('')+
+      theme(legend.position = 'top',legend.title = element_blank())+
+      scale_color_manual(values=Kls)
+    
+    p2=rbind(d5.daily,d7.daily,d8.daily)%>%
+      mutate(method=factor(method,levels=LVLS))%>%
+      ggplot(aes(year,mean,color=method))+
+      geom_line(alpha=0.35,linetype='dashed')+
+      geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2,alpha=0.35)+
+      geom_point(size=2.5)+ylim(0,NA)+
+      ggtitle('Daily')+theme_PA()+ylab('')+xlab('')+
+      theme(legend.position = 'top',legend.title = element_blank())+
+      scale_color_manual(values=Kls)
+    
+    p=ggarrange(p1,p2,ncol=1,common.legend = T)
+    annotate_figure(p,
+                    left = textGrob("Relative CPUE (+/- 95% CI)", rot = 90, vjust = 1, gp = gpar(cex = 1.3)),
+                    bottom = textGrob("Financial year", gp = gpar(cex = 1.3)))
+    return(p)
+    
+  }
+  for(d in 1:length(Zone_preds.monthly))
+  {
+    NM=names(Zone_preds.monthly)[d]
+    fn.plot.spatial.indices2(sp=NM,
+                             Pred=Pred,
+                             Pred.spatial=Zone_preds.monthly,
+                             Pred.spatial_single=Zone_preds.monthly_single_model,
+                             Pred.daily=Pred.daily,
+                             Pred.spatial.daily=Zone_preds.daily,
+                             Pred.spatial.daily_single=Zone_preds.daily_single_model)
+    ggsave(handl_OneDrive(paste('Analyses/Catch and effort/Outputs/Compare all index types/',
+                                NM,'_Spatial_two approaches.jpeg',sep='')),width=10,height= 10)
+  }
   
-  #Zone_preds.monthly Zone_preds.daily
 }
  

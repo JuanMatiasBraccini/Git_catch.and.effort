@@ -3286,38 +3286,59 @@ for(s in nnn)
     Unstandardised.daily[[s]]=subset(Unstandardised.daily[[s]],finyear%in%
                                        Unstandardised.daily.creep[[s]]$finyear)
   }
+  if(!is.null(Effective_daily[[s]]))
+  {
+    Effective_daily[[s]]=subset(Effective_daily[[s]],finyear%in%
+                                  Effective.daily.creep[[s]]$finyear)
+  }
 }
 
 #-- Calculate relative cpue with efficiency creep  ----------------------------------------------     
-Pred.normlzd=Pred.creep
-Pred.daily.normlzd=Pred.daily.creep
-Unstandardised.normlzd=Unstandardised.creep
-Unstandardised.daily.normlzd=Unstandardised.daily.creep
-Effective.normlzd=Effective.creep
-Effective.daily.normlzd=Effective.daily.creep
+#note: first normalized, then apply creep
+Pred.normlzd=Pred
+Pred.daily.normlzd=Pred.daily
+Unstandardised.normlzd=Unstandardised
+Unstandardised.daily.normlzd=Unstandardised.daily
+Effective.normlzd=Effective
+Effective.daily.normlzd=Effective_daily
 for(s in nnn)
 {
   #monthly
   if(!is.null(Pred.normlzd[[s]]))
   {
+    add.crp=Eff.creep$effort.creep[match(Pred.creep[[s]]$finyear,Eff.creep$finyear)]
     Mn=mean(Pred.normlzd[[s]]$response)
-    Pred.normlzd[[s]]$response=Pred.normlzd[[s]]$response/Mn
-    Pred.normlzd[[s]]$lower.CL=Pred.normlzd[[s]]$lower.CL/Mn
-    Pred.normlzd[[s]]$upper.CL=Pred.normlzd[[s]]$upper.CL/Mn
+    Pred.normlzd[[s]]=Pred.normlzd[[s]]%>%
+                        mutate(response=response/Mn,
+                               lower.CL=lower.CL/Mn,
+                               upper.CL=upper.CL/Mn)%>%
+                        mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+                               upper.CL=upper.CL-(response-response*(1-add.crp)),
+                               response=response*(1-add.crp))
+
     
     Mn=mean(Unstandardised.normlzd[[s]]$response)
     Unstandardised.normlzd[[s]]=Unstandardised.normlzd[[s]]%>%
-      mutate(response=response/Mn,
-             lower.CL=lower.CL/Mn,
-             upper.CL=upper.CL/Mn)
+                                  filter(finyear%in%as.character(Pred.normlzd[[s]]$finyear))%>%
+                                  mutate(response=response/Mn,
+                                         lower.CL=lower.CL/Mn,
+                                         upper.CL=upper.CL/Mn)%>%
+                                  mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+                                         upper.CL=upper.CL-(response-response*(1-add.crp)),
+                                         response=response*(1-add.crp))
     
     if(!is.null(Effective.normlzd[[s]]))
     {
-      Mn=mean(Effective.normlzd[[s]]$response)
+      add.crp=Eff.creep$effort.creep[match(Effective.creep[[s]]$finyear,Eff.creep$finyear)]
+      Mn=mean(Effective.normlzd[[s]]$mean)
       Effective.normlzd[[s]]=Effective.normlzd[[s]]%>%
-        mutate(response=response/Mn,
-               lower.CL=lower.CL/Mn,
-               upper.CL=upper.CL/Mn)
+        filter(finyear%in%as.character(Pred.normlzd[[s]]$finyear))%>%
+        mutate(response=mean/Mn,
+               lower.CL=lowCL/Mn,
+               upper.CL=uppCL/Mn)%>%
+        mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+               upper.CL=upper.CL-(response-response*(1-add.crp)),
+               response=response*(1-add.crp))
     }
     
   }
@@ -3325,24 +3346,38 @@ for(s in nnn)
   #daily
   if(!is.null(Pred.daily.normlzd[[s]]))
   {
+    add.crp=Eff.creep$effort.creep[match(Pred.daily.creep[[s]]$finyear,Eff.creep$finyear)]
+    
     Mn=mean(Pred.daily.normlzd[[s]]$response)
-    Pred.daily.normlzd[[s]]$response=Pred.daily.normlzd[[s]]$response/Mn
-    Pred.daily.normlzd[[s]]$lower.CL=Pred.daily.normlzd[[s]]$lower.CL/Mn
-    Pred.daily.normlzd[[s]]$upper.CL=Pred.daily.normlzd[[s]]$upper.CL/Mn
+    Pred.daily.normlzd[[s]]=Pred.daily.normlzd[[s]]%>%
+                            mutate(response=response/Mn,
+                                   lower.CL=lower.CL/Mn,
+                                   upper.CL=upper.CL/Mn)%>%
+                            mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+                                   upper.CL=upper.CL-(response-response*(1-add.crp)),
+                                   response=response*(1-add.crp))
     
     Mn=mean(Unstandardised.daily.normlzd[[s]]$response)
     Unstandardised.daily.normlzd[[s]]=Unstandardised.daily.normlzd[[s]]%>%
-      mutate(response=response/Mn,
-             lower.CL=lower.CL/Mn,
-             upper.CL=upper.CL/Mn)
+                            mutate(response=response/Mn,
+                                   lower.CL=lower.CL/Mn,
+                                   upper.CL=upper.CL/Mn)%>%
+                            mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+                                   upper.CL=upper.CL-(response-response*(1-add.crp)),
+                                   response=response*(1-add.crp))
+    
     if(!is.null(Effective.daily.normlzd[[s]]))
     {
-      Mn=mean(Effective.daily.normlzd[[s]]$response)
-      
+      Mn=mean(Effective.daily.normlzd[[s]]$mean)
       Effective.daily.normlzd[[s]]=Effective.daily.normlzd[[s]]%>%
-        mutate(response=response/Mn,
-               lower.CL=lower.CL/Mn,
-               upper.CL=upper.CL/Mn)
+                                    filter(finyear%in%as.character(Pred.daily.normlzd[[s]]$finyear))%>%
+                                    mutate(response=mean/Mn,
+                                           lower.CL=lowCL/Mn,
+                                           upper.CL=uppCL/Mn)%>%
+                                    mutate(lower.CL=lower.CL-(response-response*(1-add.crp)),
+                                           upper.CL=upper.CL-(response-response*(1-add.crp)),
+                                           response=response*(1-add.crp))
+
     }
   }
 }
@@ -4704,5 +4739,77 @@ if(plot.cpue.paper.figures=="YES")
     
   }
 }
-
+Check.ves.yr.pred=FALSE
+if(Check.ves.yr.pred)  
+{
+  update_formula <- function(the_formula, var_name)
+  {
+    var_position <- grep(
+      paste(var_name,collapse = '|'), attr(terms(the_formula), "term.labels"))
+    drop.re=update(
+      the_formula,
+      drop.terms(terms(the_formula), var_position,
+                 keep.response=TRUE))
+    new.form=update(drop.re,~ . + vessel.year)
+    return(new.form)
+  }
+  
+  #Monthly 
+  Stand.out$`Gummy Shark`$res.gam
+  for(i in 1:Tar.sp)
+  {
+    NM=names(Stand.out)[i]
+    d=Stand.out[[i]]$DATA%>%mutate(vessel.year=interaction(vessel,finyear,drop=TRUE))
+    MOD=bam(update_formula(Best.Model[[i]],c('finyear','vessel')),
+            data=d,family='tw',method="fREML",discrete=TRUE)
+    a=summary(emmeans(MOD,
+                      specs = c("vessel.year"),
+                      type="response", rg.limit = 2e5,data=d))%>%
+      mutate(vessel=sub("\\..*", "", vessel.year),
+             finyear=sub(".*\\.", "", vessel.year))
+    N.leg.row=round(length(unique(a$vessel))/8)
+    a%>%
+      mutate(year=as.numeric(substr(finyear,1,4)))%>%
+      ggplot(aes(year,response,color=vessel))+
+      geom_line(alpha=0.35,linetype='dashed')+
+      geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2,alpha=0.35)+
+      geom_point(size=2.5)+
+      theme_PA()+ylab('')+xlab('')+ylim(0,quantile(a$upper.CL,.95))+
+      theme(legend.position = 'top',legend.title = element_blank())+
+      geom_line(data=Pred[[i]]%>%
+                  mutate(vessel='Mean',year=as.numeric(substr(finyear,1,4))),
+                aes(year,response,color=vessel),linewidth=2)+
+      guides(color=guide_legend(nrow=N.leg.row,byrow=TRUE))
+    ggsave(handl_OneDrive(paste('Analyses/Catch and effort/Outputs/Predicted year by vessel/',
+                                NM,'_monthly.jpeg',sep='')),width=10,height= 10)
+  }
+  #Daily
+  for(i in 1:Tar.sp)
+  {
+    NM=names(Stand.out.daily)[i]
+    d=Stand.out.daily[[i]]$DATA%>%mutate(vessel.year=interaction(vessel,finyear,drop=TRUE))
+    MOD=bam(update_formula(Best.Model.daily[[i]],c('finyear','vessel')),
+            data=d,family='tw',method="fREML",discrete=TRUE)
+    a=summary(emmeans(MOD,
+                      specs = c("vessel.year"),
+                      type="response", rg.limit = 2e5,data=d))%>%
+      mutate(vessel=sub("\\..*", "", vessel.year),
+             finyear=sub(".*\\.", "", vessel.year))
+    N.leg.row=round(length(unique(a$vessel))/8)
+    a%>%
+      mutate(year=as.numeric(substr(finyear,1,4)))%>%
+      ggplot(aes(year,response,color=vessel))+
+      geom_line(alpha=0.35,linetype='dashed')+
+      geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2,alpha=0.35)+
+      geom_point(size=2.5)+
+      theme_PA()+ylab('')+xlab('')+ylim(0,quantile(a$upper.CL,.95))+
+      theme(legend.position = 'top',legend.title = element_blank())+
+      geom_line(data=Pred.daily[[i]]%>%
+                  mutate(vessel='Mean',year=as.numeric(substr(finyear,1,4))),
+                aes(year,response,color=vessel),linewidth=2)+
+      guides(color=guide_legend(nrow=N.leg.row,byrow=TRUE))
+    ggsave(handl_OneDrive(paste('Analyses/Catch and effort/Outputs/Predicted year by vessel/',
+                                NM,'_daily.jpeg',sep='')),width=10,height= 10)
+  }
+}
 

@@ -154,9 +154,6 @@ Monthly_CLF_vessel=read.csv(handl_OneDrive("Data/Catch and Effort/Monthly_CLF_ve
 
 # PARAMETERS SECTION -----------------------------------------------------------------------
 
-#Control if monthly cpue is exported for stock assessments
-xport_monthly=FALSE # SQL server overwrite 'Reporter' column so now all records id as 'good reporters' for monthly records
-
 #1.1 Control what parts of script are activated
 
 #1.1.1 Data controls
@@ -3629,8 +3626,7 @@ if(Model.run=="First")
 #note: standard run takes ~ 7 secs per species
 if(do.spatial.cpiui) source(handl_OneDrive('Analyses/Catch and effort/Git_catch.and.effort/CPUE Construct standardised abundance index_spatial.R'))
 on.exit(stopCluster(cl))
-#ACA
-#ACA xport_monthly before exporting montly, compare current one in folder with new one
+
 # EXPORT INDICES -----------------------------------------------------------------------
 setwd(handl_OneDrive("Analyses/Data_outs"))
 Sel.vars=c("finyear","response","CV","lower.CL","upper.CL","SE")
@@ -3648,7 +3644,7 @@ for (s in Tar.sp)
 {
   a=subset(Pred[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly_no.creep.csv",sep=""),row.names=F) 
+  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly_no.creep.csv",sep=""),row.names=F) 
   
   a=subset(Pred.daily[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
@@ -3661,7 +3657,7 @@ for (s in Tar.sp)
 {
   a=subset(Pred.creep[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly.csv",sep=""),row.names=F) 
+  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly.csv",sep=""),row.names=F) 
   
   a=subset(Pred.daily.creep[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
@@ -3681,7 +3677,7 @@ if(do.spatial.cpiui)
       a=subset(Zone_preds.monthly[[s]][[z]]$Preds,select=Sel.vars)   
       names(a)=nams.Sel.vars
       ii=Tar.sp[s]
-      if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
+      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_no.creep.csv",sep=""),row.names=F) 
       
       a=subset(Zone_preds.daily[[s]][[z]]$Preds,select=Sel.vars)    
       names(a)=nams.Sel.vars
@@ -3701,7 +3697,7 @@ if(do.spatial.cpiui)
       a=subset(Zone_preds.monthly[[s]][[z]]$Preds.creep,select=Sel.vars)   
       names(a)=nams.Sel.vars
       ii=Tar.sp[s]
-      if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly",Zn[z],".csv",sep=""),row.names=F) 
+      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly",Zn[z],".csv",sep=""),row.names=F) 
       
       a=subset(Zone_preds.daily[[s]][[z]]$Preds.creep,select=Sel.vars)   
       names(a)=nams.Sel.vars
@@ -3712,24 +3708,23 @@ if(do.spatial.cpiui)
   }
 }
 
-#1.2.Relative scale   
+#1.2.Relative scale with creep  
 
-  #zones combined with efficiency creep
+  #zones combined 
 for (s in Tar.sp)
 {
   a=subset(Pred.normlzd[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
-  if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
+  write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
   
   a=subset(Pred.daily.normlzd[[s]],select=Sel.vars)   
   names(a)=nams.Sel.vars
   write.csv(a,paste(getwd(),'/',Nms.sp[s],'/',Nms.sp[s],".annual.abundance.basecase.daily_relative.csv",sep=""),row.names=F) 
   rm(a)
 }
-  #spatial
+  #by zones 
 if(do.spatial.cpiui)
 {
-  #4.22.12.6 by zones with efficiency creep
   for (s in 1:length(Tar.sp))
   {
     Zn=names(Zone_preds.monthly[[s]])
@@ -3738,7 +3733,7 @@ if(do.spatial.cpiui)
       a=subset(Zone_preds.monthly[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
       names(a)=nams.Sel.vars
       ii=Tar.sp[s]
-      if(xport_monthly) write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_relative.csv",sep=""),row.names=F) 
+      write.csv(a,paste(getwd(),'/',Nms.sp[ii],'/',Nms.sp[ii],".annual.abundance.basecase.monthly.",Zn[z],"_relative.csv",sep=""),row.names=F) 
       
       a=subset(Zone_preds.daily[[s]][[z]]$Preds.nrmlzd,select=Sel.vars)   
       names(a)=nams.Sel.vars
@@ -3763,7 +3758,7 @@ for (s in nnn[-sort(Tar.sp)])
   {
     a=subset(Pred.creep[[s]],select=Sel.vars.other)   
     names(a)=nams.Sel.vars
-    if(xport_monthly) write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.monthly.csv",sep=""),row.names=F) 
+    write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.monthly.csv",sep=""),row.names=F) 
   }
   
   if(!is.null(Pred.daily.creep[[s]]))
@@ -3774,7 +3769,7 @@ for (s in nnn[-sort(Tar.sp)])
   }
   rm(a,nmx)
 }
-  #2.2. Relative scale
+  #2.2. Relative scale with creep
 for (s in nnn[-sort(Tar.sp)])
 {
   nmx=Nms.sp[s]
@@ -3784,7 +3779,7 @@ for (s in nnn[-sort(Tar.sp)])
   {
     a=subset(Pred.normlzd[[s]],select=Sel.vars.other)   
     names(a)=nams.Sel.vars
-    if(xport_monthly) write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
+    write.csv(a,paste(getwd(),'/',nmx,'/',nmx,".annual.abundance.basecase.monthly_relative.csv",sep=""),row.names=F) 
   }
   
   if(!is.null(Pred.daily.normlzd[[s]]))
