@@ -4740,7 +4740,7 @@ if(plot.cpue.paper.figures=="YES")
   }
 }
 Check.ves.yr.pred=FALSE
-if(Check.ves.yr.pred)  
+if(Check.ves.yr.pred)  #takes 8 mins per species
 {
   update_formula <- function(the_formula, var_name)
   {
@@ -4755,8 +4755,7 @@ if(Check.ves.yr.pred)
   }
   
   #Monthly 
-  Stand.out$`Gummy Shark`$res.gam
-  for(i in 1:Tar.sp)
+  for(i in Tar.sp)
   {
     NM=names(Stand.out)[i]
     d=Stand.out[[i]]$DATA%>%mutate(vessel.year=interaction(vessel,finyear,drop=TRUE))
@@ -4784,7 +4783,7 @@ if(Check.ves.yr.pred)
                                 NM,'_monthly.jpeg',sep='')),width=10,height= 10)
   }
   #Daily
-  for(i in 1:Tar.sp)
+  for(i in Tar.sp)
   {
     NM=names(Stand.out.daily)[i]
     d=Stand.out.daily[[i]]$DATA%>%mutate(vessel.year=interaction(vessel,finyear,drop=TRUE))
