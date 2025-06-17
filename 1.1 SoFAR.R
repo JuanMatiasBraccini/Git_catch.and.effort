@@ -11,28 +11,26 @@ library(tidyr)
 library(dplyr)
 library(RColorBrewer)
 library(Hmisc)
+library(stringr)
 
 if(!exists('handl_OneDrive')) source('C:/Users/myb/OneDrive - Department of Primary Industries and Regional Development/Matias/Analyses/SOURCE_SCRIPTS/Git_other/handl_OneDrive.R')
 
 source(handl_OneDrive("Analyses/SOURCE_SCRIPTS/Git_other/SoFaR.figs.R"))
 
+# Must run:
+#       catch rate standardisation script (2.CPUE standardisations.R) before so it can bring in the index with the latest year
+#      'recons_recreational.csv' to bring in current year of reconstructed rec catch
+
 #note:  TDGDLF is defined as METHOD= "GN" or "LL" and non-estuaries and south of 26 S. 
-#       'Other fisheries' are extracted from 'Other.fishery.catch' (this includes 'Data.monthly'  
+#         'Other fisheries' are extracted from 'Other.fishery.catch' (this includes 'Data.monthly'  
 #         for which gear is not 'GN' or 'LL' and 'Daily logbooks' from other fisheries that report 
 #         sharks (Pilbara trawl, WCDF, mackerel, Kimberley barramundi, Shark Bay prawn, etc) 
-
 #       table 81.d for monthly records has no teleost catches 
-
-#       Must run catch rate standardisation script before so it can bring in the index with the latest year
-
 #     SOFAR effort is reported as km.gn.d. calculated with Use.Date to "YES" (as instructed by Rory). 
 #     If Use.Date = "NO" then 'ID' is used in the aggregation rather than 'date', then effort
-#      in recent years is larger due to the multiple shot per day practice of
-#     vessels from zone 2. Rory instructed this is biased. See '4.Script for testing effect of DATE or ID 
-#     in effort calculation'.  This is not an issue for km.gn.hr
-
-#     Before executing SOFAR script, run "2.CPUE standardisations.R" to construct latest standardised cpue
-
+#       in recent years is larger due to the multiple shot per day practice of
+#       vessels from zone 2. Rory instructed this is biased. See '4.Script for testing effect of DATE or ID 
+#       in effort calculation'.  This is not an issue for km.gn.hr
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240)
 
@@ -49,7 +47,7 @@ setwd(handl_OneDrive("Analyses/Data_outs"))
 
 Data.monthly=read.csv("Data.monthly.csv")
 Data.daily=read.csv("Data.daily.csv")
-Rec.fish.catch=read.csv('recons_recreational.csv')   #update
+Rec.fish.catch=read.csv('recons_recreational.csv')   
 Data.current.Sofar=read.csv("Data.current.Sofar.csv")
 PRICES=read.csv("PRICES.csv")
 Total.effort.days.monthly=read.csv("Annual.total.eff.days.csv")
@@ -115,8 +113,6 @@ Catch.range.key.species=data.frame(SPECIES=c("Gummy","Whiskery","Bronzy.Dusky","
                                    Max.catch=c(450,225,300,120))%>%
                         mutate(SPECIES=as.character(SPECIES))
 
-
-  
 handle.Sofar=paste(handl_OneDrive("Analyses/Catch and effort/State of fisheries/"),Current.yr,sep="")
 if(!file.exists(handle.Sofar))dir.create(handle.Sofar)
 
@@ -188,17 +184,13 @@ Rec.fi.Tot.catch=Rec.fish.catch%>%
     mutate(yr=as.numeric(substr(FINYEAR,1,4)),
            yr.min=abs(yr-as.numeric(substr(Current.yr,1,4))))%>%
     filter(yr.min==min(yr.min))%>%
-    mutate(SPECIES=paste("Recreational catch ","(",FINYEAR,")",sep=""),
+    mutate(SPECIES=paste("Reconstructed statewide recreational catch ","(",FINYEAR,")",sep=""),
            Percnt.Tot.Com= Catch.tons*100/MainFeatures$Catch.tons[which(MainFeatures$SPECIES=="Total sharks and rays")],
-           Catch.tons=ifelse(Percnt.Tot.Com<5,"< 5% of commercial catch",
-                       ifelse(Percnt.Tot.Com>=5 &Percnt.Tot.Com<10,"< 10% of commercial catch",
-                       ifelse(Percnt.Tot.Com>=10 &Percnt.Tot.Com<20,"< 20% of commercial catch",
-                       Percnt.Tot.Com))))%>%
-      data.frame
+           Catch.tons=paste0(ceiling(Percnt.Tot.Com),'% of commercial catch'))%>%
+    data.frame
 REC.yr=Rec.fi.Tot.catch$FINYEAR
 Rec.fi.Tot.catch=Rec.fi.Tot.catch%>%
                   dplyr::select(SPECIES,Catch.tons)
-
 
 Ktch.indic=subset(MainFeatures,SPECIES=="Total indicators",select=Catch.tons)$Catch.tons
 
@@ -209,13 +201,13 @@ MainFeatures=rbind(MainFeatures,Rec.fi.Tot.catch)
 #number of licenses operating in current year
 dummy=subset(Data.current.Sofar,finyear==Current.yr,select=c(finyear,month,blockx,vessel,crew,MastersName))
 dummy$blockx=with(dummy,ifelse(blockx%in%c(96021),25120,     #Shark Bay
-                               ifelse(blockx%in%c(96022,96023),26131,
-                                      ifelse(blockx%in%c(97011),27132,                        #Abrolhos
-                                             ifelse(blockx%in%c(97012,97013),28132,       
-                                                    ifelse(blockx%in%c(97014,97015),29132,
-                                                           ifelse(blockx%in%c(96010),33151,                        #Geographe Bay
-                                                                  ifelse(blockx%in%c(96000),32150,                        #Cockburn sound
-                                                                         ifelse(blockx%in%c(96030),35181,blockx)))))))))         # King George sound
+                        ifelse(blockx%in%c(96022,96023),26131,
+                        ifelse(blockx%in%c(97011),27132,                        #Abrolhos
+                        ifelse(blockx%in%c(97012,97013),28132,       
+                        ifelse(blockx%in%c(97014,97015),29132,
+                        ifelse(blockx%in%c(96010),33151,                        #Geographe Bay
+                        ifelse(blockx%in%c(96000),32150,                        #Cockburn sound
+                        ifelse(blockx%in%c(96030),35181,blockx)))))))))         # King George sound
 DAT$FINYEAR=as.character(DAT$FINYEAR)
 DAT$VESSEL=as.character(DAT$VESSEL)
 dummy$finyear=as.character(dummy$finyear)
@@ -577,7 +569,7 @@ OrdeR=c(paste("Current Landings (",FIN.yr.slash,")",sep=""),
         "Demersal Gillnet and Demersal Longline Fishery","Total sharks and rays",
         "Total scalefish","Indicator species","Gummy","Bronzy.Dusky",                                        
         "sandbar","Whiskery","Sharks and rays by other commercial fisheries",
-        paste("Recreational catch ","(",REC.yr,")",sep=""))
+        paste("Reconstructed statewide recreational catch ","(",REC.yr,")",sep=""))
 MainFeatures.doc=MainFeatures.doc[match(OrdeR,MainFeatures.doc$SPECIES),]
 MAIN.F.sp=c("Gummy shark","Dusky shark","Sandbar shark","Whiskery shark")
 MainFeatures.doc$SPECIES[match(c("Gummy","Bronzy.Dusky","sandbar","Whiskery"),
@@ -621,9 +613,7 @@ Ktch_comm_accept=Tot.wt%>%mutate(SPECIES=ifelse(SPECIES=="sandbar","Sandbar",SPE
                           left_join(Catch.range.key.species,by="SPECIES")%>%
                           mutate(Acceptable=ifelse(Catch.tons>=Min.catch*.9 & Catch.tons<=Max.catch*1.1,"Acceptable",
                                                    "Unacceptable"))
- 
 write.csv(Ktch_comm_accept,"Ktch_comm_accept.csv",row.names=F)
-
 
 
 #Export tables as .csv
@@ -678,7 +668,8 @@ BG=c("black","black","white")
 fn.figs2.3.SoFaR=function(GROUP,LAT1,LAT2,INT,INT2)
 {
     dat=subset(Data.monthly,SPECIES%in%GROUP & LAT<=LAT1 & LAT >=LAT2 & METHOD%in%c("GN","LL") &
-                 Estuary=="NO")
+                 Estuary=="NO")%>%
+      filter(!Shark.fishery=='non.shark.fishery')
     
     #Split boundary zone1-zone2 catch
     annual.catch.by.zone=aggregate(LIVEWT.c~FINYEAR+zone+BLOCKX,data=dat,sum,na.rm=T)
@@ -695,7 +686,8 @@ fn.figs2.3.SoFaR=function(GROUP,LAT1,LAT2,INT,INT2)
     names(wide)[match("FINYEAR",names(wide))]="finyear"
     names(annual.catch.total)[match("FINYEAR",names(annual.catch.total))]="finyear"
     
-    fun.fig.SoFar(annual.catch.total,wide,1000,"Catch (tonnes live wt.)","Financial year",INT,INT2)
+    fun.fig.SoFar(DAT=annual.catch.total,DAT1=wide,scaler=1000,
+                  TITLE1="Catch (tonnes live wt.)",TITLE2="Financial year",INT,INT2)
   }
 
 
@@ -709,7 +701,7 @@ DO="YES"
 
 jpeg(file="Figure 2.TotalElasmoCatch.jpeg",width = 2400, height = 2400,units = "px", res = 300)
 PaR()
-fn.figs2.3.SoFaR(Elasmo.species,TDGDLF.lat.range[1],TDGDLF.lat.range[2],100,500)
+fn.figs2.3.SoFaR(GROUP=Elasmo.species,LAT1=TDGDLF.lat.range[1],LAT2=TDGDLF.lat.range[2],INT=100,INT2=500)
 LEG()
 dev.off()
 
@@ -723,7 +715,8 @@ fn.figs2.3.SoFaR.scalies=function(GROUP,LAT1,LAT2,INT,INT2)
   a=2011:(Yr.current-1);b=2012:Yr.current
   Curr.yr=paste(a,"-",substr(b,3,4),sep="")
   DAT=subset(Data.monthly,FINYEAR%in%Curr.yr & METHOD%in%c("GN","LL") & Estuary=="NO" &
-               LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])
+               LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])%>%
+    filter(!Shark.fishery=="non.shark.fishery")
   
   dat=subset(DAT,SPECIES%in%GROUP & LAT<=LAT1 & LAT >=LAT2)
   
@@ -1023,6 +1016,7 @@ if(do.ERA)
   era.yrs=paste(era.yrs,substr(era.yrs1,3,4),sep='-')
   ERA=subset(Data.monthly,METHOD%in%c("GN","LL") & Estuary=="NO" &
                LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])%>%
+    filter(!Shark.fishery=="non.shark.fishery")%>%
     filter(FINYEAR%in%era.yrs)%>%
     dplyr::select(FINYEAR,SPECIES,LIVEWT.c)%>%
     group_by(FINYEAR,SPECIES)%>%
@@ -1045,10 +1039,7 @@ if(do.ERA)
            COMMON_NAME=ifelse(COMMON_NAME=="Skates and rays, other","Other skates and rays",COMMON_NAME))%>%
     filter(Average.catch>0)
   
-}
-
-if(do.ERA)
-{
+  
   #1. Catch
   #Table of retained species
   write.csv(ERA,"ERA_table.retained.species.csv",row.names=F)
@@ -1070,12 +1061,13 @@ if(do.ERA)
   Data.monthly%>%
     filter(METHOD%in%c("GN","LL") & Estuary=="NO" & SPECIES%in%ERA.main.SP$SPECIES  &
              LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])%>%
+    filter(!Shark.fishery=="non.shark.fishery")%>%
     left_join(ERA.main.SP,by='SPECIES')%>%
     group_by(FINYEAR,Names)%>%
     summarise(Catch.tons=sum(LIVEWT.c)/1000)%>%
     mutate(Yr=as.numeric(substr(FINYEAR,1,4)))%>%
     ggplot(aes(Yr,Catch.tons))+
-    geom_line(aes(colour=Names),size=1.5)+
+    geom_line(aes(colour=Names),linewidth=1.5)+
     ylab("Catch (tonnes live wt.)")+
     xlab("Financial year")+
     theme(axis.text= element_text( size = 14),
@@ -1100,7 +1092,7 @@ if(do.ERA)
   rbind(d,LL.equiv.Eff.days.total)%>%
     mutate(Year=as.numeric(substr(FINYEAR,1,4)))%>%
     ggplot(aes(Year,Total))+
-    geom_line(aes(colour=Data),size=3)+
+    geom_line(aes(colour=Data),linewidth=3)+
     ylab("Effort (1000 km gn d)")+
     xlab("Finacial year")+
     theme(axis.text= element_text( size = 14),
@@ -1160,7 +1152,7 @@ if(do.ERA)
     mutate(thousand.hook.days=ifelse(is.na(thousand.hook.days),0,thousand.hook.days))%>%
     ggplot(aes(x=Yr))+
     geom_line(aes(y=Total), size=3, color="#F8766D")+
-    geom_line(aes(y=thousand.hook.days/coeff),size=3,col="#00BFC4")+
+    geom_line(aes(y=thousand.hook.days/coeff),linewidth=3,col="#00BFC4")+
     scale_y_continuous(name = "Gillnet effort (1000 km gn d)",
                        sec.axis = sec_axis(~.*coeff, name="Longline effort (1000 hook d)"))+
     xlab("Finacial year")+
@@ -1201,7 +1193,8 @@ if(do.AMM)
                                     nn,frms,n.frms,do.animation,speed)
     {
       dat=subset(Data.monthly,SPECIES%in%GROUP & LAT<=LAT1 & LAT >=LAT2 & METHOD%in%c("GN","LL") &
-                   Estuary=="NO")
+                   Estuary=="NO")%>%
+        filter(!Shark.fishery=="non.shark.fishery")
       
       #aggregate by total
       annual.catch.total=aggregate(LIVEWT.c~FINYEAR,data=dat,sum,na.rm=T)%>%
@@ -1405,8 +1398,8 @@ if(do.AMM)
   #3. Summary landed weight
   Summary.landwt=DAT%>%
         mutate(Taxa=case_when(
-          SPECIES%in%Elasmo.species ~ "Elasmo",
-          SPECIES%in%Scalefish.species ~ "Scalefish"))%>%
+                      SPECIES%in%Elasmo.species ~ "Elasmo",
+                      SPECIES%in%Scalefish.species ~ "Scalefish"))%>%
         group_by(Taxa)%>%
         summarise(Catch.tons=round(sum(LANDWT)/1000,0))
   fun.Tab1.SoFaR.LANDWT=function(SP,id,Tab.livewt,Add)
