@@ -6266,6 +6266,13 @@ All.species=All.species[!duplicated(All.species$dummy),]
 All.species=All.species[order(All.species$SPECIES),1:2]
 
 
+#Reset to bad Chris black returns for November 2024 (did not report numbers by shots)
+Data.monthly=Data.monthly%>%
+  mutate(Reporter=case_when(MONTH==11 & YEAR==2024 & VESSEL=="E 009"~'bad',
+                            TRUE~Reporter))
+Data.daily=Data.daily%>%
+  mutate(Reporter=case_when(MONTH==11 & YEAR==2024 & VESSEL=="E 009"~'bad',
+                            TRUE~Reporter))
 
 #C.13. Proportion of bad catch reporters
   #monthly
