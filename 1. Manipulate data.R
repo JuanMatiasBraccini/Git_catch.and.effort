@@ -109,7 +109,9 @@ library(rgdal)
 library(purrr)
 library(janitor)
 library(rnaturalearth)
-library(ggpubr)  
+library(ggpubr) 
+library(sf)
+library(mapview)
 
 options(stringsAsFactors = FALSE,"max.print"=50000,"width"=240,dplyr.summarise.inform = FALSE) 
 par.default=par()
@@ -129,7 +131,7 @@ setwd(handl_OneDrive("Data/Catch and Effort"))  # working directory
 First.run="NO"    
 #First.run="YES"
 
-Current.yr="2023-24"    #Set current financial year 
+Current.yr="2024-25"    #Set current financial year 
 Current.yr.dat=paste(substr(Current.yr,1,4),substr(Current.yr,6,7),sep="_")
 xx=paste(getwd(),Current.yr.dat,sep="/")
 if(!file.exists(xx)) dir.create(xx) 
@@ -709,8 +711,8 @@ if(do.sql.extraction)
   }
   #add other' to 'main databases
   Data.monthly_other$Reporter=NA
-  Data.daily=rbind(Data.daily,Data.daily_other[,match(names(Data.daily),names(Data.daily_other))]) 
-  Data.monthly=rbind(Data.monthly,Data.monthly_other[,match(names(Data.monthly),names(Data.monthly_other))])
+  if(nrow(Data.daily_other)>0)Data.daily=rbind(Data.daily,Data.daily_other[,match(names(Data.daily),names(Data.daily_other))]) 
+  if(nrow(Data.monthly_other)>0)Data.monthly=rbind(Data.monthly,Data.monthly_other[,match(names(Data.monthly),names(Data.monthly_other))])
   
   rm(Data.monthly_other,Data.daily_other)
 }
@@ -1350,7 +1352,7 @@ if(!do.sql.extraction)
     filter(!species==22998)    #remove fins as already part of 'shark other'
 }
 
-#b. now remove fins and livers 
+  #b. now remove fins and livers 
 Data.monthly=subset(Data.monthly,!(SPECIES%in%c(22997,22998)))
 if(nrow(A)>0) Data.monthly=subset(Data.monthly,KEEP=="KEEP")
 Data.monthly$CONDITN=with(Data.monthly,
@@ -1358,7 +1360,62 @@ Data.monthly$CONDITN=with(Data.monthly,
 if(nrow(A)>0) Data.monthly=Data.monthly[,-match("KEEP",names(Data.monthly))]
 if(!use.new.server & length(only.liver.fin)>0) rm(A,add.only.liver.fin,only.liver.fin)
 
-# A.4.3. Create copy of original file
+
+# A.4.3. Inspect new year of monthly data
+world <- ne_countries(scale = "medium", returnclass = "sf")
+if(First.run=='YES')
+{
+  new.year=Data.monthly%>%
+    filter(FINYEAR==Current.yr)%>%
+    mutate(lat=-abs(lat))
+  
+  #check fishery and species
+  table(new.year$fishery,new.year$SNAME,useNA = 'ifany')
+  
+  #check weight (though don't have numbers so cannot validate averag weight)
+  new.year%>%
+    group_by(SNAME,METHOD,MONTH)%>%
+    summarise(LIVEWT=sum(LIVEWT))%>%
+    spread(SNAME,LIVEWT,fill=0)
+  
+  #check spatial distribution
+  points_df=new.year%>%
+    group_by(long,lat,fishery,BLOCKX)%>%
+    summarise(LIVEWT=sum(LIVEWT))%>%
+    ungroup()%>%
+    rename(longitude=long,
+           latitude=lat,
+           cex.size=LIVEWT)%>%
+    filter(!is.na(longitude))
+  
+  Limx=range(new.year$long,na.rm=T); Limy=range(new.year$lat,na.rm=T)
+  p=ggplot(data = world) +
+    geom_sf(color = "black", fill = "darkorange4",alpha=.3) +
+    coord_sf(xlim =Limx , ylim = Limy, expand = T) +
+    xlab("") + ylab("")+
+    geom_point(data=points_df,aes(longitude,latitude,color=BLOCKX,size=cex.size))
+  p
+  
+  
+  lon_min <- min(points_df$longitude)-2
+  lon_max <- max(points_df$longitude)+2
+  lat_min <- min(points_df$latitude)-2
+  lat_max <- max(points_df$latitude)+2
+  bbox_sf <- st_bbox(c(xmin = lon_min, ymin = lat_min, xmax = lon_max, ymax = lat_max), crs = 4326) %>%
+    st_as_sfc()
+  
+  points_sf <- st_as_sf(points_df, coords = c("longitude", "latitude"), crs = 4326) # Convert to sf object
+  
+  mapview(points_sf, cex = "cex.size",alpha.regions = 1,color='white',alpha=1 ,
+          layer.name = "") #map.types = "Esri.WorldImagery"
+  #mapview(bbox_sf, hide = TRUE) + mapview(points_sf, cex = "cex.size",alpha.regions = 1,color='white',alpha=1)
+  
+  
+  
+}
+
+
+# A.4.4. Create copy of original file
 Data.monthly.original=Data.monthly
 if(!'lat'%in%colnames(Data.monthly.original)) Data.monthly.original=Data.monthly.original%>%mutate(lat=NA,long=NA)
 Data.monthly.original=Data.monthly.original%>%
@@ -1575,7 +1632,6 @@ Data.monthly$zone=as.character(with(Data.monthly,
                          NA))))))))
 
 #Check spatial blocks and catch assigned to right zone
-world <- ne_countries(scale = "medium", returnclass = "sf")
 fn.ck.spatial=function(d,BLK.data,Depth.data,BLK.size,add.yr=FALSE,pt.size=3,pt.alpha=1)
 {
   Limx=range(d$ln,na.rm=T); Limy=range(d$la,na.rm=T)
@@ -2583,7 +2639,7 @@ if(Inspect.New.dat=="YES")
                 pt.alpha=0.35)
   ggsave(paste(handle,"Map_blocks_daily.tiff",sep='/'),width = 14,height = 10,compression = "lzw")
   
-  ODD.blocks=c(33260,35190) #update after visual inspection of map 
+  ODD.blocks=c(34220,33250) #update after visual inspection of map 
   out.catch.block=Current.data%>%
     filter(fishery%in%c('JASDGDL','WCDGDL'))%>%
     rename(date=SessionStartDate,
@@ -2598,15 +2654,30 @@ if(Inspect.New.dat=="YES")
     dplyr::select(fishery,BoatName,vessel,date,SNo,DSNo,TSNo,blockx,Lat,Long)
   if(nrow(out.catch.block)>0)
   {
-    write.csv(out.catch.block,file=paste(handle,"/Check.catch outside normal fishing grounds.csv",sep=""),row.names=F)
+    Plus=1.01
+    Mins=0.99
+    out.catch.block%>%
+      mutate(LBL=paste(vessel,date))%>%
+      ggplot(aes(Long,Lat))+
+      geom_point()+
+      geom_text(aes(label=LBL),hjust = 0, nudge_x = 0.1)+
+      ylim(min(out.catch.block$Lat)*Plus,max(out.catch.block$Lat)*Mins)+
+      xlim(min(out.catch.block$Long)*Mins,max(out.catch.block$Long)*Plus)
+    
+    #manually chose the dodgy shots
+    write.csv(out.catch.block%>%
+                mutate(LBL=paste(vessel,date))%>%
+                filter(LBL%in%c("E 030 2024-08-10","E 045 2024-11-13")),
+              file=paste(handle,"/Check.catch outside normal fishing grounds.csv",sep=""),row.names=F)
     send.email(TO=Email.data.checks,
                CC=Email.data.checks2,
                BCC=Email.FishCube,
-               Subject=paste("Shark validation",Sys.time(),'NA_nfish.weight.csv',sep=' _ '),
+               Subject=paste("Shark validation",Sys.time(),'Check.catch outside normal fishing grounds.csv',sep=' _ '),
                Body= "Hi,
               I have started the data validation process for the new year data stream.
               I will be sending a series of emails with queries.
-              In the attached, I extracted records where fishing occurs outside normal fishing grounds
+              In the attached, I extracted records where fishing occurs outside normal fishing grounds.
+              Can you check that lats and longs were entered correctly?
               Cheers
               Matias",  
                Attachment=paste(handle,"/Check.catch outside normal fishing grounds.csv",sep="")) 
@@ -2630,7 +2701,7 @@ if(Inspect.New.dat=="YES")
     send.email(TO=Email.data.checks,
                CC=Email.data.checks2,
                BCC=Email.FishCube,
-               Subject=paste("Shark validation",Sys.time(),'NA_nfish.weight.csv',sep=' _ '),
+               Subject=paste("Shark validation",Sys.time(),'Check.NA zone.csv',sep=' _ '),
                Body= "Hi,
               I have started the data validation process for the new year data stream.
               I will be sending a series of emails with queries
@@ -2663,7 +2734,7 @@ if(Inspect.New.dat=="YES")
     send.email(TO=Email.data.checks,
                CC=Email.data.checks2,
                BCC=Email.FishCube,
-               Subject=paste("Shark validation",Sys.time(),'NA_nfish.weight.csv',sep=' _ '),
+               Subject=paste("Shark validation",Sys.time(),'Check.wrong zone.csv',sep=' _ '),
                Body= "Hi,
               I have started the data validation process for the new year data stream.
               I will be sending a series of emails with queries
@@ -2701,7 +2772,7 @@ if(Inspect.New.dat=="YES")
   #NAs=subset(Current.data,is.na(livewt))
   #NA.table=table(as.character(NAs$sname1),useNA='ifany')
   
-  
+  #ACA
   #2. Identify zero catch shots (i.e. NA species and NA weight)
   table(Current.data$NilCatch)  
   NA.shots=subset(Current.data,is.na(as.character(sname1)))
@@ -2742,23 +2813,24 @@ if(Inspect.New.dat=="YES")
         mutate(dummy=paste(DailySheetNumber,TripSheetNumber,RSSpeciesCommonName))%>%
         filter(!dummy%in%paste(NA.livewt$DailySheetNumber,NA.livewt$TripSheetNumber,NA.livewt$RSSpeciesCommonName))%>%
         dplyr::select(-dummy)
-    }
-    if(nrow(check.nfish.weight)>0)
-    {
-      write.csv(check.nfish.weight%>%mutate(livewt=ifelse(is.na(livewt),'',livewt)),
-                file=paste(handle,"/Check.no_live.weight.csv",sep=""),row.names=F)
-      send.email(TO=Email.data.checks,
-                 CC=Email.data.checks2,
-                 BCC=Email.FishCube,
-                 Subject=paste("Shark validation",Sys.time(),'no_live.weight.csv',sep=' _ '),
-                 Body= "Hi,
+      
+      if(nrow(check.nfish.weight)>0)
+      {
+        write.csv(check.nfish.weight%>%mutate(livewt=ifelse(is.na(livewt),'',livewt)),
+                  file=paste(handle,"/Check.no_live.weight.csv",sep=""),row.names=F)
+        send.email(TO=Email.data.checks,
+                   CC=Email.data.checks2,
+                   BCC=Email.FishCube,
+                   Subject=paste("Shark validation",Sys.time(),'no_live.weight.csv',sep=' _ '),
+                   Body= "Hi,
               In the attached, I extracted records where ‘landwt’ and/or ‘livewt’ is NA or 0 but there are 
               values for ‘nfish’.
               Is this a typo or there’s a legit reason for not having a ‘livewt’ value?
               Cheers
               Matias",  
-                 Attachment=paste(handle,"/Check.no_live.weight.csv",sep=""))
-      
+                   Attachment=paste(handle,"/Check.no_live.weight.csv",sep=""))
+        
+      }
     }
   }
 
@@ -2883,7 +2955,7 @@ if(Inspect.New.dat=="YES")
   library(sp)
   Current.data$Lat=-abs(as.numeric(as.character(Current.data$Lat)))
   Current.data$Long=as.numeric(as.character(Current.data$Long))
-  Dist.range=list('17001'=list(c(113,-29),c(129,-36)),  #Gummy Shark
+  Dist.range=list('17001'=list(c(113,-29),c(129,-36)),  #Gummy Shark  North first, South second
                   '17003'=list(c(113,-21),c(129,-36)),  #Whiskery Shark
                   '18001'=list(c(113,-29),c(129,-36)),  #Bronze Whaler
                   '18003'=list(c(113,-15),c(129,-36)),  #Dusky Whaler
@@ -2898,7 +2970,9 @@ if(Inspect.New.dat=="YES")
                   '12000'=list(c(113,-10),c(129,-36)),  #"Thresher Shark"
                   '18022' =list(c(113,-14),c(129,-36)),   #"Tiger Shark"
                   '24900' =list(c(113,-29),c(129,-36)),   #"Angel Shark"
-                  '13000' =list(c(113,-26),c(129,-36)),   #"Wobbegong"
+                  '13000' =list(c(113,-26),c(129,-36)),   #"Wobbeggong"
+                  '18014' =list(c(113,-10),c(129,-21.5)),   #"Blacktip Shark"
+                  '15026' =list(c(113,-32),c(129,-36)),   #"Western Spotted Catshark"
                   '19001' =list(c(113,-10),c(118,-35)),   #"Scalloped Hammerhead"
                   '19002' =list(c(113,-10),c(115,-30)),   #"Great Hammerhead"
                   '19004' =list(c(113,-20),c(129,-36))   #"Smooth Hammerhead"
@@ -2925,7 +2999,10 @@ if(Inspect.New.dat=="YES")
     s=subset(Current.data,species==as.numeric(names(Dist.range)[i]))
     if(nrow(s)>0)
     {
-      NM=unique(s$RSSpeciesCommonName)
+      NM=paste(unique(s$RSSpeciesCommonName),
+               paste('RSSpeciesCode',unique(s$RSSpeciesCode),sep='='),
+               paste('species',unique(s$species),sep='=')
+               ,sep='; ')
       plot(s$Long,s$Lat,main=NM,ylim=c(-36,-10),xlim=c(113,129),ylab="",xlab="")
       pol=Dist.range[[i]]
       polygon(x=c(pol[[1]][1],pol[[2]][1],pol[[2]][1],pol[[1]][1]),
@@ -2952,7 +3029,7 @@ if(Inspect.New.dat=="YES")
                BCC=Email.FishCube,
                Subject=paste("Shark validation",Sys.time(),'lat.and.long.typo.csv',sep=' _ '),
                Body= "For the attached file, could you please check the latitude and longitude of the shot?
-                      Currently they fall outside the species distribution. 
+                      Currently they fall outside the species distribution. Alternatively, the species is wrong. 
                     Cheers
                     Matias",
                Attachment=paste(handle,"/Check.lat.and.long.csv",sep=""))
