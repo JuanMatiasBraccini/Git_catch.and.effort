@@ -2772,7 +2772,6 @@ if(Inspect.New.dat=="YES")
   #NAs=subset(Current.data,is.na(livewt))
   #NA.table=table(as.character(NAs$sname1),useNA='ifany')
   
-  #ACA
   #2. Identify zero catch shots (i.e. NA species and NA weight)
   table(Current.data$NilCatch)  
   NA.shots=subset(Current.data,is.na(as.character(sname1)))
@@ -7356,11 +7355,16 @@ Effort.monthly$Eff.Reporter=with(Effort.monthly,ifelse(!(SHOTS==SHOTS.c),"bad",E
 Effort.daily$Eff.Reporter=with(Effort.daily,ifelse(!(shots==shots.c),"bad",Eff.Reporter))
 
 
-#Correct nlines        
-Effort.daily$nlines.c=Effort.daily$nlines
-Effort.daily$nlines.c=with(Effort.daily,ifelse(vessel=="F 417" & nlines.c==11 & 
-                   Same.return.SNo=="3 TDGLF8001838 TDGLF8001838",1,
-                   ifelse(vessel=="E 059" & nlines.c>3,NA,nlines.c)))
+#Correct nlines
+Effort.daily=Effort.daily%>%
+  mutate(nlines.c=nlines,
+         nlines.c=case_when(vessel=="F 417" & nlines.c==11 &  Same.return.SNo=="3 TDGLF8001838 TDGLF8001838"~1,
+                            vessel=="E 059" & nlines.c>3~NA,
+                            vessel=="E 009" & nlines.c>1~1, #Chris Black reported the number of bales not of lines, the bales were set as 1 single line
+                            nlines.c>6~NA,
+                            TRUE~nlines.c))
+
+
 
 #Add Rory's manual changes to netlen and nlines for Alex
 #note: Rory manually identified records with discrepancies in the netlen and nlines combinations and

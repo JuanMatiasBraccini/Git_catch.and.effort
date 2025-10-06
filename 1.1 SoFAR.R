@@ -66,7 +66,7 @@ All.species.names=read.csv(handl_OneDrive("Data/Species.code.csv"))
 Shark.species=5001:24999
 Ray.species=c(25000:31000,38000,39001,90030)
 Elasmo.species=c(Shark.species,Ray.species)
-Gummy=17001;Dusky_whaler=c(18003,18001);Whiskery=17003;Sandbar=18007;Hammerheads=19000;
+Gummy=17001;Dusky_whaler=c(18003,18001);Whiskery=17003;Sandbar=18007;Hammerheads=c(19000:19004);
 Spinner=18023;Wobbegongs=13000;Common_saw_shark=23002;School=17008
 Order.Elas.Sp.SoFAR=data.frame(Species=c("Gummy","Dusky_whaler","Whiskery","Sandbar","Hammerheads",
                                          "Spinner","Wobbegongs","Rays","Common_saw_shark","School","Other_elasmobranchs",
@@ -122,7 +122,8 @@ Ind.spe.list=list(Gummy=17001,Whiskery=17003,Bronzy.Dusky=c(18001,18003),sandbar
 
 #Create current year data set for TDGDLF
 DAT=subset(Data.monthly,FINYEAR==Current.yr & METHOD%in%c("GN","LL") & Estuary=="NO" &
-             LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])
+             LAT<=TDGDLF.lat.range[1] & LAT >=TDGDLF.lat.range[2])%>%
+  mutate(LANDWT=ifelse(is.na(LANDWT),LIVEWT.c*0.63,LANDWT))
 
 #add small catch to WC (Gascoyne appears because of upper boundary set to 26S)
 DAT$Bioregion=with(DAT,ifelse(Bioregion=="Gascoyne","WC",Bioregion))  
@@ -351,7 +352,7 @@ fun.Tab1.SoFaR=function(SP)
   return(wide)
 }
 
-Table1.SoFar.Elasmos=fun.Tab1.SoFaR(Spec.tab.1.elasmo)
+Table1.SoFar.Elasmos=fun.Tab1.SoFaR(SP=Spec.tab.1.elasmo)
 ID.nm=match(c("West","South","West.dem","Zone1","Zone2","Total"),names(Table1.SoFar.Elasmos))
 Table1.SoFar.Elasmos[,ID.nm]= Table1.SoFar.Elasmos[,ID.nm]/1000    #convert to tonnes
 Table1.SoFar.Scalies=fun.Tab1.SoFaR(Spec.tab.1.scalies)
@@ -1177,6 +1178,9 @@ if(do.AMM)
     library(ggpubr)
     Management=read.csv(handl_OneDrive('Management/Sharks/Timeline management measures/Management_timeline.csv'))
     Management=Management%>%
+                filter(Use=='Yes')
+    
+    Management=Management%>%
       mutate(date=as.POSIXct(StartDate,format="%d/%m/%Y"),
              finyear=decimal_date(date))
     Management.north=Management%>%
@@ -1395,13 +1399,13 @@ if(do.AMM)
   }
    
   
-  #3. Summary landed weight
+  #3. Summary landed weight 
   Summary.landwt=DAT%>%
         mutate(Taxa=case_when(
                       SPECIES%in%Elasmo.species ~ "Elasmo",
                       SPECIES%in%Scalefish.species ~ "Scalefish"))%>%
         group_by(Taxa)%>%
-        summarise(Catch.tons=round(sum(LANDWT)/1000,0))
+        summarise(Catch.tons=round(sum(LANDWT,na.rm=T)/1000,0))
   fun.Tab1.SoFaR.LANDWT=function(SP,id,Tab.livewt,Add)
   {
     Dat=DAT  
